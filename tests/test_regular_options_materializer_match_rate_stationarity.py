@@ -116,6 +116,7 @@ def _write_artifacts(
     *,
     observed_market_days: int = 3,
     observed_filter_matches: int = 0,
+    observed_materializer_rows: int = 9,
     disclosed_rows: int,
     generated_at: str = NOW,
 ) -> None:
@@ -138,7 +139,7 @@ def _write_artifacts(
             "generated_at_utc": generated_at,
             "window": {"market_day_count": observed_market_days},
             "materializer_coverage": {
-                "row_count_in_window": 9,
+                "row_count_in_window": observed_materializer_rows,
                 "filter_matched_selected_rows_in_window": observed_filter_matches,
             },
             "summary": {"filtered_materializer_candidate_rows": observed_filter_matches},
@@ -199,6 +200,7 @@ class MaterializerMatchRateStationarityTests(unittest.TestCase):
 
         self.assertEqual(report["status"], "post_freeze_zero_within_historical_variation")
         self.assertGreater(report["zero_run_stationarity"]["zero_match_window_fraction"], 0.05)
+        self.assertNotIn("## Operator Escalation", stationarity.render_markdown(report))
 
     def test_zero_run_trigger_schedule_computes_dates_and_reuses_n13_fraction(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -272,6 +274,82 @@ class MaterializerMatchRateStationarityTests(unittest.TestCase):
             schedule["observed_filter_match_source"],
             "parity_materializer_filter_matched_selected_rows_in_window",
         )
+        self.assertEqual(report["status"], "post_freeze_zero_within_historical_variation")
+
+    def test_zero_run_trigger_reached_status_adds_escalation_block(self) -> None:
+        def fake_zero_run(match_dates: set[str], all_dates: list[str], window_days: int) -> dict:
+            return {
+                "status": "ready",
+                "observed_window_market_days": window_days,
+                "historical_market_day_count": 60,
+                "window_count": 10,
+                "zero_match_window_count": 1,
+                "zero_match_window_fraction": 0.04,
+                "min_matches_in_any_window": 0,
+                "max_matches_in_any_window": 1,
+            }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = _paths(Path(tmp))
+            _policy(paths["policy"])
+            dates = _market_dates(date(2026, 1, 2), 60)
+            _write_engine(paths, dates, set(dates[:10]))
+            _write_artifacts(paths, observed_market_days=24, disclosed_rows=10)
+            with patch.object(stationarity, "_sliding_zero_run", side_effect=fake_zero_run):
+                report = _build(paths)
+
+        self.assertEqual(report["status"], "post_freeze_zero_regime_break_trigger_reached")
+        escalation = report["operator_escalation"]
+        self.assertEqual(escalation["status"], "operator_question_required")
+        self.assertIn("refreeze/filter-family research contract", escalation["question"])
+        self.assertIn("does not authorize", escalation["non_authorization_statement"])
+        self.assertIn("## Operator Escalation", stationarity.render_markdown(report))
+
+    def test_zero_run_confirmation_status_takes_precedence(self) -> None:
+        def fake_zero_run(match_dates: set[str], all_dates: list[str], window_days: int) -> dict:
+            return {
+                "status": "ready",
+                "observed_window_market_days": window_days,
+                "historical_market_day_count": 90,
+                "window_count": 10,
+                "zero_match_window_count": 1,
+                "zero_match_window_fraction": 0.005,
+                "min_matches_in_any_window": 0,
+                "max_matches_in_any_window": 1,
+            }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = _paths(Path(tmp))
+            _policy(paths["policy"])
+            dates = _market_dates(date(2026, 1, 2), 90)
+            _write_engine(paths, dates, set(dates[:10]))
+            _write_artifacts(paths, observed_market_days=41, disclosed_rows=10)
+            with patch.object(stationarity, "_sliding_zero_run", side_effect=fake_zero_run):
+                report = _build(paths)
+
+        self.assertEqual(report["status"], "post_freeze_zero_regime_break_confirmed")
+        self.assertEqual(report["operator_escalation"]["trigger_status"], "post_freeze_zero_regime_break_confirmed")
+
+    def test_row_conditioned_zero_window_statistic_is_descriptive_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = _paths(Path(tmp))
+            _policy(paths["policy"])
+            dates = _market_dates(date(2024, 10, 1), 20)
+            _write_engine(paths, dates, set())
+            _write_artifacts(
+                paths,
+                observed_market_days=13,
+                observed_materializer_rows=10,
+                disclosed_rows=0,
+            )
+            report = _build(paths)
+
+        statistic = report["row_conditioned_zero_window_statistic"]
+        self.assertTrue(statistic["descriptive_only"])
+        self.assertTrue(statistic["does_not_change_status_or_trigger_logic"])
+        self.assertEqual(statistic["monthly_zero_precedents"][0]["month"], "2024-10")
+        observed_window = next(row for row in statistic["window_summaries"] if row["window_market_days"] == 13)
+        self.assertGreater(observed_window["zero_match_windows_with_at_least_observed_rows"], 0)
 
     def test_zero_run_trigger_schedule_monotonicity_violation_blocks_report(self) -> None:
         def fake_zero_run(match_dates: set[str], all_dates: list[str], window_days: int) -> dict:

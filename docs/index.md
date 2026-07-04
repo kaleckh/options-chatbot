@@ -149,11 +149,11 @@ These are the living docs for the current worktree:
 - `docs/regular-options-phase2-drop-decomposition.md`
   - generated read-only decomposition of scheduled Phase 2 production-gate drops by reason, symbol, month, and playbook; current status is `phase2_drop_decomposition_ready`
 - `docs/regular-options-materializer-match-rate-stationarity.md`
-  - generated read-only stationarity and frozen-threshold near-miss audit for the historical materializer match rate versus current post-freeze zero-match observations; current status is `post_freeze_zero_within_historical_variation`
+  - generated read-only stationarity, frozen-threshold near-miss, row-conditioned zero-window, and preregistered zero-run trigger-escalation audit for the historical materializer match rate versus current post-freeze zero-match observations; current status is `post_freeze_zero_within_historical_variation`
 - `docs/regular-options-scanner-materializer-parity-diff.md`
   - generated Track C Phase 13 read-only scanner-vs-materializer parity diff; current default post-freeze window has `182` materializer rows, `0` filter-matched materializer candidates, and one SPY divergence row for read-only investigation
 - `data/profitability-lab/regular-options-materializer-match-rate-stationarity/latest.json`
-  - machine-readable materializer match-rate stationarity artifact with policy hash checks, historical source fallback, zero-run stationarity, threshold-distance decomposition, session-window overlap, and hash-invariance proof
+  - machine-readable materializer match-rate stationarity artifact with policy hash checks, historical source fallback, zero-run stationarity, preregistered trigger statuses, row-conditioned zero-window statistics, threshold-distance decomposition, session-window overlap, and hash-invariance proof
 - `data/forward-tracking/regular-options-phase2-drop-decomposition/latest.json`
   - machine-readable Phase 2 scheduled-drop decomposition artifact with throughput reconciliation, full symbol-level drop rows, reason/symbol/month/playbook crosstabs, and read-only no-authority boundary flags
 - `data/forward-tracking/regular-options-scanner-materializer-parity-diff/latest.json`
@@ -179,7 +179,7 @@ These are the living docs for the current worktree:
 - `scripts/build_regular_options_phase2_drop_decomposition.py`
   - read-only Phase 2 scheduled-drop decomposition that reconciles the throughput audit and reports where production scanner gates drop symbols without changing policy, proof bars, evidence, cohorts, live validation, or broker behavior
 - `scripts/build_regular_options_materializer_match_rate_stationarity.py`
-  - read-only stationarity audit that reconciles frozen-filter materializer matches, compares post-freeze zero-match runs to historical windows, and reports frozen-threshold near misses without changing policy or emitting counterfactual economics
+  - read-only stationarity audit that reconciles frozen-filter materializer matches, compares post-freeze zero-match runs to historical windows, reports preregistered trigger-escalation statuses, and reports frozen-threshold near misses without changing policy or emitting counterfactual economics
 - `scripts/build_regular_options_scanner_materializer_parity_diff.py`
   - read-only Track C Phase 13 parity-diff builder; loads materializer JSONL, scan-pick JSONL, and scheduled-scan ledger sessions without running the scanner or mutating evidence stores
 - `scripts/import_regular_options_fresh_window_thetadata_opra.py`

@@ -3,8 +3,8 @@
     "latest_json": "data/forward-tracking/regular_options_daily_ops_latest.json",
     "latest_markdown": "docs/regular-options-daily-ops.md"
   },
-  "boundary": "This runner refreshes read-only operator artifacts and row plans. It refreshes point-in-time earnings readiness and source-repair planning before tracking historical scanner input source-surface coverage. It refreshes the frozen candidate-generation replay, source-surface, engine, and historical simulated-forward audit every run. It also tracks the historical profitability filter iteration and filtered simulated-forward audit every run. It tracks prospective matches to the filtered policy as forward paper-shadow dashboard rows. It refreshes filtered-forward exit evidence in no-write mode and evaluates the pre-registered forward evidence bar. It checks scheduled-scan heartbeat health before the gateboard refresh. It does not submit broker orders, create trades, mutate tracked-position rows, import quotes, change scanner policy, or lower proof bars.",
-  "completed_at_utc": "2026-07-03T21:38:40Z",
+  "boundary": "This runner refreshes read-only operator artifacts and row plans. It refreshes point-in-time earnings readiness and source-repair planning before tracking historical scanner input source-surface coverage. It refreshes the frozen candidate-generation replay, source-surface, engine, and historical simulated-forward audit every run. It also tracks the historical profitability filter iteration and filtered simulated-forward audit every run. It tracks prospective matches to the filtered policy as forward paper-shadow dashboard rows. It refreshes filtered-forward exit evidence in no-write mode and evaluates the pre-registered forward evidence bar. It projects read-only evidence-bar throughput against the cohort checkpoint and four-month forward audit horizon. It refreshes materializer match-rate stationarity and preregistered zero-run trigger escalation status. It checks scheduled-scan heartbeat health before the gateboard refresh. It does not submit broker orders, create trades, mutate tracked-position rows, import quotes, change scanner policy, or lower proof bars.",
+  "completed_at_utc": "2026-07-04T19:09:23Z",
   "failed_step_count": 0,
   "report_id": "regular_options_daily_ops",
   "required_stage_order": [
@@ -16,9 +16,9 @@
     "heartbeat_check",
     "gateboard_refresh"
   ],
-  "started_at_utc": "2026-07-03T21:30:01Z",
+  "started_at_utc": "2026-07-04T19:00:43Z",
   "status": "completed",
-  "step_count": 24,
+  "step_count": 26,
   "steps": [
     {
       "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/build_regular_options_point_in_time_earnings_calendar.py",
@@ -229,6 +229,30 @@
         "",
         "This evaluator is read-only. Passing the bar means pending operator review only, never automatic promotion, scanner-policy change, live validation, auto-track, broker action, quote import, or evidence-store mutation."
       ]
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/build_regular_options_forward_evidence_bar_throughput_projection.py",
+      "continue_after_failure": false,
+      "id": "forward_evidence_bar_throughput_projection",
+      "label": "Forward evidence-bar throughput projection",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "paper_shadow_collection",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": []
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/build_regular_options_materializer_match_rate_stationarity.py",
+      "continue_after_failure": false,
+      "id": "materializer_match_rate_stationarity",
+      "label": "Materializer match-rate stationarity",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "paper_shadow_collection",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": []
     },
     {
       "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/build_regular_options_open_risk_resolution_plan.py",

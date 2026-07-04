@@ -48,6 +48,8 @@ ZERO_RUN_TRIGGER_MAX_WINDOW_DAYS = 90
 STATUS_VOCABULARY = {
     "post_freeze_zero_within_historical_variation",
     "post_freeze_zero_indicates_regime_break",
+    "post_freeze_zero_regime_break_trigger_reached",
+    "post_freeze_zero_regime_break_confirmed",
     "insufficient_history_for_stationarity_verdict",
     "blocked_missing_or_stale_inputs",
 }
@@ -279,6 +281,137 @@ def _sliding_zero_run(match_dates: set[str], all_dates: Sequence[str], window_da
     }
 
 
+def _count_by_date(rows: Sequence[dict[str, Any]]) -> Counter[str]:
+    counts: Counter[str] = Counter()
+    for row in rows:
+        day = _date_key(row)
+        if day:
+            counts[day] += 1
+    return counts
+
+
+def _row_conditioned_zero_windows(
+    *,
+    accepted_rows: Sequence[dict[str, Any]],
+    filtered_rows: Sequence[dict[str, Any]],
+    all_dates: Sequence[str],
+    observed_accepted_rows: int,
+    window_days: int,
+) -> dict[str, Any]:
+    accepted_by_date = _count_by_date(accepted_rows)
+    match_by_date = _count_by_date(filtered_rows)
+    ordered = sorted({day for day in all_dates if day})
+    if window_days <= 0 or len(ordered) < window_days:
+        return {
+            "status": "insufficient_history",
+            "window_market_days": window_days,
+            "historical_market_day_count": len(ordered),
+            "window_count": 0,
+            "zero_match_window_count": 0,
+            "zero_match_windows_with_at_least_observed_rows": 0,
+            "zero_match_row_conditioned_fraction": None,
+            "observed_accepted_materializer_rows": observed_accepted_rows,
+            "descriptive_only": True,
+            "does_not_change_status_or_trigger_logic": True,
+        }
+
+    zero_windows = 0
+    row_conditioned_zero_windows = 0
+    max_zero_window_accepted_rows = 0
+    richest_zero_windows: list[dict[str, Any]] = []
+    for start_index in range(0, len(ordered) - window_days + 1):
+        window = ordered[start_index : start_index + window_days]
+        accepted_count = sum(accepted_by_date.get(day, 0) for day in window)
+        match_count = sum(match_by_date.get(day, 0) for day in window)
+        if match_count != 0:
+            continue
+        zero_windows += 1
+        if accepted_count >= observed_accepted_rows:
+            row_conditioned_zero_windows += 1
+        if accepted_count >= max_zero_window_accepted_rows:
+            max_zero_window_accepted_rows = accepted_count
+            richest_zero_windows.append(
+                {
+                    "start_date": window[0],
+                    "end_date": window[-1],
+                    "accepted_materializer_rows": accepted_count,
+                    "frozen_filter_match_rows": match_count,
+                }
+            )
+            richest_zero_windows = sorted(
+                richest_zero_windows,
+                key=lambda row: (-_safe_int(row.get("accepted_materializer_rows")), str(row.get("start_date"))),
+            )[:5]
+    return {
+        "status": "ready",
+        "window_market_days": window_days,
+        "historical_market_day_count": len(ordered),
+        "window_count": len(ordered) - window_days + 1,
+        "zero_match_window_count": zero_windows,
+        "zero_match_windows_with_at_least_observed_rows": row_conditioned_zero_windows,
+        "zero_match_row_conditioned_fraction": round(row_conditioned_zero_windows / zero_windows, 6)
+        if zero_windows
+        else None,
+        "observed_accepted_materializer_rows": observed_accepted_rows,
+        "max_zero_window_accepted_rows": max_zero_window_accepted_rows,
+        "richest_zero_windows": richest_zero_windows,
+        "descriptive_only": True,
+        "does_not_change_status_or_trigger_logic": True,
+    }
+
+
+def _row_conditioned_zero_window_summary(
+    *,
+    accepted_rows: Sequence[dict[str, Any]],
+    filtered_rows: Sequence[dict[str, Any]],
+    all_dates: Sequence[str],
+    observed_accepted_rows: int,
+    observed_market_days: int,
+    zero_run_schedule: dict[str, Any],
+    monthly_table: Sequence[dict[str, Any]],
+) -> dict[str, Any]:
+    windows_to_check = {
+        observed_market_days,
+        _safe_int(_as_dict(zero_run_schedule.get("first_regime_break_trigger")).get("window_market_days")),
+        _safe_int(_as_dict(zero_run_schedule.get("first_confirmation_trigger")).get("window_market_days")),
+    }
+    window_summaries = [
+        _row_conditioned_zero_windows(
+            accepted_rows=accepted_rows,
+            filtered_rows=filtered_rows,
+            all_dates=all_dates,
+            observed_accepted_rows=observed_accepted_rows,
+            window_days=window_days,
+        )
+        for window_days in sorted(day for day in windows_to_check if day > 0)
+    ]
+    monthly_zero_precedents = [
+        {
+            "month": row.get("month"),
+            "accepted_materializer_rows": row.get("accepted_materializer_rows"),
+            "frozen_filter_match_rows": row.get("frozen_filter_match_rows"),
+            "match_rate": row.get("match_rate"),
+        }
+        for row in _as_list(monthly_table)
+        if _safe_int(_as_dict(row).get("frozen_filter_match_rows")) == 0
+        and _safe_int(_as_dict(row).get("accepted_materializer_rows")) >= observed_accepted_rows
+    ]
+    return {
+        "status": "ready" if window_summaries else "insufficient_observed_zero_run",
+        "descriptive_only": True,
+        "does_not_change_status_or_trigger_logic": True,
+        "observed_accepted_materializer_rows": observed_accepted_rows,
+        "window_summaries": window_summaries,
+        "monthly_zero_precedents": monthly_zero_precedents,
+        "interpretation": (
+            "historical_row_rich_zero_windows_exist"
+            if monthly_zero_precedents
+            or any(_safe_int(row.get("zero_match_windows_with_at_least_observed_rows")) > 0 for row in window_summaries)
+            else "no_historical_zero_window_with_observed_row_density"
+        ),
+    }
+
+
 def _market_days_after(start_date: date, days_needed: int) -> date:
     if days_needed <= 0:
         return start_date
@@ -381,6 +514,49 @@ def _zero_run_trigger_schedule(
             "violations": violations,
         },
         "windows": windows,
+    }
+
+
+def _trigger_status_from_schedule(schedule: dict[str, Any]) -> str | None:
+    if schedule.get("status") != "ready":
+        return None
+    confirmation = _as_dict(schedule.get("first_confirmation_trigger"))
+    if confirmation.get("already_reached"):
+        return "post_freeze_zero_regime_break_confirmed"
+    break_trigger = _as_dict(schedule.get("first_regime_break_trigger"))
+    if break_trigger.get("already_reached"):
+        return "post_freeze_zero_regime_break_trigger_reached"
+    return None
+
+
+def _operator_escalation(status: str, schedule: dict[str, Any]) -> dict[str, Any] | None:
+    if status not in {"post_freeze_zero_regime_break_trigger_reached", "post_freeze_zero_regime_break_confirmed"}:
+        return None
+    active_trigger = (
+        _as_dict(schedule.get("first_confirmation_trigger"))
+        if status == "post_freeze_zero_regime_break_confirmed"
+        else _as_dict(schedule.get("first_regime_break_trigger"))
+    )
+    return {
+        "status": "operator_question_required",
+        "trigger_status": status,
+        "active_trigger": active_trigger,
+        "question": (
+            "The preregistered zero-run trigger is active. Should Codex draft a separate preregistered "
+            "refreeze/filter-family research contract for operator review? Default: no draft; the frozen "
+            "window continues untouched."
+        ),
+        "safe_fallback": "No draft is produced; scheduled forward collection and read-only health reports continue unchanged.",
+        "evidence_pointers": {
+            "stationarity_report": "docs/regular-options-materializer-match-rate-stationarity.md",
+            "projection_report": "docs/regular-options-forward-evidence-bar-throughput-projection.md",
+            "drop_decomposition_report": "docs/regular-options-phase2-drop-decomposition.md",
+        },
+        "non_authorization_statement": (
+            "This escalation asks an operator question only. It does not authorize scanner policy changes, "
+            "filter or threshold changes, proof-bar changes, cohort append, quote import, evidence-store mutation, "
+            "protected-holdout use, live validation, auto-track, broker action, accepted profitability, or promotion."
+        ),
     }
 
 
@@ -633,6 +809,16 @@ def build_report(
         observed_filter_matches=observed_filter_matches,
         reference_date=reference_date,
     )
+    observed_accepted_rows = _safe_int(parity_coverage.get("row_count_in_window"))
+    row_conditioned_summary = _row_conditioned_zero_window_summary(
+        accepted_rows=accepted_rows,
+        filtered_rows=filtered_rows,
+        all_dates=all_dates,
+        observed_accepted_rows=observed_accepted_rows,
+        observed_market_days=observed_market_days,
+        zero_run_schedule=zero_run_schedule,
+        monthly_table=monthly_table,
+    )
     if _as_dict(zero_run_schedule.get("monotonicity_check")).get("status") == "failed":
         blockers.append("zero_run_trigger_schedule_monotonicity_violation")
 
@@ -640,6 +826,8 @@ def build_report(
         status = "blocked_missing_or_stale_inputs"
     elif zero_run["status"] != "ready" or disclosed_months <= 0:
         status = "insufficient_history_for_stationarity_verdict"
+    elif trigger_status := _trigger_status_from_schedule(zero_run_schedule):
+        status = trigger_status
     elif observed_filter_matches == 0 and (zero_run.get("zero_match_window_fraction") or 0.0) <= ZERO_RUN_REGIME_BREAK_MAX_FRACTION:
         status = "post_freeze_zero_indicates_regime_break"
     else:
@@ -681,7 +869,7 @@ def build_report(
         },
         "post_freeze_observation": {
             "observed_market_days": observed_market_days,
-            "parity_materializer_rows_in_window": _safe_int(parity_coverage.get("row_count_in_window")),
+            "parity_materializer_rows_in_window": observed_accepted_rows,
             "parity_filter_matched_selected_rows_in_window": observed_filter_matches,
             "parity_status": parity_latest.get("status"),
             "tracker_matched_rows": _safe_int(_as_dict(tracker_latest.get("forward_tracking")).get("matched_candidate_count")),
@@ -699,6 +887,8 @@ def build_report(
             ),
         },
         "zero_run_trigger_schedule": zero_run_schedule,
+        "row_conditioned_zero_window_statistic": row_conditioned_summary,
+        "operator_escalation": _operator_escalation(status, zero_run_schedule),
         "frozen_threshold_distance_summary": _threshold_distance_summary(accepted_rows, conditions, threshold),
         "scheduled_scan_near_miss_summary": _throughput_near_miss_summary(throughput_latest),
         "session_entry_window_overlap": _session_overlap(parity_latest),
@@ -736,6 +926,8 @@ def render_markdown(report: dict[str, Any]) -> str:
     schedule = _as_dict(report.get("zero_run_trigger_schedule"))
     break_trigger = _as_dict(schedule.get("first_regime_break_trigger"))
     confirmation_trigger = _as_dict(schedule.get("first_confirmation_trigger"))
+    row_conditioned = _as_dict(report.get("row_conditioned_zero_window_statistic"))
+    escalation = _as_dict(report.get("operator_escalation"))
     threshold = _as_dict(report.get("frozen_threshold_distance_summary"))
     overlap = _as_dict(report.get("session_entry_window_overlap"))
     lines = [
@@ -750,6 +942,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Zero-run trigger schedule: `{schedule.get('status')}`; monotonicity `{_as_dict(schedule.get('monotonicity_check')).get('status')}`.",
         f"- First <=0.05 trigger if zero-run continues: `{break_trigger.get('projected_calendar_date_if_zero_run_continues')}` at `{break_trigger.get('window_market_days')}` market days; fraction `{break_trigger.get('zero_match_window_fraction')}`.",
         f"- First <=0.01 confirmation if zero-run continues: `{confirmation_trigger.get('projected_calendar_date_if_zero_run_continues')}` at `{confirmation_trigger.get('window_market_days')}` market days; fraction `{confirmation_trigger.get('zero_match_window_fraction')}`.",
+        f"- Row-conditioned zero-window statistic: `{row_conditioned.get('interpretation')}`; descriptive only `{row_conditioned.get('descriptive_only')}`.",
         f"- Minimum historical distance below frozen threshold: `{threshold.get('min_distance')}`.",
         f"- Session-time overlap with materializer entry window: `{overlap.get('distinct_session_times_inside_entry_window')}` / `{overlap.get('distinct_scheduled_session_time_count')}` distinct times.",
         "",
@@ -760,13 +953,58 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"| `<=0.05` | {break_trigger.get('window_market_days')} | `{break_trigger.get('projected_calendar_date_if_zero_run_continues')}` | {break_trigger.get('zero_match_window_fraction')} |",
         f"| `<=0.01` | {confirmation_trigger.get('window_market_days')} | `{confirmation_trigger.get('projected_calendar_date_if_zero_run_continues')}` | {confirmation_trigger.get('zero_match_window_fraction')} |",
         "",
+        "These are descriptive overlapping-window fractions, not p-values or independent significance tests.",
+        "",
         "A single post-freeze parity materializer filter match voids this zero-run schedule and requires a fresh stationarity run.",
         "",
-        "## Monthly Match Counts",
+        "Daily ops refreshes this report before the weekday fresh-window import, so trigger/void recognition can lag newly imported parity by one market day.",
         "",
-        "| Month | Accepted Rows | Frozen-Filter Matches | Match Rate |",
-        "|---|---:|---:|---:|",
+        "## Row-Conditioned Zero Windows",
+        "",
+        "| Window Market Days | Zero Windows | Row-Conditioned Zero Windows | Fraction | Max Zero-Window Rows |",
+        "|---:|---:|---:|---:|---:|",
     ]
+    if escalation:
+        lines[lines.index("## Row-Conditioned Zero Windows"):lines.index("## Row-Conditioned Zero Windows")] = [
+            "## Operator Escalation",
+            "",
+            f"- Status: `{escalation.get('status')}`.",
+            f"- Question: {escalation.get('question')}",
+            f"- Safe fallback: {escalation.get('safe_fallback')}",
+            "",
+        ]
+    for row in _as_list(row_conditioned.get("window_summaries")):
+        row = _as_dict(row)
+        lines.append(
+            f"| {row.get('window_market_days')} | {row.get('zero_match_window_count')} | "
+            f"{row.get('zero_match_windows_with_at_least_observed_rows')} | "
+            f"{row.get('zero_match_row_conditioned_fraction')} | {row.get('max_zero_window_accepted_rows')} |"
+        )
+    lines.extend(
+        [
+            "",
+            "This statistic is descriptive only and does not change status, trigger dates, thresholds, scanner policy, filters, proof bars, or evidence-bar behavior.",
+            "",
+            "## Monthly Zero Precedents",
+            "",
+            "| Month | Accepted Rows | Frozen-Filter Matches | Match Rate |",
+            "|---|---:|---:|---:|",
+        ]
+    )
+    for row in _as_list(row_conditioned.get("monthly_zero_precedents")):
+        row = _as_dict(row)
+        lines.append(
+            f"| `{row.get('month')}` | {row.get('accepted_materializer_rows')} | {row.get('frozen_filter_match_rows')} | {row.get('match_rate')} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Monthly Match Counts",
+            "",
+            "| Month | Accepted Rows | Frozen-Filter Matches | Match Rate |",
+            "|---|---:|---:|---:|",
+        ]
+    )
     for row in _as_list(historical.get("monthly_table")):
         row = _as_dict(row)
         lines.append(

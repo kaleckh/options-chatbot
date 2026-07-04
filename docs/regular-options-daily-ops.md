@@ -1,9 +1,9 @@
 # Regular Options Daily Ops
 
 - Status: `completed`.
-- Started: `2026-07-03T21:30:01Z`.
-- Completed: `2026-07-03T21:38:40Z`.
-- Steps: `24`.
+- Started: `2026-07-04T19:00:43Z`.
+- Completed: `2026-07-04T19:09:23Z`.
+- Steps: `26`.
 - Failed steps: `0`.
 
 ## Steps
@@ -25,6 +25,8 @@
 | `filtered_forward_paper_shadow_tracker` | `paper_shadow_collection` | `pass` | `0` |
 | `filtered_forward_exit_evidence_capture` | `exit_evidence_capture` | `pass` | `0` |
 | `filtered_forward_evidence_bar_evaluation` | `paper_shadow_collection` | `pass` | `0` |
+| `forward_evidence_bar_throughput_projection` | `paper_shadow_collection` | `pass` | `0` |
+| `materializer_match_rate_stationarity` | `paper_shadow_collection` | `pass` | `0` |
 | `open_risk_exit_evidence_plan` | `exit_evidence_capture` | `pass` | `0` |
 | `suggested_trade_review_plan` | `suggested_trade_review_plan_execution` | `pass` | `0` |
 | `fill_attempt_evidence_capture_plan` | `paper_shadow_collection` | `pass` | `0` |
@@ -37,4 +39,4 @@
 
 ## Boundary
 
-This runner refreshes read-only operator artifacts and row plans. It refreshes point-in-time earnings readiness and source-repair planning before tracking historical scanner input source-surface coverage. It refreshes the frozen candidate-generation replay, source-surface, engine, and historical simulated-forward audit every run. It also tracks the historical profitability filter iteration and filtered simulated-forward audit every run. It tracks prospective matches to the filtered policy as forward paper-shadow dashboard rows. It refreshes filtered-forward exit evidence in no-write mode and evaluates the pre-registered forward evidence bar. It checks scheduled-scan heartbeat health before the gateboard refresh. It does not submit broker orders, create trades, mutate tracked-position rows, import quotes, change scanner policy, or lower proof bars.
+This runner refreshes read-only operator artifacts and row plans. It refreshes point-in-time earnings readiness and source-repair planning before tracking historical scanner input source-surface coverage. It refreshes the frozen candidate-generation replay, source-surface, engine, and historical simulated-forward audit every run. It also tracks the historical profitability filter iteration and filtered simulated-forward audit every run. It tracks prospective matches to the filtered policy as forward paper-shadow dashboard rows. It refreshes filtered-forward exit evidence in no-write mode and evaluates the pre-registered forward evidence bar. It projects read-only evidence-bar throughput against the cohort checkpoint and four-month forward audit horizon. It refreshes materializer match-rate stationarity and preregistered zero-run trigger escalation status. It checks scheduled-scan heartbeat health before the gateboard refresh. It does not submit broker orders, create trades, mutate tracked-position rows, import quotes, change scanner policy, or lower proof bars.

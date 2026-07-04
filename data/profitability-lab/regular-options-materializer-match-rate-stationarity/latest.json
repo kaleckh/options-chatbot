@@ -2,10 +2,10 @@
   "accepted_profitability": false,
   "artifacts": {
     "docs_report": "docs/regular-options-materializer-match-rate-stationarity.md",
-    "json": "data/profitability-lab/regular-options-materializer-match-rate-stationarity/regular_options_materializer_match_rate_stationarity_20260704T180441Z.json",
+    "json": "data/profitability-lab/regular-options-materializer-match-rate-stationarity/regular_options_materializer_match_rate_stationarity_20260704T191521Z.json",
     "latest_json": "data/profitability-lab/regular-options-materializer-match-rate-stationarity/latest.json",
     "latest_markdown": "data/profitability-lab/regular-options-materializer-match-rate-stationarity/latest.md",
-    "markdown": "data/profitability-lab/regular-options-materializer-match-rate-stationarity/regular_options_materializer_match_rate_stationarity_20260704T180441Z.md"
+    "markdown": "data/profitability-lab/regular-options-materializer-match-rate-stationarity/regular_options_materializer_match_rate_stationarity_20260704T191521Z.md"
   },
   "auto_track_enabled": false,
   "blockers": [],
@@ -228,7 +228,7 @@
     "row_count_with_distance": 1760,
     "threshold": 10.990605
   },
-  "generated_at_utc": "2026-07-04T18:02:38Z",
+  "generated_at_utc": "2026-07-04T19:13:46Z",
   "hash_invariance": {
     "all_unchanged": true,
     "checks": [
@@ -447,11 +447,27 @@
     },
     "inspected_historical_engine_sources": [
       {
-        "age_days": 1,
-        "embedded_selected_candidates": 0,
-        "generated_at_utc": "2026-07-03T23:45:40Z",
+        "age_days": 0,
+        "embedded_selected_candidates": 2972,
+        "generated_at_utc": "2026-07-04T19:06:40Z",
         "path": "data/profitability-lab/regular-options-13-symbol-frozen-candidate-generation-engine/latest.json",
-        "selected_candidate_row_count": 0,
+        "selected_candidate_row_count": 2972,
+        "status": "blocked_frozen_13_symbol_candidate_generation_engine"
+      },
+      {
+        "age_days": 0,
+        "embedded_selected_candidates": 2972,
+        "generated_at_utc": "2026-07-04T19:06:40Z",
+        "path": "data/profitability-lab/regular-options-13-symbol-frozen-candidate-generation-engine/regular_options_13_symbol_frozen_candidate_generation_engine_20260704T190640Z.json",
+        "selected_candidate_row_count": 2972,
+        "status": "blocked_frozen_13_symbol_candidate_generation_engine"
+      },
+      {
+        "age_days": 0,
+        "embedded_selected_candidates": 2972,
+        "generated_at_utc": "2026-07-04T18:48:41Z",
+        "path": "data/profitability-lab/regular-options-13-symbol-frozen-candidate-generation-engine/regular_options_13_symbol_frozen_candidate_generation_engine_20260704T184841Z.json",
+        "selected_candidate_row_count": 2972,
         "status": "blocked_frozen_13_symbol_candidate_generation_engine"
       },
       {
@@ -500,6 +516,7 @@
     }
   },
   "live_validation_enabled": false,
+  "operator_escalation": null,
   "policy_hash_checks": {
     "actual_policy_contract_sha256": "2054eafc577ddc10f4cd4bbd4c4b4133c6e82d3d8bd7be2d6bd1dc547dc42b00",
     "computed_conditions_sha256": "3b10d0306800e1a203480b80e4fafda03d5e1b6443d8d294cbf8ff7f20324967",
@@ -537,6 +554,146 @@
   "read_only": true,
   "report_id": "regular_options_materializer_match_rate_stationarity",
   "research_only": true,
+  "row_conditioned_zero_window_statistic": {
+    "descriptive_only": true,
+    "does_not_change_status_or_trigger_logic": true,
+    "interpretation": "historical_row_rich_zero_windows_exist",
+    "monthly_zero_precedents": [
+      {
+        "accepted_materializer_rows": 187,
+        "frozen_filter_match_rows": 0,
+        "match_rate": 0.0,
+        "month": "2024-10"
+      }
+    ],
+    "observed_accepted_materializer_rows": 182,
+    "status": "ready",
+    "window_summaries": [
+      {
+        "descriptive_only": true,
+        "does_not_change_status_or_trigger_logic": true,
+        "historical_market_day_count": 494,
+        "max_zero_window_accepted_rows": 130,
+        "observed_accepted_materializer_rows": 182,
+        "richest_zero_windows": [
+          {
+            "accepted_materializer_rows": 130,
+            "end_date": "2024-10-18",
+            "frozen_filter_match_rows": 0,
+            "start_date": "2024-10-02"
+          },
+          {
+            "accepted_materializer_rows": 129,
+            "end_date": "2024-10-17",
+            "frozen_filter_match_rows": 0,
+            "start_date": "2024-10-01"
+          },
+          {
+            "accepted_materializer_rows": 125,
+            "end_date": "2024-10-16",
+            "frozen_filter_match_rows": 0,
+            "start_date": "2024-09-30"
+          },
+          {
+            "accepted_materializer_rows": 119,
+            "end_date": "2024-10-15",
+            "frozen_filter_match_rows": 0,
+            "start_date": "2024-09-27"
+          },
+          {
+            "accepted_materializer_rows": 110,
+            "end_date": "2024-10-14",
+            "frozen_filter_match_rows": 0,
+            "start_date": "2024-09-26"
+          }
+        ],
+        "status": "ready",
+        "window_count": 482,
+        "window_market_days": 13,
+        "zero_match_row_conditioned_fraction": 0.0,
+        "zero_match_window_count": 52,
+        "zero_match_windows_with_at_least_observed_rows": 0
+      },
+      {
+        "descriptive_only": true,
+        "does_not_change_status_or_trigger_logic": true,
+        "historical_market_day_count": 494,
+        "max_zero_window_accepted_rows": 194,
+        "observed_accepted_materializer_rows": 182,
+        "richest_zero_windows": [
+          {
+            "accepted_materializer_rows": 194,
+            "end_date": "2024-10-31",
+            "frozen_filter_match_rows": 0,
+            "start_date": "2024-09-30"
+          },
+          {
+            "accepted_materializer_rows": 193,
+            "end_date": "2024-10-30",
+            "frozen_filter_match_rows": 0,
+            "start_date": "2024-09-27"
+          },
+          {
+            "accepted_materializer_rows": 190,
+            "end_date": "2024-10-29",
+            "frozen_filter_match_rows": 0,
+            "start_date": "2024-09-26"
+          },
+          {
+            "accepted_materializer_rows": 189,
+            "end_date": "2024-10-23",
+            "frozen_filter_match_rows": 0,
+            "start_date": "2024-09-20"
+          },
+          {
+            "accepted_materializer_rows": 187,
+            "end_date": "2024-10-22",
+            "frozen_filter_match_rows": 0,
+            "start_date": "2024-09-19"
+          }
+        ],
+        "status": "ready",
+        "window_count": 471,
+        "window_market_days": 24,
+        "zero_match_row_conditioned_fraction": 0.565217,
+        "zero_match_window_count": 23,
+        "zero_match_windows_with_at_least_observed_rows": 13
+      },
+      {
+        "descriptive_only": true,
+        "does_not_change_status_or_trigger_logic": true,
+        "historical_market_day_count": 494,
+        "max_zero_window_accepted_rows": 268,
+        "observed_accepted_materializer_rows": 182,
+        "richest_zero_windows": [
+          {
+            "accepted_materializer_rows": 268,
+            "end_date": "2024-11-07",
+            "frozen_filter_match_rows": 0,
+            "start_date": "2024-09-12"
+          },
+          {
+            "accepted_materializer_rows": 264,
+            "end_date": "2024-11-04",
+            "frozen_filter_match_rows": 0,
+            "start_date": "2024-09-09"
+          },
+          {
+            "accepted_materializer_rows": 264,
+            "end_date": "2024-11-06",
+            "frozen_filter_match_rows": 0,
+            "start_date": "2024-09-11"
+          }
+        ],
+        "status": "ready",
+        "window_count": 454,
+        "window_market_days": 41,
+        "zero_match_row_conditioned_fraction": 1.0,
+        "zero_match_window_count": 4,
+        "zero_match_windows_with_at_least_observed_rows": 4
+      }
+    ]
+  },
   "scanner_policy_changed": false,
   "scheduled_scan_near_miss_summary": {
     "distance_available_count": 50,
@@ -795,6 +952,8 @@
     "blocked_missing_or_stale_inputs",
     "insufficient_history_for_stationarity_verdict",
     "post_freeze_zero_indicates_regime_break",
+    "post_freeze_zero_regime_break_confirmed",
+    "post_freeze_zero_regime_break_trigger_reached",
     "post_freeze_zero_within_historical_variation"
   ],
   "stops_changed": false,

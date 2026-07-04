@@ -93,6 +93,8 @@ data/forward-tracking/*_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9]
 data/forward-tracking/*_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z.csv
 data/forward-tracking/regular-options-phase2-drop-decomposition/*_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z.json
 data/forward-tracking/regular-options-phase2-drop-decomposition/*_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z.md
+data/profitability-lab/regular-options-materializer-match-rate-stationarity/*_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z.json
+data/profitability-lab/regular-options-materializer-match-rate-stationarity/*_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z.md
 data/forward-tracking/*.backup-*.jsonl
 data/forward-tracking/*.before-*.jsonl
 data/forward-tracking/*backup*.json

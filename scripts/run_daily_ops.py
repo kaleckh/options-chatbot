@@ -129,6 +129,13 @@ DAILY_OP_STEPS: tuple[dict[str, Any], ...] = (
         "read_only_safe": True,
     },
     {
+        "id": "materializer_match_rate_stationarity",
+        "label": "Materializer match-rate stationarity",
+        "stage": "paper_shadow_collection",
+        "command": [sys.executable, "scripts/build_regular_options_materializer_match_rate_stationarity.py"],
+        "read_only_safe": True,
+    },
+    {
         "id": "open_risk_exit_evidence_plan",
         "label": "Open-risk exit-evidence plan",
         "stage": "exit_evidence_capture",
@@ -312,6 +319,7 @@ def run_daily_ops(*, stop_on_failure: bool = True) -> dict[str, Any]:
             "It tracks prospective matches to the filtered policy as forward paper-shadow dashboard rows. "
             "It refreshes filtered-forward exit evidence in no-write mode and evaluates the pre-registered forward evidence bar. "
             "It projects read-only evidence-bar throughput against the cohort checkpoint and four-month forward audit horizon. "
+            "It refreshes materializer match-rate stationarity and preregistered zero-run trigger escalation status. "
             "It checks scheduled-scan heartbeat health before the gateboard refresh. "
             "It does not submit broker orders, create trades, mutate tracked-position rows, "
             "import quotes, change scanner policy, or lower proof bars."

@@ -1,5 +1,13 @@
 # Decisions
 
+## 2026-07-04: Zero-Run Trigger Escalations Must Be Preregistered And Read-Only
+
+The materializer stationarity report now owns the preregistered zero-run escalation schedule for the frozen filtered-forward lane. That schedule is useful only if its trigger dates are refreshed unattended and if the trigger semantics are fixed before code observes a future trigger.
+
+Durable decision: `scripts/build_regular_options_materializer_match_rate_stationarity.py`, exposed as `npm run options:audit:materializer-match-rate-stationarity`, may extend its status vocabulary from the existing four base statuses to exactly six statuses by adding `post_freeze_zero_regime_break_trigger_reached` for the first already-reached `<=0.05` zero-window trigger and `post_freeze_zero_regime_break_confirmed` for the first already-reached `<=0.01` confirmation trigger. The confirmation status takes precedence. Both trigger statuses are voided by the first post-freeze parity materializer filter match, after which the report returns to the base stationarity vocabulary for a fresh computation. Trigger-window fractions are descriptive overlapping-window fractions, not p-values or independent significance tests.
+
+The report may add a row-conditioned zero-window statistic to describe how often historical zero-match windows had at least the observed post-freeze accepted materializer row count. That statistic is `descriptive_only`; it must not change trigger dates, thresholds, status logic, scanner policy, filters, proof bars, or any evidence-bar behavior. When a trigger status is active, the report may include an operator escalation block that asks whether to draft a separate preregistered refreeze/filter-family research contract. The block may only ask; it does not authorize the draft, any policy change, evidence mutation, quote import, cohort append, live validation, auto-track, broker action, protected-holdout use, accepted profitability, or promotion.
+
 ## 2026-07-04: Four-Month Forward Audit Projections Are Warning Surfaces, Not Proof
 
 The four-month forward audit is the best current success indicator for the frozen filtered-forward lane, but the audit can fail silently if it reaches the evaluation date with an empty or tiny denominator. A projection surface is needed to name that risk early without changing the evidence bar or treating historical/materializer rows as forward proof.

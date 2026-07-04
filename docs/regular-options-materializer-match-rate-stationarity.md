@@ -9,6 +9,7 @@
 - Zero-run trigger schedule: `ready`; monotonicity `passed`.
 - First <=0.05 trigger if zero-run continues: `2026-07-20` at `24` market days; fraction `0.048832`.
 - First <=0.01 confirmation if zero-run continues: `2026-08-12` at `41` market days; fraction `0.008811`.
+- Row-conditioned zero-window statistic: `historical_row_rich_zero_windows_exist`; descriptive only `True`.
 - Minimum historical distance below frozen threshold: `0.023566`.
 - Session-time overlap with materializer entry window: `14` / `341` distinct times.
 
@@ -19,7 +20,27 @@
 | `<=0.05` | 24 | `2026-07-20` | 0.048832 |
 | `<=0.01` | 41 | `2026-08-12` | 0.008811 |
 
+These are descriptive overlapping-window fractions, not p-values or independent significance tests.
+
 A single post-freeze parity materializer filter match voids this zero-run schedule and requires a fresh stationarity run.
+
+Daily ops refreshes this report before the weekday fresh-window import, so trigger/void recognition can lag newly imported parity by one market day.
+
+## Row-Conditioned Zero Windows
+
+| Window Market Days | Zero Windows | Row-Conditioned Zero Windows | Fraction | Max Zero-Window Rows |
+|---:|---:|---:|---:|---:|
+| 13 | 52 | 0 | 0.0 | 130 |
+| 24 | 23 | 13 | 0.565217 | 194 |
+| 41 | 4 | 4 | 1.0 | 268 |
+
+This statistic is descriptive only and does not change status, trigger dates, thresholds, scanner policy, filters, proof bars, or evidence-bar behavior.
+
+## Monthly Zero Precedents
+
+| Month | Accepted Rows | Frozen-Filter Matches | Match Rate |
+|---|---:|---:|---:|
+| `2024-10` | 187 | 0 | 0.0 |
 
 ## Monthly Match Counts
 
