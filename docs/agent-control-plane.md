@@ -34,6 +34,11 @@ Use the graph to recover context and write back reviewed lessons, not to replace
 | Audit automated dreaming | `npm run memory:dream-audit` |
 | Audit the whole memory system | `npm run memory:operator-dashboard` |
 | Review recent agent/subagent run history | `npm run memory:run-ledger` |
+| Anchor the agent run ledger hash chain | `npm run memory:anchor-ledger` |
+| Back up local runtime memory state | `npm run memory:backup` |
+| Run full memory integrity/backup/eval checks | `npm run memory:doctor` |
+| Run self-logging memory maintenance | `npm run memory:maintenance` |
+| Run memory maintenance only when needed | `npm run memory:auto-maintenance` |
 | Read the daily operator brief | `npm run memory:daily-brief` |
 | Run deterministic agent eval checks | `npm run memory:agent-eval` |
 | Group repeated agent blockers | `npm run memory:blocker-autopsy` |
@@ -42,6 +47,7 @@ Use the graph to recover context and write back reviewed lessons, not to replace
 | Sync allowlisted profitability readbacks into research-only memory | `npm run memory:profit-learning-sync` |
 | Audit the profit-learning memory sync | `npm run memory:profit-learning-audit` |
 | Register the nightly Windows dreaming task | `npm run memory:schedule-dreams` |
+| Register the Windows memory auto-maintenance task | `npm run memory:schedule-maintenance` |
 | Audit memory lifecycle health | `npm run memory:audit` |
 | Backfill authority metadata on legacy operating memory rows | `npm run memory:repair-authority` |
 | Run deterministic memory recovery checks | `npm run memory:eval` or `npm run verify:memory` |
@@ -68,7 +74,7 @@ Graph queries index nodes into `retrieval_documents` and use SQLite FTS/BM25 bef
 
 `npm run memory:profit-learning-sync` is the options-profitability learning intake. It reads only the allowlisted generated readbacks from `data/forward-tracking/` and `data/profitability-lab/`, then writes research-only provenance rows into `data/agent-control/agent_control.db`. It records source hashes, generated timestamps, denominator context, zero-candidate episodes, diagnostic hypotheses, and experiment readbacks for future agents. It strips or sanitizes action-authority-shaped metric/status fields, requires valid generated timestamps, uses tenant-prefixed semantic IDs, rejects cross-tenant ID overwrites, and requires the explicit `APPROVE_PROFIT_LEARNING_MEMORY_SYNC` token in the package alias. It does not append cohort rows, import quotes, mutate evidence stores, change scanners/strategies/proof bars, open broker/live paths, consume holdout, or promote lanes.
 
-The agent run ledger is the local observability layer for autonomous work. `npm run memory:run-ledger` audits the tenant-scoped run-event hash chain and summarizes recent runs. `npm run memory:daily-brief` combines the ledger, operator dashboard, and research-priority report into one prompt-ready daily handoff. `npm run memory:agent-eval` runs the existing memory eval plus temp-backed self-tests for ledger redaction, blocked-run surfacing, and non-authoritative approval notes. `npm run memory:blocker-autopsy` groups repeated blocked/failed run reasons, and `npm run memory:inbox` shows pending approval notes, blockers/failures, and stale running runs.
+The agent run ledger is the local observability layer for autonomous work. `npm run memory:run-ledger` audits the tenant-scoped run-event hash chain and summarizes recent runs. `npm run memory:anchor-ledger` writes a local hash anchor for the current run ledger, `npm run memory:backup` copies the ignored memory DB and JSONL sidecars with a hashed manifest, and `npm run memory:doctor` runs ledger, anchor, outbox, lifecycle, dashboard, eval, and latest-backup restore checks together. `npm run memory:maintenance` records its own run-ledger start/completion or failure events, creates a backup, runs doctor, writes a final maintenance anchor, and re-runs doctor so routine memory-health work leaves auditable history while keeping the anchor current. `npm run memory:auto-maintenance` is the live local memory guard: it checks latest successful maintenance age, backup freshness, anchor status, and doctor status, then either skips cleanly or runs `memory:maintenance`. `npm run memory:schedule-maintenance` registers the Windows task that calls the auto-maintenance guard repeatedly; the guard does the necessity check, not the scheduler. The control-plane file lock uses a non-destructive Windows process probe; do not reintroduce `os.kill(pid, 0)` as a Windows liveness check because it can terminate the probed process. `npm run memory:daily-brief` combines the ledger, operator dashboard, and research-priority report into one prompt-ready daily handoff. `npm run memory:agent-eval` runs the existing memory eval plus temp-backed self-tests for ledger redaction, blocked-run surfacing, and non-authoritative approval notes. `npm run memory:blocker-autopsy` groups repeated blocked/failed run reasons, and `npm run memory:inbox` shows pending approval notes, blockers/failures, and stale running runs.
 
 Approval notes in the ledger, daily brief, and inbox are not authorization. A recorded approval note is only local orchestration context; it does not approve cohort append, evidence mutation, quote import, scanner/strategy changes, proof-bar changes, live validation, auto-track, broker action, stop/sizing changes, promotion, protected-holdout use, or treating historical rows as forward proof.
 

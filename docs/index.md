@@ -38,6 +38,8 @@ These are the living docs for the current worktree:
   - living docs ownership, generated-artifact, and source-of-truth hygiene rules
 - `docs/agent-control-plane.md`
   - local CEO/worker orchestration flow and runtime memory graph backed by ignored SQLite/JSONL state
+- `docs/fable-planner-bridge.md`
+  - manual/API-neutral Claude Fable 5 planning handoff and returned-plan validation workflow for Codex implementation
 - `docs/agent-memory-graph.md`
   - generated where-to-go graph for owner docs, code, contracts, and generated artifacts
 - `data/contracts/agent-memory-graph.json`
@@ -80,6 +82,10 @@ These are the living docs for the current worktree:
   - canonical replay/profit ownership map for replay readbacks, scanner policy, proof/profit gates, and options-profit status
 - `docs/regular-options-existing-input-surface-atlas.md`
   - generated read-only inventory of existing point-in-time input/source surfaces; current status is `research_only_input_surfaces_exhausted_under_current_repository`
+- `docs/regular-options-parked-branch-ledger.md`
+  - generated consolidated ledger for parked, falsified, exhausted, and superseded regular-options branches, with archived doc paths, blocker summaries, revival conditions, and reconstruction anchors
+- `data/forward-tracking/regular-options-parked-branch-ledger/latest.json`
+  - machine-readable parked-branch ledger used to keep archived branch docs out of the live Start Here index while preserving scripts and data artifacts
 - `docs/regular-options-phase2-forward-paper-shadow-market-window-capture.md`
   - generated audit of the approved Phase 2 forward paper-shadow capture gate; current status is `no_phase2_natural_selections_no_append`
 - `docs/regular-options-59-symbol-thetadata-opra-import-repair.md`
@@ -128,8 +134,42 @@ These are the living docs for the current worktree:
   - generated read-only row-level identity ledger for the 157-row clean base stack, used for strict-new duplicate control without creating replay/proof/profitability rows
 - `docs/regular-options-flow-extreme-denominator-dedupe-bridge.md`
   - generated read-only full-denominator and strict-new dedupe bridge for the flow-extreme ratio/backspread branch, now consuming the base clean stack identity ledger
-- `docs/regular-options-all-local-quote-minute-structure-capability-atlas.md`
-  - generated read-only all-local quote-minute structure capability atlas; current status exhausts local quote-surface-only replayability under current data because all selected surfaces fail the 20-train-month feasibility gate despite dense latest-four quote depth
+- `docs/regular-options-historical-profitability-filter-iteration.md`
+  - generated read-only train-selected historical filter iteration for the frozen 13-symbol deterministic materializer; current status blocks re-selection on the consumed audit window and discloses selection-conditioned audit bias while preserving scanner-parity false and no-promotion boundaries
+- `docs/regular-options-historical-filtered-simulated-forward-audit.md`
+  - generated read-only canonical filtered simulated-forward audit for the frozen v1 historical filter; current status is blocked under cluster and USD gates while preserving scanner-parity false and no-promotion boundaries
+- `docs/regular-options-filtered-forward-paper-shadow-tracker.md`
+  - generated read-only prospective paper-shadow dashboard tracker for scan-pick rows that match the frozen historical filtered candidate policy, without live, broker, auto-track, scanner-policy, proof-bar, quote-import, or promotion authority
+- `docs/regular-options-filtered-forward-exit-evidence-capture.md`
+  - generated filtered-forward exit-completion readback over the append-only matched-row log; reads trusted quote stores in read-only mode and can append completion events only through the dedicated script, without quote import, broker, live, auto-track, scanner-policy, proof-bar, or promotion authority
+- `docs/regular-options-filtered-forward-evidence-bar-evaluation.md`
+  - generated read-only evaluator for the pre-registered filtered-forward evidence bar; status remains `evaluation_not_permitted_yet` until the minimum completed-row count is reached
+- `docs/regular-options-scanner-materializer-parity-diff.md`
+  - generated Track C Phase 13 read-only scanner-vs-materializer parity diff; current default post-freeze window has scheduled scan sessions but no materializer rows, so no top starvation gate is inferred from parity rows
+- `data/forward-tracking/regular-options-scanner-materializer-parity-diff/latest.json`
+  - machine-readable parity-diff artifact with daily table, divergence counts, per-lane/symbol summary, and diagnostic-only no-scanner-change boundary flags
+- `docs/regular-options-fresh-window-thetadata-opra-import.md`
+  - generated Track C Phase 16 token-gated fresh-window ThetaData OPRA/NBBO import readback; current dry-run plans from store max `2026-06-08` through latest completed market day `2026-07-01`, while the real write waits for store coordination
+- `docs/regular-options-fresh-window-import-scheduler-health.md`
+  - generated weekday post-close scheduler-health readback for `\OptionsFreshWindowThetaDataOPRAImport`; validates the wrapper has no scan, auto-track, append, broker, proof, or promotion flags
+- `data/contracts/regular-options-frozen-filtered-policy-v1.json`
+  - token-frozen matching authority for the frozen v1 historical filtered policy consumed by the prospective filtered paper-shadow tracker
+- `data/contracts/regular-options-filtered-forward-evidence-bar-v1.json`
+  - token-frozen prospective evidence-bar contract requiring 30 completed non-fixture forward paper-shadow rows, 8 ticker-week clusters, 3 months, positive USD, and percent/USD cluster PF lower bounds above 1.0 before evaluation
+- `scripts/freeze_regular_options_filtered_policy.py`
+  - token-gated generator for the frozen filtered-policy matching contract
+- `scripts/freeze_regular_options_filtered_forward_evidence_bar.py`
+  - token-gated generator for the forward evidence-bar contract; the tracker reports progress against this bar but cannot approve profitability, scanner-policy changes, live validation, auto-track, broker orders, quote import, evidence mutation, holdout use, or promotion
+- `scripts/capture_regular_options_filtered_forward_exit_evidence.py`
+  - append-only filtered-forward exact-exit completion writer; it reads trusted exit quote evidence and never imports quotes, creates trades, submits orders, or changes scanner policy
+- `scripts/build_regular_options_filtered_forward_evidence_bar_evaluation.py`
+  - read-only filtered-forward evidence-bar evaluator with contract hash checks and no approval authority
+- `scripts/build_regular_options_scanner_materializer_parity_diff.py`
+  - read-only Track C Phase 13 parity-diff builder; loads materializer JSONL, scan-pick JSONL, and scheduled-scan ledger sessions without running the scanner or mutating evidence stores
+- `scripts/import_regular_options_fresh_window_thetadata_opra.py`
+  - token-gated Track C Phase 16 trusted quote importer for store-max-plus-one through latest completed market day, with optional materializer/parity refresh and no scanner/proof/promotion authority
+- `scripts/build_regular_options_fresh_window_import_scheduler_health.py`
+  - scheduler-health readback for the fresh-window ThetaData import task and wrapper safety checks
 - `docs/day-trading-current-state.md`
   - current day-trading and crypto sidecar snapshot, with archive warnings
 - `docs/PROJECT_CONTEXT.md`
@@ -296,21 +336,25 @@ These are the living docs for the current worktree:
 - `docs/regular-options-13-symbol-frozen-daily-candidate-decisions.md`
   - generated read-only frozen daily candidate/no-pick/blocker decision materializer; it rejects broad or mismatched source artifacts at the materializer boundary and requires explicit `proof_safe=true` before accepted rows can become proof-safe
 - `docs/regular-options-historical-frozen-scanner-replay-adapter.md`
-  - generated bounded read-only historical scanner replay adapter for the frozen Phase 2 lane/symbol/date denominator; it currently emits 6,916 blocked rows and names missing point-in-time scanner inputs instead of inventing selected/no-pick rows
+  - generated bounded read-only historical scanner replay adapter for the frozen Phase 2 lane/symbol/date denominator; it now consumes point-in-time earnings readiness, enforces known-at filtering, and materializes deterministic selected/no-pick rows without claiming scanner parity
 - `docs/regular-options-13-symbol-frozen-candidate-generation-source-surface.md`
-  - generated read-only frozen 13-symbol candidate-generation source-surface materializer; it consumes the frozen entrypoint, keeps broad selected rows out of proof, and currently proves 0/24 candidate-generation months and 0 selected rows
+  - generated read-only frozen 13-symbol candidate-generation source-surface materializer; it consumes the frozen entrypoint, keeps broad selected rows out of proof, and now proves the full 24-month frozen calendar surface
 - `docs/regular-options-13-symbol-frozen-candidate-generation-entrypoint.md`
-  - generated read-only reusable frozen daily candidate/no-pick entrypoint; it currently emits 6,916 blocked lane/symbol/date rows because daily candidate-generation diagnostics are missing
+  - generated read-only reusable frozen daily candidate/no-pick entrypoint; it carries deterministic materializer provenance and separates row-level accepted decisions from source-level blockers
 - `docs/regular-options-13-symbol-frozen-candidate-generation-denominator-v2.md`
   - generated read-only daily candidate/no-pick/blocker denominator for the frozen 13-symbol source surface; it currently parks the branch with 494 blocked market-date rows, 0 latest-four strict-new candidates, and smallest blocker `missing_frozen_13_symbol_candidate_generation_engine`
 - `docs/regular-options-13-symbol-frozen-candidate-generation-engine.md`
-  - generated read-only frozen 13-symbol candidate-generation engine/daily diagnostics artifact; it consumes the frozen entrypoint and currently parks on incomplete daily diagnostics with 6,916 blocked lane/symbol/date rows and no selected candidates
+  - generated read-only frozen 13-symbol candidate-generation engine/daily diagnostics artifact; it consumes the frozen entrypoint and now reports ready full-calendar coverage with strict latest-audit exact-trade counts
 - `docs/regular-options-59-symbol-thetadata-opra-import-resume.md`
-  - generated tokened resume retry for the approved scoped 59-symbol ThetaData OPRA/NBBO source repair; it currently parks on local ThetaTerminal availability with no import attempted, 260 shared trusted dates, and 11,565 remaining symbol-date gaps
-- `docs/regular-options-direct-vix-source-repair-packet.md`
-  - generated read-only direct VIX source repair packet; current status is superseded by the materialized VIX source and ready point-in-time VIX bucket, with no current VIX blockers or replay/profitability claim
+  - generated tokened resume retry for the approved scoped 59-symbol ThetaData OPRA/NBBO source repair; latest historical resume state is provenance for provider/import readiness and should not override current paid-source import readbacks
 - `docs/regular-options-macro-event-calendar-source-repair-packet.md`
   - generated read-only macro-event calendar source repair packet; it defines scheduled-event schema, known-at/tradable-after policy, frozen categories, future tokened import/materialization command, and macro-event/post-event branch implications without importing event rows or running replay
+- `docs/regular-options-earnings-calendar-source-repair-packet.md`
+  - generated read-only earnings calendar source repair packet; it defines point-in-time equity earnings schema, known-at/source snapshot policy, required frozen equity symbols, future tokened import/materialization command, and historical-audit downstream unlocks without importing earnings rows or running replay
+- `docs/regular-options-sec-earnings-calendar-source.md`
+  - generated SEC Item 2.02 observed earnings-release source acquisition readback; it stages official point-in-time release filings for the frozen equity symbols while documenting that this is not a vendor scheduled future-calendar snapshot
+- `docs/regular-options-earnings-calendar-source-import.md`
+  - generated tokened earnings-calendar source import report; it materializes approved point-in-time earnings source rows only and then refreshes readiness without running replay or changing trading gates
 - `docs/regular-options-flow-extreme-source-repair-packet.md`
   - generated read-only flow-extreme volume/OI source repair packet; it defines SPY/QQQ trusted daily volume/open-interest schema, known-at policy, prior-row percentile threshold policy, future tokened import/materialization command, and flow-extreme branch implications without importing flow rows or running replay
 - `docs/regular-options-underlying-daily-source-repair-packet.md`
@@ -319,12 +363,6 @@ These are the living docs for the current worktree:
   - generated read-only staged-source acquisition preflight for the underlying daily OHLCV/adjusted-close source; it currently blocks on missing `data/import-staging/underlying_daily` trusted CSV files and refuses local DB/reconstructed/inferred-known-at shortcuts without writing source rows or running replay
 - `docs/regular-options-underlying-daily-source-import.md`
   - generated tokened underlying daily OHLCV/adjusted-close source import report; sample fixture materialization writes generated source rows only, preserves no-replay/no-live/no-broker/no-proof boundaries, and does not clear the full 13-symbol blocker without a trusted full-window source CSV
-- `docs/regular-options-quote-surface-opening-range-reversal-replay.md`
-  - generated read-only quote-surface-only opening-range reversal replay for SPY/QQQ/IWM/DIA; it currently parks the branch with 1,976 blocked daily denominator rows, 0 candidate rows, and smallest blocker `blocked_missing_quote_surface_underlying_price`
-- `docs/regular-options-quote-derived-synthetic-forward-surface.md`
-  - generated read-only synthetic-forward opening-bucket source surface for SPY/QQQ/IWM/DIA; it currently parks the branch with 1,976 symbol-date rows, 7,904 requested bucket checks, 0 ready buckets, and missing same-minute call-put-pair coverage
-- `docs/regular-options-local-quote-structure-capability-matrix.md`
-  - generated read-only local OPRA/NBBO structure capability matrix for the 13-symbol proof set; it currently emits 0 replay-feasible structures because dense latest-four quote-surface rows fail the required 20 train-month coverage gate
 - `docs/regular-options-preregistered-post-event-iv-crush-iron-condor-playbook.md`
   - generated read-only preregistered design artifact for `post_event_iv_crush_index_iron_condor_v1`, defining scheduled macro-event post-event IV-crush iron condor/butterfly rules, event and IV-premium requirements, four-leg side-aware formulas, max-loss/margin requirements, denominator statuses, engine requirements, and falsification gates without implementing or replaying the playbook
 - `docs/regular-options-post-event-iv-crush-replay-readiness.md`
@@ -339,8 +377,6 @@ These are the living docs for the current worktree:
   - generated read-only row-level identity ledger for the 157-row clean base stack; current status is ready with 157 unique identities and no duplicate/missing/leaky/holdout-overlap rows
 - `docs/regular-options-flow-extreme-denominator-dedupe-bridge.md`
   - generated read-only denominator/dedupe bridge that now clears flow-extreme full denominator mapping and strict-new dedupe after consuming the base clean stack identity ledger
-- `docs/regular-options-all-local-quote-minute-structure-capability-atlas.md`
-  - generated read-only all-local quote-minute structure capability atlas; current status exhausts local quote-surface-only replayability under current data because all selected surfaces fail the 20-train-month feasibility gate despite dense latest-four quote depth
 - `docs/regular-options-flow-extreme-ratio-backspread-replay-readiness.md`
   - generated read-only replay-readiness audit for `index_flow_extreme_mean_reversion_ratio_backspread_v1`, checking point-in-time flow/extreme inputs, VIX bucket readiness, side-aware ratio/backspread pricing, max-loss/collateral, assignment/expiration, SPY/QQQ quote surface, denominator mapping, strict-new dedupe, holdout guard, and proof-boundary labeling without running replay
 - `docs/regular-options-preregistered-dispersion-proxy-hybrid-playbook.md`
@@ -399,10 +435,6 @@ These are the living docs for the current worktree:
   - generated read-only chain-native filter relaxation replay for exact-candidate repair targets, now surfacing trusted entry quote demands instead of changing contract-selection policy
 - `docs/regular-options-chain-native-exit-outcome-replay.md`
   - generated read-only exact-exit outcome replay for selected chain-native diagnostic candidates, separating trusted OPRA/NBBO exit P&L from promotion permission
-- `docs/regular-options-chain-native-relaxation-archive.md`
-  - generated read-only archive for exact-priced negative chain-native relaxation branches so disproved branches leave the monthly next-evidence queue
-- `docs/regular-options-exhausted-contract-archive.md`
-  - generated read-only archive for exact contract/date repair targets where the current source repeatedly returned no exact OPRA/NBBO rows
 - `docs/regular-options-profitability-layer-stack.md`
   - generated all-20 regular-options profitability iteration control plane, separating ready, collecting, blocked, replay-gap, and data-gap layers without changing scanner, broker, stop, sizing, or proof behavior
 - `docs/regular-options-minute-exit-replay-readiness.md`

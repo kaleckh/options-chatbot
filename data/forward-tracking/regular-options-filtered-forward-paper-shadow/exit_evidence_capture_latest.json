@@ -1,0 +1,62 @@
+{
+  "accepted_profitability": false,
+  "approval_authority": false,
+  "auto_track_enabled": false,
+  "blockers": [],
+  "broker_order_allowed": false,
+  "completion_rows_appended": 1,
+  "completion_rows_ready": 1,
+  "duplicate_daily_signal_identities": [],
+  "evidence_stores_mutated": false,
+  "exit_evidence_source": {
+    "bad_row_count": 0,
+    "exists": false,
+    "path": "C:/Users/kalec/AppData/Local/Temp/tmpeai1j_6p/missing-live-evidence.jsonl",
+    "row_count": 0,
+    "sha256": null,
+    "status": "missing"
+  },
+  "generated_at_utc": "2026-06-05T22:00:00Z",
+  "historical_rows_are_forward_proof": false,
+  "latest_completed_market_day": "2026-06-05",
+  "live_validation_enabled": false,
+  "matched_rows_log": {
+    "bad_row_count": 0,
+    "exists": true,
+    "path": "C:/Users/kalec/AppData/Local/Temp/tmpeai1j_6p/matched_rows.jsonl",
+    "row_count": 1,
+    "sha256": "f4e5b8020f823ae8a5fdee078f7b7467b2e2153a986c5334b26e0076d34a12ef",
+    "status": "loaded"
+  },
+  "no_write": false,
+  "open_candidate_count": 1,
+  "options_history_db": {
+    "exists": true,
+    "path": "C:/Users/kalec/AppData/Local/Temp/tmpeai1j_6p/options_history.db",
+    "read_only": true
+  },
+  "options_history_db_mutated": false,
+  "prohibited_actions": [
+    "do_not_import_quotes_from_exit_capture",
+    "do_not_mutate_options_history_db_from_exit_capture",
+    "do_not_submit_broker_orders_from_exit_capture",
+    "do_not_enable_live_validation_from_exit_capture",
+    "do_not_enable_auto_track_from_exit_capture",
+    "do_not_change_scanner_policy_from_exit_capture",
+    "do_not_promote_from_exit_capture"
+  ],
+  "protected_holdout_consumed": false,
+  "quotes_imported": false,
+  "reject_counts": {},
+  "report_id": "regular_options_filtered_forward_exit_evidence_capture",
+  "row_results": [
+    {
+      "candidate_id": "50d97caee5b7eab8cac1b664",
+      "policy_exit_date": "2026-06-04",
+      "status": "completion_appended"
+    }
+  ],
+  "scanner_policy_changed": false,
+  "schema_version": 1,
+  "status": "exit_completion_appended"
+}

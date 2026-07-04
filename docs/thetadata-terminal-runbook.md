@@ -80,9 +80,16 @@ npm run options:gateboard
 ## Failure Rules
 
 - `WinError 10061`, connection refused, or no listener on `25503` means the feed is down. Start ThetaTerminal v3 and rerun the dry-run probe before archiving, quarantining, or declaring quote exhaustion.
+- `403 Forbidden` with terminal output showing `Options: FREE` means the local terminal is running but the loaded credentials do not have the required paid options entitlement. Fix or replace `C:\Users\kalec\ThetaData\creds.txt`, restart ThetaTerminal v3, and rerun the provider recheck before retrying imports.
 - A feed-down dry run is not evidence that the requested contract/date has no OPRA/NBBO evidence.
 - Archive current-source exhausted contracts only after the terminal is reachable and durable exact contract/date attempts still return current-provider no-match evidence.
 - Imported quote rows and read-only execution-alternative replay coverage are not production proof. Production proof still requires trusted intraday exact-contract OPRA/NBBO bid/ask plus executable entry, exit, fill, and P&L for the actual trade surface being claimed.
+
+## 2026-06-29 Readback
+
+ThetaTerminal v3 was reachable on `25503`, and the running Java command used `C:\Users\kalec\ThetaData\creds.txt`, but the terminal banner reported `Subscriptions: Stock: FREE Options: FREE Index: FREE Rate: FREE`. The QQQ/SPY option-history probe returned `403 Forbidden`, and the 59-symbol resume artifact now reports `blocked_thetadata_options_entitlement` with no import attempted. This is a credential/entitlement blocker, not a down-terminal blocker.
+
+Later the operator supplied a `td1_prod_...` API key. That key was stored locally at `C:\Users\kalec\ThetaData\api-key.txt` for future use, but it is not a drop-in `--creds-file` value for the current ThetaTerminal builds. Testing it as the password half of a two-line creds file and as a key-only creds file both returned `Invalid credentials`. The original `creds.txt` email/password also returned `Invalid credentials` after the subscription change. To use ThetaTerminal, provide a valid two-line username/password creds file or official ThetaData API-key terminal instructions; do not keep retrying the API key through `--creds-file`.
 
 ## 2026-06-08 Readback
 

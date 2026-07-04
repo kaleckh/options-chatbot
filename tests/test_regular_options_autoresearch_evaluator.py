@@ -7,6 +7,7 @@ from pathlib import Path
 
 from scripts.evaluate_regular_options_autoresearch import (
     append_ledger,
+    block_bootstrap_confidence_for_values,
     bootstrap_confidence_for_values,
     build_scoreboard,
     evaluator_config_hash,
@@ -300,6 +301,44 @@ class RegularOptionsAutoresearchEvaluatorTests(unittest.TestCase):
         self.assertLess(stats["pf_lb_5pct"], 1.0)
         self.assertLess(stats["avg_net_lb_5pct"], 0.0)
         self.assertEqual(stats["statistical_confidence"], "underpowered")
+
+    def test_block_bootstrap_single_cluster_is_degenerate(self):
+        entries = [("AAPL:2026-W01", 10.0), ("AAPL:2026-W01", -2.0)]
+        stats = block_bootstrap_confidence_for_values(entries, branch_id="single-cluster", draws=100)
+
+        self.assertEqual(stats["method"], "cluster_block_bootstrap")
+        self.assertEqual(stats["cluster_count"], 1)
+        self.assertEqual(stats["pf_point"], 5.0)
+        self.assertEqual(stats["pf_lb_5pct"], 5.0)
+        self.assertEqual(stats["avg_net_lb_5pct"], 4.0)
+
+    def test_block_bootstrap_identical_independent_clusters_matches_iid_shape(self):
+        entries = []
+        values = []
+        for i in range(30):
+            entries.extend([(f"T{i}:2026-W01", 10.0), (f"T{i}:2026-W01", -2.0)])
+            values.extend([10.0, -2.0])
+
+        clustered = block_bootstrap_confidence_for_values(entries, branch_id="identical-clusters", draws=500)
+        iid = bootstrap_confidence_for_values(values, branch_id="identical-clusters", draws=500)
+
+        self.assertEqual(clustered["cluster_count"], 30)
+        self.assertGreater(clustered["pf_lb_5pct"], 1.0)
+        self.assertAlmostEqual(clustered["pf_point"], iid["pf_point"])
+
+    def test_block_bootstrap_correlated_clusters_is_more_conservative_than_iid(self):
+        entries = []
+        values = []
+        for i in range(20):
+            cluster_values = [10.0, 10.0, 10.0] if i < 16 else [-30.0, -30.0, -30.0]
+            for value in cluster_values:
+                entries.append((f"T{i}:2026-W01", value))
+                values.append(value)
+
+        clustered = block_bootstrap_confidence_for_values(entries, branch_id="correlated-clusters", draws=1000)
+        iid = bootstrap_confidence_for_values(values, branch_id="correlated-clusters", draws=1000)
+
+        self.assertLess(clustered["pf_lb_5pct"], iid["pf_lb_5pct"])
 
     def test_scoreboard_reports_combined_and_per_branch_bootstrap_fields(self):
         scoreboard = build_scoreboard(

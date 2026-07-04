@@ -137,6 +137,9 @@ class RegularOptions13SymbolFrozenCandidateGenerationEngineTests(unittest.TestCa
         self.assertFalse(report["accepted_profitability"])
         self.assertFalse(report["historical_rows_are_forward_proof"])
         self.assertFalse(report["quotes_imported"])
+        self.assertFalse(report["scanner_parity"])
+        self.assertFalse(report["production_scanner_replay"])
+        self.assertEqual(report["candidate_materialization_basis"], "deterministic_local_pit_candidate_materializer_v1")
 
     def test_entrypoint_discovery_can_mark_ready_but_not_execute_engine(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -166,6 +169,13 @@ class RegularOptions13SymbolFrozenCandidateGenerationEngineTests(unittest.TestCa
                     for symbol in lane["symbols"]:
                         rows.append({"date": day, "lane": lane["lane_id"], "underlying": symbol, "status": "explicit_no_pick"})
             rows[0]["status"] = "selected_candidate"
+            rows[0].update(
+                {
+                    "exact_priced": True,
+                    "proof_grade": "trusted_intraday_opra_nbbo",
+                    "fill_basis": "imported_spread_mark",
+                }
+            )
             _write_json(
                 paths["frozen_entrypoint_path"],
                 {
@@ -188,6 +198,43 @@ class RegularOptions13SymbolFrozenCandidateGenerationEngineTests(unittest.TestCa
         self.assertEqual(report["daily_candidate_generation_row_count"], 28)
         self.assertEqual(report["selected_candidate_row_count"], 1)
         self.assertNotIn("blocked_daily_candidate_generation_coverage", report["blockers"])
+        self.assertEqual(report["coverage"]["latest_audit_exact_trades"], 1)
+        self.assertEqual(report["coverage"]["latest_four_strict_new_candidates"], 1)
+
+    def test_partial_selected_row_audit_is_separate_from_strict_coverage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = _fixtures(Path(tmp))
+            source_payload = json.loads(paths["source_surface_path"].read_text(encoding="utf8"))
+            source_payload["selected_trades"] = [
+                {
+                    "date": "2026-02-02",
+                    "entry_date": "2026-02-02",
+                    "ticker": "SPY",
+                    "partial_audit_candidate": True,
+                    "exact_priced": True,
+                    "proof_grade": "trusted_intraday_opra_nbbo",
+                    "fill_basis": "imported_spread_mark",
+                    "pnl_pct": 10.0,
+                }
+            ]
+            source_payload["calendar_coverage"] = {"status": "calendar_coverage_not_proven"}
+            _write_json(paths["source_surface_path"], source_payload)
+            report = engine.build_report(
+                **paths,
+                window_start="2026-02-01",
+                window_end="2026-02-28",
+                as_of_date="2026-06-04",
+                generated_at_utc="2026-06-24T00:00:00Z",
+            )
+
+        self.assertEqual(report["coverage"]["latest_audit_exact_trades"], 0)
+        self.assertEqual(report["coverage"]["latest_audit_exact_trades_scope"], "strict_calendar_coverage_only")
+        self.assertIn("strict_latest_audit_exact_trades_0_below_30", report["blockers"])
+        self.assertEqual(report["partial_selected_row_audit"]["exact_priced_rows"], 1)
+        self.assertEqual(report["partial_selected_row_audit"]["exact_priced_months"], ["2026-02"])
+        self.assertFalse(report["partial_selected_row_audit"]["strict_calendar_coverage_proven"])
+        self.assertFalse(report["partial_selected_row_audit"]["scanner_parity"])
+        self.assertFalse(report["partial_selected_row_audit"]["production_scanner_replay"])
 
     def test_write_outputs_creates_expected_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -208,6 +255,36 @@ class RegularOptions13SymbolFrozenCandidateGenerationEngineTests(unittest.TestCa
             self.assertTrue((root / "out" / "selected_candidates.jsonl").exists())
             self.assertTrue((root / "doc.md").exists())
             self.assertTrue(artifacts["daily_candidate_generation_jsonl"].replace("\\", "/").endswith("/out/daily_candidate_generation.jsonl"))
+
+    def test_ready_boundary_says_downstream_audit_may_consume_generated_rows(self) -> None:
+        report = {
+            "status": "frozen_13_symbol_candidate_generation_engine_ready",
+            "decision": "frozen_13_symbol_candidate_generation_engine_ready",
+            "requested_window": {"window_start": "2024-06-01", "window_end": "2026-05-31", "as_of_date": "2026-06-04"},
+            "daily_candidate_generation_row_count": 1,
+            "coverage": {
+                "candidate_generation_months_covered_count": 24,
+                "requested_month_count": 24,
+                "train_months_covered": 20,
+                "audit_months_covered": 4,
+                "latest_audit_exact_trades": 345,
+                "latest_audit_exact_trades_scope": "strict_calendar_coverage_only",
+            },
+            "partial_selected_row_audit": {"exact_priced_rows": 2851},
+            "candidate_materialization_basis": "deterministic_local_pit_candidate_materializer_v1",
+            "scanner_parity": False,
+            "production_scanner_replay": False,
+            "baseline_reproduction": {"prior_frozen_source_surface_months_covered": 24, "prior_denominator_v2_all_rows_blocked": True},
+            "accepted_profitability": False,
+            "daily_status_counts": {"selected_candidate": 1},
+            "blockers": [],
+        }
+
+        markdown = engine.render_markdown(report)
+
+        self.assertIn("downstream historical simulated-forward audit metrics may consume the generated selected rows", markdown)
+        self.assertIn("scanner parity remains false", markdown)
+        self.assertNotIn("candidate-generation coverage is not proven", markdown)
 
 
 if __name__ == "__main__":

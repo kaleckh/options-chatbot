@@ -82,6 +82,20 @@ FORBIDDEN_ACTIONS = [
     "posthoc_filter_broad_source_rows_into_proof",
     "invent_selected_or_no_pick_rows",
 ]
+DEFAULT_CANDIDATE_MATERIALIZATION_BASIS = "deterministic_local_pit_candidate_materializer_v1"
+
+
+def _source_non_parity(source: dict[str, Any] | None) -> dict[str, Any]:
+    source_data = _as_dict(source)
+    return {
+        "candidate_materialization_basis": str(
+            source_data.get("candidate_materialization_basis") or DEFAULT_CANDIDATE_MATERIALIZATION_BASIS
+        ),
+        "scanner_parity": bool(source_data.get("scanner_parity")) if "scanner_parity" in source_data else False,
+        "production_scanner_replay": bool(source_data.get("production_scanner_replay"))
+        if "production_scanner_replay" in source_data
+        else False,
+    }
 
 
 def _utc_now_iso() -> str:
@@ -287,6 +301,7 @@ def _build_rows(
     source_integrity: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
     indexed = _source_index(source or {})
+    non_parity = _source_non_parity(source)
     source_integrity_blockers = [str(item) for item in _as_list(_as_dict(source_integrity).get("blockers"))]
     rows: list[dict[str, Any]] = []
     selected: list[dict[str, Any]] = []
@@ -351,6 +366,7 @@ def _build_rows(
                 "no_write": True,
                 "accepted_profitability": False,
                 "historical_rows_are_forward_proof": False,
+                **non_parity,
                 "source_artifact_path": _as_dict(source_meta).get("path"),
                 "decision_source": (
                     "provided_exact_daily_decision_source"
@@ -362,9 +378,78 @@ def _build_rows(
                     "missing_command": scanner_surface.get("missing_command"),
                     "source_row_present": bool(source_row),
                     "proof_safe": bool(status in ACCEPTED_STATUSES and source_proof_safe),
+                    **non_parity,
                 },
                 "blockers": sorted(dict.fromkeys(row_blockers)),
             }
+            if source_row and status in ACCEPTED_STATUSES:
+                for payload_key in (
+                    "entry_date",
+                    "exit_date",
+                    "ticker",
+                    "symbol",
+                    "lane_family",
+                    "direction",
+                    "strategy_type",
+                    "entry_contract_resolution",
+                    "fill_basis",
+                    "proof_grade",
+                    "quote_source",
+                    "exact_priced",
+                    "pnl_pct",
+                    "net_pnl_pct",
+                    "contract_multiplier",
+                    "fee_per_contract_leg_usd",
+                    "total_fees_usd",
+                    "gross_pnl_usd",
+                    "net_pnl_usd",
+                    "net_pnl_pct_after_fees",
+                    "exit_value_floored_at_zero",
+                    "dedupe_key",
+                    "portfolio_eligible",
+                    "source_result_path",
+                    "long_contract_symbol",
+                    "short_contract_symbol",
+                    "expiry",
+                    "dte",
+                    "spread_width",
+                    "entry_debit",
+                    "net_debit",
+                    "debit_pct_of_width",
+                    "exit_reason",
+                    "exit_value",
+                    "exit_px",
+                    "exit_pricing_status",
+                    "long_entry_bid",
+                    "long_entry_ask",
+                    "short_entry_bid",
+                    "short_entry_ask",
+                    "long_exit_bid",
+                    "long_exit_ask",
+                    "short_exit_bid",
+                    "short_exit_ask",
+                    "signal_evidence",
+                    "no_pick_reason",
+                ):
+                    if payload_key in source_row:
+                        row[payload_key] = source_row.get(payload_key)
+                row.update(
+                    {
+                        "row_id": f"{REPORT_ID}:{current_date.isoformat()}:{lane}:{symbol}",
+                        "date": current_date.isoformat(),
+                        "candidate_generation_date": current_date.isoformat(),
+                        "month": current_date.isoformat()[:7],
+                        "lane": lane,
+                        "lane_id": lane,
+                        "underlying": symbol,
+                        "ticker": symbol,
+                        "status": status,
+                        "selected_candidate": status == "selected_candidate",
+                        "explicit_no_pick": status == "explicit_no_pick",
+                        "proof_safe": bool(status in ACCEPTED_STATUSES and source_proof_safe),
+                        "blockers": sorted(dict.fromkeys(row_blockers)),
+                    }
+                )
             rows.append(row)
             blockers.extend(row_blockers)
             if row["selected_candidate"]:
@@ -501,7 +586,10 @@ def build_report(
             "source_daily_decisions": source_meta,
         },
         "scanner_replay_surface": scanner_surface,
-        "source_integrity": source_integrity,
+            "source_integrity": source_integrity,
+        "candidate_materialization_basis": _source_non_parity(source).get("candidate_materialization_basis"),
+        "scanner_parity": _source_non_parity(source).get("scanner_parity"),
+        "production_scanner_replay": _source_non_parity(source).get("production_scanner_replay"),
         "source_artifact_inventory": [
             {
                 "artifact": "existing_scanner_surface",
@@ -509,6 +597,7 @@ def build_report(
                 "reason": scanner_surface.get("decision"),
                 "missing_command": scanner_surface.get("missing_command"),
                 "inspected_callables": scanner_surface.get("inspected_callables"),
+                **_source_non_parity(source),
             }
         ],
         "calendar_coverage": {
@@ -582,7 +671,19 @@ def render_markdown(report: dict[str, Any]) -> str:
     if blockers := _as_list(report.get("blockers")):
         lines.extend(["", "## Blockers", ""])
         lines.extend(f"- `{blocker}`" for blocker in blockers)
-    lines.extend(["", "## Boundary", "", "No rows are fabricated, broad-source rows are not post-hoc filtered into proof, and scanner policy is unchanged.", ""])
+    lines.extend(
+        [
+            "",
+            "## Boundary",
+            "",
+            f"- Candidate materialization basis: `{report.get('candidate_materialization_basis')}`.",
+            f"- Scanner parity: `{report.get('scanner_parity')}`.",
+            f"- Production scanner replay: `{report.get('production_scanner_replay')}`.",
+            "",
+            "No rows are fabricated, broad-source rows are not post-hoc filtered into proof, and scanner policy is unchanged.",
+            "",
+        ]
+    )
     return "\n".join(lines)
 
 

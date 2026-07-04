@@ -42,6 +42,9 @@ DEFAULT_FRESH_EVIDENCE = ROOT / "data" / "forward-tracking" / "regular_options_f
 DEFAULT_OPEN_RISK = ROOT / "data" / "forward-tracking" / "regular_open_position_risk_latest.json"
 DEFAULT_SUGGESTED_RISK = ROOT / "data" / "forward-tracking" / "suggested_trade_close_risk_latest.json"
 DEFAULT_PAPER_SHORTLIST = ROOT / "data" / "profitability-lab" / "regular-options-paper-shortlist" / "latest.json"
+DEFAULT_FILTERED_FORWARD_TRACKER = (
+    ROOT / "data" / "forward-tracking" / "regular-options-filtered-forward-paper-shadow" / "latest.json"
+)
 DEFAULT_OPERATING_SCORECARD = ROOT / "data" / "profitability-lab" / "regular-options-operating-scorecard" / "latest.json"
 DEFAULT_CANDIDATE_LIFECYCLE = ROOT / "data" / "contracts" / "candidate-lifecycle-contract.json"
 DEFAULT_AI_COMMODITY = ROOT / "data" / "ai-commodity-infra" / "progress" / "latest.json"
@@ -346,6 +349,7 @@ def _promotion_pathway(lane_promotion: dict[str, Any], registry: dict[str, Any])
 
 def _operator_pathway(
     paper_shortlist: dict[str, Any],
+    filtered_forward_tracker: dict[str, Any],
     scorecard: dict[str, Any],
     ai_commodity: dict[str, Any],
     open_risk: dict[str, Any],
@@ -354,6 +358,11 @@ def _operator_pathway(
     registry: dict[str, Any],
 ) -> dict[str, Any]:
     shortlist_summary = paper_shortlist.get("summary") if isinstance(paper_shortlist.get("summary"), dict) else {}
+    filtered_forward = (
+        filtered_forward_tracker.get("forward_tracking")
+        if isinstance(filtered_forward_tracker.get("forward_tracking"), dict)
+        else {}
+    )
     scorecard_paper = scorecard.get("paper_gate_readiness") if isinstance(scorecard.get("paper_gate_readiness"), dict) else {}
     eligible = _safe_int(shortlist_summary.get("eligible_count"), _safe_int(scorecard_paper.get("eligible_paper_review_candidate_count"), 0))
     ai_verified = bool(ai_commodity.get("verified"))
@@ -392,6 +401,9 @@ def _operator_pathway(
     details = [
         f"paper_shortlist_release_gate={shortlist_summary.get('release_gate_status')}",
         f"eligible_paper_review_candidates={eligible}",
+        f"filtered_forward_paper_shadow_candidates={_safe_int(filtered_forward.get('matched_candidate_count'), 0)}",
+        f"filtered_forward_open_candidates={_safe_int(filtered_forward.get('open_candidate_count'), 0)}",
+        f"filtered_forward_tracker_status={filtered_forward_tracker.get('status')}",
         f"scorecard_status={scorecard.get('status')}",
         f"paper_gate_status={scorecard_paper.get('status')}",
         f"open_risk_governor_status={open_governor.get('status')}",
@@ -440,6 +452,7 @@ def _no_chase_manifest(
     paper_shortlist: dict[str, Any],
     open_risk: dict[str, Any],
     suggested_risk: dict[str, Any],
+    filtered_forward_tracker: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     reasons: list[dict[str, Any]] = []
     missed_summary = missed_outcome.get("summary") if isinstance(missed_outcome.get("summary"), dict) else {}
@@ -563,6 +576,7 @@ def build_gateboard(
     open_risk_path: Path = DEFAULT_OPEN_RISK,
     suggested_risk_path: Path = DEFAULT_SUGGESTED_RISK,
     paper_shortlist_path: Path = DEFAULT_PAPER_SHORTLIST,
+    filtered_forward_tracker_path: Path = DEFAULT_FILTERED_FORWARD_TRACKER,
     operating_scorecard_path: Path = DEFAULT_OPERATING_SCORECARD,
     candidate_lifecycle_path: Path = DEFAULT_CANDIDATE_LIFECYCLE,
     ai_commodity_path: Path = DEFAULT_AI_COMMODITY,
@@ -575,6 +589,7 @@ def build_gateboard(
     open_risk = _load_json(open_risk_path)
     suggested_risk = _load_json(suggested_risk_path)
     paper_shortlist = _load_json(paper_shortlist_path)
+    filtered_forward_tracker = _load_json(filtered_forward_tracker_path)
     scorecard = _load_json(operating_scorecard_path)
     lifecycle = _load_json(candidate_lifecycle_path)
     ai_commodity = _load_json(ai_commodity_path)
@@ -605,6 +620,7 @@ def build_gateboard(
         _promotion_pathway(lane_promotion, registry),
         _operator_pathway(
             paper_shortlist,
+            filtered_forward_tracker,
             scorecard,
             ai_commodity,
             open_risk,
@@ -623,6 +639,7 @@ def build_gateboard(
         "suggested_trade_close_risk": _artifact_summary(suggested_risk_path, suggested_risk),
         "lane_promotion_state": _artifact_summary(lane_promotion_path, lane_promotion),
         "paper_shortlist": _artifact_summary(paper_shortlist_path, paper_shortlist),
+        "filtered_forward_paper_shadow_tracker": _artifact_summary(filtered_forward_tracker_path, filtered_forward_tracker),
         "operating_scorecard": _artifact_summary(operating_scorecard_path, scorecard),
         "ai_commodity_progress": _artifact_summary(ai_commodity_path, ai_commodity),
         "scheduled_scan_heartbeat": {
@@ -649,6 +666,7 @@ def build_gateboard(
             lane_promotion=lane_promotion,
             fresh_evidence=fresh_evidence,
             paper_shortlist=paper_shortlist,
+            filtered_forward_tracker=filtered_forward_tracker,
             open_risk=open_risk,
             suggested_risk=suggested_risk,
         ),

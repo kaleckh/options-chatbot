@@ -1,0 +1,112 @@
+{
+  "artifacts": {
+    "docs_report": "docs/regular-options-fresh-window-import-scheduler-health.md",
+    "json": "data/forward-tracking/regular_options_fresh_window_import_scheduler_health_20260703T234541Z.json",
+    "latest_json": "data/forward-tracking/regular_options_fresh_window_import_scheduler_health_latest.json",
+    "latest_markdown": "data/forward-tracking/regular_options_fresh_window_import_scheduler_health_latest.md",
+    "markdown": "data/forward-tracking/regular_options_fresh_window_import_scheduler_health_20260703T234541Z.md"
+  },
+  "batch_file": {
+    "exists": true,
+    "missing_steps": [],
+    "order_blockers": [],
+    "path": "scripts/run_fresh_window_thetadata_opra_import.bat",
+    "prohibited_tokens_present": [],
+    "status": "loaded"
+  },
+  "blockers": [
+    "scheduler_runtime_blocking:scheduler_runtime_failed"
+  ],
+  "config_blockers": [],
+  "config_status": "fresh_window_import_scheduler_ready",
+  "expected": {
+    "batch_steps": [
+      "scripts\\import_regular_options_fresh_window_thetadata_opra.py --approval-token APPROVE_FRESH_WINDOW_THETADATA_OPRA_IMPORT --timeout 20 --refresh-after-import --json",
+      "scripts\\build_regular_options_fresh_window_import_scheduler_health.py --json"
+    ],
+    "execution_time_limit": "02:00:00",
+    "schedule_type": "Weekly",
+    "scheduled_task_state": "Enabled",
+    "start_time": "5:30:00 PM",
+    "task_name": "\\OptionsFreshWindowThetaDataOPRAImport",
+    "task_to_run": "C:\\Users\\kalec\\options-chatbot\\scripts\\run_fresh_window_thetadata_opra_import.bat",
+    "weekdays_required": [
+      "MON",
+      "TUE",
+      "WED",
+      "THU",
+      "FRI"
+    ]
+  },
+  "generated_at_utc": "2026-07-03T23:45:41Z",
+  "query_returncode": 0,
+  "query_stderr": [],
+  "report_id": "regular_options_fresh_window_import_scheduler_health",
+  "runtime_blockers": [
+    "scheduler_runtime_last_result_nonzero"
+  ],
+  "runtime_status": "scheduler_runtime_failed",
+  "runtime_telemetry": {
+    "blockers": [
+      "scheduler_runtime_last_result_nonzero"
+    ],
+    "fields": {
+      "last_result": "267009",
+      "last_run_time": "7/3/2026 5:30:00 PM",
+      "next_run_time": "7/6/2026 5:30:00 PM",
+      "number_of_missed_runs": ""
+    },
+    "parsed": {
+      "last_result_code": 267009,
+      "last_run_time_is_never_run_sentinel": false,
+      "last_run_time_local": "2026-07-03T17:30:00",
+      "next_run_time_local": "2026-07-06T17:30:00",
+      "number_of_missed_runs": null
+    },
+    "runtime_blocking": true,
+    "status": "scheduler_runtime_failed"
+  },
+  "safety": {
+    "auto_track_enabled": false,
+    "broker_order_allowed": false,
+    "forward_cohort_appended": false,
+    "live_validation_enabled": false,
+    "proof_bars_changed": false,
+    "protected_holdout_consumed": false,
+    "scanner_policy_changed": false
+  },
+  "schema_version": 1,
+  "status": "fresh_window_import_scheduler_runtime_blocked",
+  "task": {
+    "Author": "N/A",
+    "Comment": "Runs the tokened options-chatbot fresh-window ThetaData OPRA/NBBO quote import after market close, then refreshes materializer/parity readbacks. No scanner, auto-track, append, broker, proof-bar, or promotion changes.",
+    "Days": "MON, TUE, WED, THU, FRI",
+    "Delete Task If Not Rescheduled": "Disabled",
+    "End Date": "N/A",
+    "Folder": "\\",
+    "HostName": "KAESDEVICE",
+    "Idle Time": "Disabled",
+    "Last Result": "267009",
+    "Last Run Time": "7/3/2026 5:30:00 PM",
+    "Logon Mode": "Interactive only",
+    "Months": "Every 1 week(s)",
+    "Next Run Time": "7/6/2026 5:30:00 PM",
+    "Power Management": "Stop On Battery Mode, No Start On Batteries",
+    "Repeat: Every": "Disabled",
+    "Repeat: Stop If Still Running": "Disabled",
+    "Repeat: Until: Duration": "Disabled",
+    "Repeat: Until: Time": "Disabled",
+    "Run As User": "kalec",
+    "Schedule": "Scheduling data is not available in this format.",
+    "Schedule Type": "Weekly",
+    "Scheduled Task State": "Enabled",
+    "Start Date": "7/2/2026",
+    "Start In": "C:\\Users\\kalec\\options-chatbot",
+    "Start Time": "5:30:00 PM",
+    "Status": "Running",
+    "Stop Task If Runs X Hours and X Mins": "02:00:00",
+    "Task To Run": "cmd.exe /c \"C:\\Users\\kalec\\options-chatbot\\scripts\\run_fresh_window_thetadata_opra_import.bat\"",
+    "TaskName": "\\OptionsFreshWindowThetaDataOPRAImport"
+  },
+  "task_name": "\\OptionsFreshWindowThetaDataOPRAImport"
+}

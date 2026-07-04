@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: 2026-05-31
+Last updated: 2026-07-02
 
 ## Critical Rule: Read Code First
 
@@ -80,54 +80,33 @@ They are:
 
 ## Validation And Proof Snapshot
 
-### Replay state
+### Regular options historical filtered-audit state
 
-The latest saved `wfo_results.json` artifact in this worktree was generated on `2026-04-07T13:15:05` and reflects a `2` year `historical_imported_daily` broad replay. It remains unprofitable:
-- `total_trades`: `227`
-- `directional_accuracy_pct`: `63.4`
-- `profit_factor`: `0.57`
-- `avg_pnl_pct`: `-14.27`
+The current regular-options historical audit chain is the frozen 13-symbol deterministic materializer, not the old `wfo_results.json` broad replay. The relevant generated sources are:
+- `data/contracts/regular-options-frozen-filtered-policy-v1.json`
+- `data/contracts/regular-options-audit-window-consumption-registry.json`
+- `data/contracts/regular-options-filtered-forward-evidence-bar-v1.json`
+- `data/profitability-lab/regular-options-historical-simulated-forward-audit/latest.json`
+- `data/profitability-lab/regular-options-historical-profitability-filter-iteration/latest.json`
+- `data/profitability-lab/regular-options-historical-filtered-simulated-forward-audit/latest.json`
+- `data/profitability-lab/regular-options-historical-frozen-scanner-replay-adapter/latest.json`
 
-That saved broad replay artifact is still useful for supervision and diagnostics, but it does not justify a profitability claim by itself.
+The frozen filtered policy is `historical_filtered_candidate_policy_v1`, filter `train_ranked_top_8_tickers__signal_evidence_prior_20_trading_day_return_pct_gte_10.9906`, with condition hash `3b10d0306800e1a203480b80e4fafda03d5e1b6443d8d294cbf8ff7f20324967`. It is the forward tracker's matching authority; the latest filtered-audit artifact is context/drift readback only.
 
-### Bullish pullback ThetaData state
+The audit window `2026-02` through `2026-05` is recorded as consumed. Rerunning the historical profitability filter iteration over that overlapping audit window cannot mint a new accepted filter. The latest iteration reports `selection_permitted=false`, `accepted_filter_count=0`, and status `blocked_audit_window_already_consumed_for_selection`.
 
-The regular `bullish_pullback_observation` lane now has newer exact trusted ThetaData intraday OPRA/NBBO research artifacts that supersede `wfo_results.json` for current profitability work:
+The corrected statistics are stricter than the original filtered-audit readback:
+- broad historical audit: `2,680` deduped exact rows after removing `171` duplicates; latest-audit percent cluster PF lower bound `0.72`; USD cluster PF lower bound `1.02`; status `blocked_historical_simulated_forward_audit`
+- frozen filtered audit: train `237` rows, percent cluster PF lower bound `0.93`, USD cluster PF lower bound `0.80`; audit `57` rows, percent cluster PF lower bound `1.15`, USD cluster PF lower bound `1.89`; status `blocked_historical_filtered_simulated_forward_audit`
+- adapter economics: `2,972` selected candidates with fee-adjusted USD fields, `$0.65` per contract-leg fee default, and `267` floored exit-value rows
 
-- active universe: `59` symbols, with `CMCSA` excluded
-- trusted coverage: `252` shared dates from `2025-05-22` through `2026-05-22`
-- high-confidence S/A/B evidence: `108` exact quoted trades, PF `4.86`, avg `+53.22%`
-- count-expanded all-59 branch: `130` exact quoted trades, PF `2.04`, avg `+24.56%`, `97.7%` quote coverage
-- per-ticker audit: `docs/bullish-pullback-ticker-audit-2026-05-29.md`
+The filtered audit's positive audit-window labels are selection-conditioned because the v1 filter was selected using train-and-audit success over a searched family of `162` filters. Those audit metrics are not unbiased out-of-sample estimates and do not constitute accepted profitability, fresh forward proof, scanner parity, live validation, auto-track permission, broker permission, proof-bar change, or promotion.
 
-This is paper-shadow research evidence, not strict proof-complete or live-capital approval. Scoped to bullish-pullback-only artifacts, the count issue remains real: the count-expanded branch is `130` exact trades and still short of a clean `200+` annual cadence.
+### Regular options forward state
 
-### Regular multi-lane stock-options count state
+Prospective matching for the frozen v1 filtered policy is tracked by `docs/regular-options-filtered-forward-paper-shadow-tracker.md`. The tracker is dashboard/reporting evidence only; it currently has `0` matched/open rows and cannot approve trades or profitability.
 
-The broader regular stock-options count question is no longer answered by bullish-pullback-only artifacts. The current multi-lane runner is `scripts/run_regular_options_multilane_portfolio.py`, with latest artifacts under `data/profitability-lab/regular-options-multilane/`.
-
-Current read:
-- combined count stack: `234` trusted intraday exact trades after strict entry-date + ticker + direction dedupe
-- gap to `200`: `0`
-- count gate: `passed`
-- overall quality gate: `quality_pending`
-- counted stack: `130` bullish-pullback core rows plus `104` strict-new Lane A rows
-- important blocker: Lane A priced-only economics do not survive conservative side-aware zero-bid replay; combined Lane A falls to PF `0.85`, avg `-6.51%`, and `96.2%` coverage
-
-Therefore, `200` is achieved only as count feasibility. It is not achieved as `200 good trades`, promotable-clean proof, production readiness, or live-capital approval.
-
-The frozen autoresearch evaluator is the clean-promotion judge. Its baseline saw the `234` stack as scout evidence with `0` clean trades. Its latest experiment output currently falls back to the `130`-trade bullish-pullback core because the tested Lane A repair shrank Lane A below the portfolio-candidate threshold. The clean replacement baseline is `157` strict-deduped rows from core plus clean reference, leaving a `43`-trade clean gap to `200`.
-
-### Regular options profit-cycle state
-
-The bounded regular options profit cycle is currently blocked.
-
-The latest saved `data/options-profit/status.json` artifact was generated on `2026-04-03T22:44:56.929432Z`. It reports:
-- mandatory imported-daily truth refresh failed because source truth is stale
-- zero matured eligible forward events
-- zero closed tracked positions for profitability supervision
-
-`data/options-profit/live_profile.json` still shows the incumbent managed candidates as `baseline_broad_control` for `SPY` and `QQQ` on both the call and put sides.
+The prospective tracker now reports against `data/contracts/regular-options-filtered-forward-evidence-bar-v1.json`. Current progress is `0` / `30` completed forward paper-shadow rows, `0` / `8` ticker-week clusters, `0` / `3` calendar months, and `evaluation_permitted=false`, so no bootstrap evaluation is run. The tracker also discloses that historical rows came from the deterministic materializer while forward rows come from production scheduled scan sessions plus scanner gates; these are a new distribution, not a continuation of the historical sample.
 
 ### AI commodity exact OPRA proof lane
 

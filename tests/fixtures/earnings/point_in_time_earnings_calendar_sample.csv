@@ -1,0 +1,10 @@
+symbol,earnings_date_et,earnings_time,source_name,source_url_or_file_name,source_published_at_utc,known_at_utc,revision_status,source_calendar_coverage_start_date_et,source_calendar_coverage_end_date_et
+AAPL,2026-01-29,after_market,fixture_point_in_time_earnings,fixture://earnings/AAPL/2026-01-29,2025-12-15T00:00:00Z,2025-12-15T00:00:00Z,scheduled,2024-06-01,2026-07-15
+COP,2026-02-05,before_market,fixture_point_in_time_earnings,fixture://earnings/COP/2026-02-05,2025-12-15T00:00:00Z,2025-12-15T00:00:00Z,scheduled,2024-06-01,2026-07-15
+CVX,2026-01-30,before_market,fixture_point_in_time_earnings,fixture://earnings/CVX/2026-01-30,2025-12-15T00:00:00Z,2025-12-15T00:00:00Z,scheduled,2024-06-01,2026-07-15
+GOOGL,2026-02-03,after_market,fixture_point_in_time_earnings,fixture://earnings/GOOGL/2026-02-03,2025-12-15T00:00:00Z,2025-12-15T00:00:00Z,scheduled,2024-06-01,2026-07-15
+JNJ,2026-01-22,before_market,fixture_point_in_time_earnings,fixture://earnings/JNJ/2026-01-22,2025-12-15T00:00:00Z,2025-12-15T00:00:00Z,scheduled,2024-06-01,2026-07-15
+LLY,2026-02-04,before_market,fixture_point_in_time_earnings,fixture://earnings/LLY/2026-02-04,2025-12-15T00:00:00Z,2025-12-15T00:00:00Z,scheduled,2024-06-01,2026-07-15
+NEM,2026-02-20,before_market,fixture_point_in_time_earnings,fixture://earnings/NEM/2026-02-20,2025-12-15T00:00:00Z,2025-12-15T00:00:00Z,scheduled,2024-06-01,2026-07-15
+UNH,2026-01-16,before_market,fixture_point_in_time_earnings,fixture://earnings/UNH/2026-01-16,2025-12-15T00:00:00Z,2025-12-15T00:00:00Z,scheduled,2024-06-01,2026-07-15
+XOM,2026-02-02,before_market,fixture_point_in_time_earnings,fixture://earnings/XOM/2026-02-02,2025-12-15T00:00:00Z,2025-12-15T00:00:00Z,scheduled,2024-06-01,2026-07-15

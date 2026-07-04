@@ -1,0 +1,110 @@
+{
+  "accepted_profitability": false,
+  "approval_authority": false,
+  "artifacts": {
+    "docs_report": "docs/regular-options-filtered-forward-evidence-bar-evaluation.md",
+    "json": "data/forward-tracking/regular-options-filtered-forward-evidence-bar-evaluation/regular_options_filtered_forward_evidence_bar_evaluation_20260702T072655Z.json",
+    "latest_json": "data/forward-tracking/regular-options-filtered-forward-evidence-bar-evaluation/latest.json",
+    "latest_markdown": "data/forward-tracking/regular-options-filtered-forward-evidence-bar-evaluation/latest.md",
+    "markdown": "data/forward-tracking/regular-options-filtered-forward-evidence-bar-evaluation/regular_options_filtered_forward_evidence_bar_evaluation_20260702T072655Z.md"
+  },
+  "auto_track_enabled": false,
+  "blockers": [],
+  "broker_order_allowed": false,
+  "completed_candidate_ids": [],
+  "current_lifecycle_row_count": 0,
+  "duplicate_daily_signal_identities": [],
+  "duplicate_daily_signal_identity_count": 0,
+  "evidence_stores_mutated": false,
+  "forward_evidence_bar": {
+    "accepted_profitability": false,
+    "approval_authority": false,
+    "bar_contract": {
+      "exists": true,
+      "path": "data/contracts/regular-options-filtered-forward-evidence-bar-v1.json",
+      "sha256": "69cd8419beb59207f188d6e5e076971df3acf5336bf3cab1502430c2a889b309",
+      "status": "loaded"
+    },
+    "bar_id": "regular_options_filtered_forward_evidence_bar_v1",
+    "calendar_month_count": 0,
+    "can_change_scanner_policy": false,
+    "checks": {
+      "calendar_months_with_rows": false,
+      "completed_rows": false,
+      "fixture_rows": true,
+      "percent_cluster_pf_lb": false,
+      "percent_metric_complete": true,
+      "ticker_week_clusters": false,
+      "total_net_pnl_usd": false,
+      "usd_cluster_pf_lb": false,
+      "usd_metric_complete": true
+    },
+    "completed_forward_rows": 0,
+    "criteria_met_reporting_only": false,
+    "evaluation_permitted": false,
+    "evaluation_waits_for_min_completed_rows": true,
+    "fixture_row_count": 0,
+    "max_fixture_rows": 0,
+    "percent_cluster_bootstrap": null,
+    "percent_metric_row_count": 0,
+    "required_calendar_months": 3,
+    "required_completed_forward_rows": 30,
+    "required_ticker_week_clusters": 8,
+    "status": "waiting_for_min_completed_forward_rows",
+    "ticker_week_cluster_count": 0,
+    "total_net_pnl_usd": null,
+    "usd_cluster_bootstrap": null,
+    "usd_metric_row_count": 0
+  },
+  "forward_evidence_bar_contract": {
+    "exists": true,
+    "path": "data/contracts/regular-options-filtered-forward-evidence-bar-v1.json",
+    "sha256": "69cd8419beb59207f188d6e5e076971df3acf5336bf3cab1502430c2a889b309",
+    "status": "loaded"
+  },
+  "forward_rows_are_profitability_proof": false,
+  "generated_at_utc": "2026-07-02T07:26:55Z",
+  "historical_rows_are_forward_proof": false,
+  "live_validation_enabled": false,
+  "matched_rows_log": {
+    "bad_row_count": 0,
+    "exists": true,
+    "path": "data/forward-tracking/regular-options-filtered-forward-paper-shadow/matched_rows.jsonl",
+    "row_count": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "status": "loaded"
+  },
+  "matched_rows_log_identity_schema": "policy_ticker_scan_date_direction_v2",
+  "matched_rows_log_identity_schema_current": true,
+  "policy_contract": {
+    "exists": true,
+    "path": "data/contracts/regular-options-frozen-filtered-policy-v1.json",
+    "sha256": "2054eafc577ddc10f4cd4bbd4c4b4133c6e82d3d8bd7be2d6bd1dc547dc42b00",
+    "status": "loaded"
+  },
+  "policy_hash_checks": {
+    "actual_policy_contract_sha256": "2054eafc577ddc10f4cd4bbd4c4b4133c6e82d3d8bd7be2d6bd1dc547dc42b00",
+    "bar_source_policy_sha_match": true,
+    "computed_conditions_sha256": "3b10d0306800e1a203480b80e4fafda03d5e1b6443d8d294cbf8ff7f20324967",
+    "expected_conditions_sha256": "3b10d0306800e1a203480b80e4fafda03d5e1b6443d8d294cbf8ff7f20324967",
+    "expected_policy_contract_sha256": "2054eafc577ddc10f4cd4bbd4c4b4133c6e82d3d8bd7be2d6bd1dc547dc42b00",
+    "policy_conditions_hash_match": true,
+    "policy_contract_loaded": true
+  },
+  "prohibited_actions": [
+    "do_not_promote_from_forward_evidence_bar_evaluation",
+    "do_not_change_scanner_policy_from_forward_evidence_bar_evaluation",
+    "do_not_enable_live_validation_from_forward_evidence_bar_evaluation",
+    "do_not_enable_auto_track_from_forward_evidence_bar_evaluation",
+    "do_not_submit_broker_orders_from_forward_evidence_bar_evaluation",
+    "do_not_import_quotes_from_forward_evidence_bar_evaluation",
+    "do_not_mutate_evidence_stores_from_forward_evidence_bar_evaluation"
+  ],
+  "protected_holdout_consumed": false,
+  "quotes_imported": false,
+  "read_only": true,
+  "report_id": "regular_options_filtered_forward_evidence_bar_evaluation",
+  "scanner_policy_changed": false,
+  "schema_version": 1,
+  "status": "evaluation_not_permitted_yet"
+}

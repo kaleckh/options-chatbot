@@ -113,6 +113,15 @@ def _parse_json_dict(value: Any) -> dict[str, Any]:
     return parsed if isinstance(parsed, dict) else {}
 
 
+def _safe_float(value: Any) -> float | None:
+    try:
+        if value in (None, "") or isinstance(value, bool):
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _drop_stage_summary(drop_counts: Counter[str]) -> dict[str, Any]:
     nonzero = {key: drop_counts[key] for key in sorted(drop_counts) if drop_counts[key] > 0}
     return {
@@ -143,6 +152,125 @@ def _drop_reason_sample(drop_reasons: dict[str, Any], *, limit: int = 10) -> lis
         if len(sample) >= max(int(limit), 0):
             break
     return sample
+
+
+def _drop_gate_category(drop_key: str, details: dict[str, Any]) -> str:
+    key = drop_key.lower()
+    reason_text = " ".join(str(value).lower() for value in details.values() if isinstance(value, str))
+    if key in {"history_or_liquidity", "option_liquidity"} or "liquidity" in key or "spread" in reason_text:
+        return "liquidity_or_history"
+    if key in {"missing_truth_source", "unknown_quote_freshness"} or "quote" in reason_text or "source" in reason_text:
+        return "data_or_quote_provenance"
+    if key in {"policy_not_applied", "missing_promotion_status"} or "policy" in key:
+        return "policy_or_provenance"
+    if key in {"momentum", "tech_score", "direction_score", "ticker_regime_filter", "ticker_vol_filter"}:
+        return "signal_or_regime_threshold"
+    if key in {"ev_floor", "iv_crush_penalty"}:
+        return "economics_threshold"
+    if key in {"earnings", "stop_cooldown", "guardrails"}:
+        return "risk_or_calendar_gate"
+    return "unclassified_gate"
+
+
+def _threshold_distance_components(details: dict[str, Any]) -> dict[str, float]:
+    components: dict[str, float] = {}
+    pairs = (
+        ("tech_score", "min_tech_score", "tech_score_gap"),
+        ("direction_score", "min_direction_score", "direction_score_gap"),
+        ("momentum_score", "min_momentum_score", "momentum_score_gap"),
+        ("confidence", "min_confidence", "confidence_gap"),
+        ("ev", "min_ev", "ev_gap"),
+        ("expected_value", "min_expected_value", "expected_value_gap"),
+        ("open_interest", "min_open_interest", "open_interest_gap"),
+        ("option_open_interest", "min_option_open_interest", "option_open_interest_gap"),
+        ("volume", "min_volume", "volume_gap"),
+    )
+    for actual_key, required_key, component_key in pairs:
+        actual = _safe_float(details.get(actual_key))
+        required = _safe_float(details.get(required_key))
+        if actual is not None and required is not None:
+            components[component_key] = round(max(required - actual, 0.0), 6)
+    liquidity = _as_dict(details.get("liquidity"))
+    filters = _as_dict(details.get("liquidity_filters"))
+    spread = _safe_float(liquidity.get("worst_leg_bid_ask_spread_pct"))
+    spread_limit = _safe_float(filters.get("liquidity_spread_max_pct"))
+    if spread is not None and spread_limit is not None:
+        components["worst_leg_spread_excess_pct"] = round(max(spread - spread_limit, 0.0), 6)
+    spread_mid = _safe_float(liquidity.get("spread_bid_ask_pct_of_mid"))
+    spread_mid_limit = _safe_float(filters.get("spread_liquidity_slippage_max_pct"))
+    if spread_mid is not None and spread_mid_limit is not None:
+        components["spread_bid_ask_excess_pct_of_mid"] = round(max(spread_mid - spread_mid_limit, 0.0), 6)
+    min_oi = _safe_float(liquidity.get("min_leg_open_interest"))
+    min_oi_limit = _safe_float(filters.get("min_option_open_interest"))
+    if min_oi is not None and min_oi_limit is not None:
+        components["min_leg_open_interest_gap"] = round(max(min_oi_limit - min_oi, 0.0), 6)
+    quote_age = _safe_float(liquidity.get("max_quote_age_hours"))
+    quote_age_limit = _safe_float(filters.get("max_option_quote_age_hours"))
+    if quote_age is not None and quote_age_limit is not None:
+        components["quote_age_excess_hours"] = round(max(quote_age - quote_age_limit, 0.0), 6)
+    return {key: value for key, value in sorted(components.items()) if value > 0}
+
+
+def _near_miss_rows_for_session(session: dict[str, Any], playbook: str, scan_drop_reasons: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for symbol, reason in sorted(scan_drop_reasons.items(), key=lambda item: str(item[0]).upper()):
+        reason_payload = _as_dict(reason)
+        details = _as_dict(reason_payload.get("details"))
+        drop_key = _norm(reason_payload.get("drop_key"))
+        components = _threshold_distance_components(details)
+        distance = round(sum(components.values()), 6) if components else None
+        rows.append(
+            {
+                "selection_date": str(session.get("run_id") or "").split(":")[1] if ":" in str(session.get("run_id") or "") else "",
+                "session_id": session.get("id"),
+                "recorded_at_utc": session.get("recorded_at_utc"),
+                "playbook": playbook,
+                "symbol": str(symbol or "").strip().upper(),
+                "drop_key": drop_key,
+                "gate_category": _drop_gate_category(drop_key, details),
+                "reason": _norm(details.get("reason") or details.get("no_fill_reason") or details.get("candidate_execution_label")),
+                "candidate_execution_label": _norm(details.get("candidate_execution_label")),
+                "distance_components": components,
+                "distance_to_pass": distance,
+                "near_miss_rank_basis": "distance_to_pass" if distance is not None else "drop_key_only",
+                "details": details,
+                "research_only": True,
+                "non_promotable": True,
+            }
+        )
+    return rows
+
+
+def _near_miss_summary(near_miss_rows: list[dict[str, Any]], *, drop_count_total: int) -> dict[str, Any]:
+    category_counts = Counter(str(row.get("gate_category") or "unclassified_gate") for row in near_miss_rows)
+    drop_key_counts = Counter(str(row.get("drop_key") or "unknown") for row in near_miss_rows)
+    distance_available_count = sum(1 for row in near_miss_rows if row.get("distance_to_pass") is not None)
+    ranked = sorted(
+        near_miss_rows,
+        key=lambda row: (
+            row.get("distance_to_pass") is None,
+            float(row.get("distance_to_pass") or 999999.0),
+            str(row.get("drop_key") or ""),
+            str(row.get("symbol") or ""),
+        ),
+    )
+    if distance_available_count > 0:
+        status = "symbol_level_near_miss_table_ready"
+    elif near_miss_rows:
+        status = "symbol_drop_reasons_recorded_without_distance"
+    elif drop_count_total > 0:
+        status = "near_miss_table_waiting_for_symbol_drop_reasons"
+    else:
+        status = "near_miss_table_waiting_for_scan_funnel_drops"
+    return {
+        "status": status,
+        "row_count": len(near_miss_rows),
+        "ranked_symbol_near_misses": ranked[:50],
+        "gate_category_counts": _counter_dict(category_counts),
+        "drop_key_counts": _counter_dict(drop_key_counts),
+        "distance_available_count": distance_available_count,
+        "acceptance_metric": "symbol-level drop reasons with gate category and distance-to-pass when raw details expose thresholds",
+    }
 
 
 def _candidate_starvation_evidence_status(
@@ -375,6 +503,7 @@ def build_report(
     scheduled_returned_picks = 0
     scheduled_drop_reason_count_total = 0
     scheduled_drop_reason_samples: list[dict[str, Any]] = []
+    scheduled_near_miss_rows: list[dict[str, Any]] = []
     for session in scheduled_sessions:
         playbook = _norm(session.get("playbook"))
         if playbook:
@@ -414,9 +543,12 @@ def build_report(
         session["scan_funnel_returned_picks"] = returned_picks
         session["scan_funnel_drop_counts"] = {key: session_drop_counts[key] for key in sorted(session_drop_counts)}
         session_drop_reason_sample = _drop_reason_sample(scan_drop_reasons)
+        session_near_miss_rows = _near_miss_rows_for_session(session, playbook, scan_drop_reasons)
         session["scan_drop_reason_count"] = len(scan_drop_reasons)
         session["scan_drop_reason_sample"] = session_drop_reason_sample
+        session["near_miss_rows"] = session_near_miss_rows[:10]
         scheduled_drop_reason_count_total += len(scan_drop_reasons)
+        scheduled_near_miss_rows.extend(session_near_miss_rows)
         for sample in session_drop_reason_sample:
             if len(scheduled_drop_reason_samples) >= 10:
                 break
@@ -431,6 +563,10 @@ def build_report(
             pass
     missing_scheduled = [playbook for playbook in stager.ALLOWED_LANES if playbook not in scheduled_playbooks]
     scheduled_drop_stage_summary = _drop_stage_summary(scheduled_drop_counts)
+    scheduled_near_miss_summary = _near_miss_summary(
+        scheduled_near_miss_rows,
+        drop_count_total=sum(scheduled_drop_counts.values()),
+    )
     candidate_starvation_evidence_status = _candidate_starvation_evidence_status(
         returned_picks=scheduled_returned_picks,
         drop_count_total=sum(scheduled_drop_counts.values()),
@@ -497,6 +633,8 @@ def build_report(
         "scheduled_phase2_drop_stage_summary": scheduled_drop_stage_summary,
         "scheduled_phase2_scan_drop_reason_count_total": scheduled_drop_reason_count_total,
         "scheduled_phase2_scan_drop_reason_sample": scheduled_drop_reason_samples,
+        "scheduled_phase2_near_miss_summary": scheduled_near_miss_summary,
+        "scheduled_phase2_ranked_near_misses": scheduled_near_miss_summary["ranked_symbol_near_misses"],
         "candidate_starvation_evidence_status": candidate_starvation_evidence_status,
         "zero_candidate_diagnostics": zero_candidate_diagnostics,
         "scheduled_phase2_eligibility_status_counts": _counter_dict(scheduled_eligibility_statuses),
@@ -548,6 +686,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Scheduled Phase 2 drop-count total: `{report.get('scheduled_phase2_drop_count_total')}`.",
         f"- Scheduled Phase 2 drop-stage status: `{_as_dict(report.get('scheduled_phase2_drop_stage_summary')).get('status')}`.",
         f"- Scheduled Phase 2 symbol drop reasons: `{report.get('scheduled_phase2_scan_drop_reason_count_total')}`.",
+        f"- Scheduled Phase 2 near-miss status: `{_as_dict(report.get('scheduled_phase2_near_miss_summary')).get('status')}`.",
         f"- Candidate-starvation evidence status: `{report.get('candidate_starvation_evidence_status')}`.",
         f"- Zero-candidate diagnostics: `{_as_dict(report.get('zero_candidate_diagnostics')).get('status')}`.",
         f"- Scheduled Phase 2 scan picks: `{report.get('scheduled_phase2_scan_picks_count')}`.",
@@ -613,6 +752,30 @@ def render_markdown(report: dict[str, Any]) -> str:
                     f"- `{item.get('symbol')}` / `{item.get('playbook')}`: "
                     f"`{item.get('drop_key')}`."
                 )
+    near_miss_summary = _as_dict(report.get("scheduled_phase2_near_miss_summary"))
+    ranked_near_misses = near_miss_summary.get("ranked_symbol_near_misses")
+    distance_ranked_near_misses = [
+        item for item in ranked_near_misses if isinstance(item, dict) and item.get("distance_to_pass") is not None
+    ] if isinstance(ranked_near_misses, list) else []
+    if distance_ranked_near_misses:
+        lines.extend(["", "## Ranked Symbol Near Misses", ""])
+        for item in distance_ranked_near_misses[:20]:
+            if isinstance(item, dict):
+                distance = item.get("distance_to_pass")
+                distance_text = "unknown" if distance is None else str(distance)
+                lines.append(
+                    f"- `{item.get('symbol')}` / `{item.get('playbook')}`: "
+                    f"`{item.get('drop_key')}` ({item.get('gate_category')}), distance `{distance_text}`."
+                )
+    elif near_miss_summary:
+        lines.extend(
+            [
+                "",
+                "## Ranked Symbol Near Misses",
+                "",
+                f"- Status: `{near_miss_summary.get('status')}`.",
+            ]
+        )
     lines.extend(
         [
             "",

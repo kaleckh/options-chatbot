@@ -1,6 +1,6 @@
 # Regular Options Strict Forward 30 Candidate Review Packet
 
-Status: `candidate_review_blocked_no_scanner_candidates_for_target_date`.
+Status: `candidate_review_waiting_for_scheduler_health`.
 
 - Strict forward rows: `0/30`.
 - Candidate JSONL exists: `false`.
@@ -11,13 +11,13 @@ Status: `candidate_review_blocked_no_scanner_candidates_for_target_date`.
 - Capture status: `market_window_not_confirmed_no_capture_started`.
 - Capture freshness: `collector_nested_capture_fresh_for_candidate_review`.
 - Collector status: `waiting_for_valid_market_window`.
-- Scheduler status: `scheduler_ready_for_next_market_window`.
+- Scheduler status: `scheduler_runtime_blocked`.
 - Scheduler freshness: `scheduler_health_fresh_for_candidate_review`.
 - Scan-task health status: `scan_tasks_ready_for_next_market_window`.
 - Scan-task health freshness: `scan_task_health_fresh_for_candidate_review`.
 - Throughput status: `blocked_no_same_day_phase2_natural_selections`.
-- Candidate-starvation evidence status: `stage_counts_only_waiting_for_symbol_drop_reasons`.
-- Zero-candidate diagnostics status: `opaque_zero_candidate_diagnosis_missing_symbol_drop_reasons`.
+- Candidate-starvation evidence status: `raw_symbol_drop_reasons_recorded`.
+- Zero-candidate diagnostics status: `zero_candidate_diagnosis_ready_symbol_drop_reasons_recorded`.
 - Zero-candidate throughput evidence: `zero_candidate_evidence_blocks_candidate_review`.
 - Candidate batch provenance: `candidate_batch_not_present`.
 
@@ -34,4 +34,4 @@ This packet is review-only. It validates the candidate handoff and renders guard
 
 ## Candidate Throughput Blockers
 
-- `opaque_zero_candidate_diagnosis_missing_symbol_drop_reasons`
+- `zero_candidate_diagnosis_ready_symbol_drop_reasons_recorded`

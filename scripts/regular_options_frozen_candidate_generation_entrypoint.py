@@ -84,6 +84,19 @@ FORBIDDEN_ACTIONS = [
     "inventing_candidate_or_no_pick_rows",
     "historical_rows_as_forward_proof",
 ]
+DEFAULT_CANDIDATE_MATERIALIZATION_BASIS = "deterministic_local_pit_candidate_materializer_v1"
+
+
+def _source_non_parity(source: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "candidate_materialization_basis": str(
+            source.get("candidate_materialization_basis") or DEFAULT_CANDIDATE_MATERIALIZATION_BASIS
+        ),
+        "scanner_parity": bool(source.get("scanner_parity")) if "scanner_parity" in source else False,
+        "production_scanner_replay": bool(source.get("production_scanner_replay"))
+        if "production_scanner_replay" in source
+        else False,
+    }
 
 
 def _utc_now_iso() -> str:
@@ -149,6 +162,7 @@ def _normalize_daily_rows(
     pairs = _cohort_pairs(cohort, ALLOWED_UNIVERSE)
     expected = {(day.isoformat(), pair["lane"], pair["underlying"]): pair for day in market_dates for pair in pairs}
     source_rows = _source_daily_rows(source)
+    non_parity = _source_non_parity(source)
     source_universe = _candidate_universe(source)
     exact_source = bool(source_universe.get("frozen_universe_exact_13_symbols"))
     outside_rows = [
@@ -180,7 +194,7 @@ def _normalize_daily_rows(
     for key, pair in sorted(expected.items()):
         day, lane, symbol = key
         source_row = by_key.get(key)
-        row_blockers = list(blockers)
+        row_blockers: list[str] = []
         if source_row is None:
             row_blockers.append("missing_daily_candidate_generation_diagnostics")
             status = "blocked_missing_daily_candidate_generation_diagnostics"
@@ -191,11 +205,13 @@ def _normalize_daily_rows(
             elif status not in ACCEPTED_DAILY_STATUSES:
                 row_blockers.append("unsupported_daily_candidate_generation_status")
                 status = "blocked_unsupported_daily_candidate_generation_status"
-            elif row_blockers:
+            elif _as_list(source_row.get("blockers")):
+                row_blockers.extend(str(item) for item in _as_list(source_row.get("blockers")))
                 status = "blocked_daily_candidate_generation_integrity"
 
         row_id = f"{REPORT_ID}:{day}:{lane}:{symbol}"
-        daily = {
+        daily = dict(source_row) if source_row is not None else {}
+        daily.update({
             "row_id": row_id,
             "date": day,
             "candidate_generation_date": day,
@@ -214,9 +230,10 @@ def _normalize_daily_rows(
             "as_of_date": as_of.isoformat(),
             "read_only": True,
             "no_write": True,
+            **non_parity,
             "source_artifact_path": source_meta.get("path"),
             "blockers": sorted(dict.fromkeys(row_blockers)),
-        }
+        })
         daily_rows.append(daily)
         if daily["selected_candidate"]:
             selected.append(daily)
@@ -321,6 +338,7 @@ def build_report(
         "frozen_universe": list(ALLOWED_UNIVERSE),
         "allowed_universe": list(ALLOWED_UNIVERSE),
         "outside_universe_row_count": outside_count,
+        **_source_non_parity(source),
         "calendar_coverage": {
             "covered_months": coverage["candidate_generation_months_covered"],
             "calendar_months_covered": coverage["candidate_generation_months_covered"],
@@ -377,7 +395,19 @@ def render_markdown(report: dict[str, Any]) -> str:
     if blockers := _as_list(report.get("blockers")):
         lines.extend(["", "## Blockers", ""])
         lines.extend(f"- `{blocker}`" for blocker in blockers)
-    lines.extend(["", "## Boundary", "", "Historical rows and broad-source rows are not forward proof and are not converted into picks here.", ""])
+    lines.extend(
+        [
+            "",
+            "## Boundary",
+            "",
+            f"- Candidate materialization basis: `{report.get('candidate_materialization_basis')}`.",
+            f"- Scanner parity: `{report.get('scanner_parity')}`.",
+            f"- Production scanner replay: `{report.get('production_scanner_replay')}`.",
+            "",
+            "Historical rows and broad-source rows are not forward proof and are not converted into picks here.",
+            "",
+        ]
+    )
     return "\n".join(lines)
 
 

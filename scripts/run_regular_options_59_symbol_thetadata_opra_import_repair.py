@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import sqlite3
 import sys
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -14,7 +16,14 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.import_thetadata_options_nbbo import DEFAULT_THETA_URL, _business_dates
+from historical_options_store import INTRADAY_SNAPSHOT_KIND, import_historical_option_snapshots
+from scripts.import_thetadata_options_nbbo import (
+    CSV_FIELDNAMES,
+    DEFAULT_THETA_URL,
+    INTRADAY_DATASET_KIND,
+    _business_dates,
+    build_thetadata_nbbo_import,
+)
 from scripts.plan_regular_sector_etf_imports import check_theta_terminal
 
 
@@ -26,6 +35,18 @@ DEFAULT_RESUME_OUTPUT_DIR = ROOT / "data" / "profitability-lab" / "regular-optio
 DEFAULT_RESUME_DOC = ROOT / "docs" / "regular-options-59-symbol-thetadata-opra-import-resume.md"
 APPROVAL_TOKEN = "APPROVE_SCOPED_59_SYMBOL_THETADATA_OPRA_IMPORT"
 DEFAULT_SOURCE_LABEL = "thetadata_opra_nbbo_1m"
+PROVIDER_PROBE_SYMBOLS = ("QQQ", "SPY")
+PROVIDER_PROBE_DATE = "2026-05-21"
+PROVIDER_PROBE_TIME = "10:27:00"
+PROVIDER_PROBE_DTE = 28
+IMPORT_BATCH_MARKET_DATES = 1
+IMPORT_INTERVAL = "1m"
+IMPORT_START_TIME = "15:55:00"
+IMPORT_END_TIME = "15:55:00"
+IMPORT_MIN_DTE = 5
+IMPORT_MAX_DTE = 60
+IMPORT_RIGHT = "both"
+IMPORT_MAX_WORKERS = 4
 CANONICAL_UNIVERSE = (
     "SPY", "QQQ", "IWM", "AAPL", "GOOGL", "UNH", "LLY", "JNJ", "XOM", "CVX", "COP", "NEM", "DIA",
     "AA", "ABBV", "AMD", "AMT", "AMZN", "ARM", "BA", "BAC", "C", "CAT", "CLF", "COIN", "COST",
@@ -113,6 +134,254 @@ def _load_json(path: Path) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _build_missing_rows(
+    *,
+    coverage: dict[str, set[str]],
+    requested_dates: list[str],
+    symbols: list[str],
+    source_label: str,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for symbol in symbols:
+        covered = coverage.get(symbol, set())
+        for quote_date in requested_dates:
+            if quote_date not in covered:
+                rows.append(
+                    {
+                        "symbol": symbol,
+                        "quote_date_et": quote_date,
+                        "reason": "trusted_intraday_symbol_date_missing",
+                        "source_label": source_label,
+                        "snapshot_kind": "intraday",
+                    }
+                )
+    return rows
+
+
+def _shared_dates(*, coverage: dict[str, set[str]], requested_dates: list[str], symbols: list[str]) -> set[str]:
+    shared = set(requested_dates)
+    for symbol in symbols:
+        shared &= coverage.get(symbol, set())
+    return shared
+
+
+def _write_csv(path: Path, rows: list[dict[str, str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=CSV_FIELDNAMES)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _run_scoped_missing_import(
+    *,
+    db_path: Path,
+    output_dir: Path,
+    missing_rows: list[dict[str, Any]],
+    symbols: list[str],
+    source_label: str,
+    theta_url: str,
+    timeout: float,
+) -> dict[str, Any]:
+    missing_by_date: dict[str, set[str]] = defaultdict(set)
+    for row in missing_rows:
+        missing_by_date[str(row["quote_date_et"])].add(str(row["symbol"]).upper())
+
+    symbol_order = {symbol: index for index, symbol in enumerate(symbols)}
+    date_keys = sorted(missing_by_date)
+    batch_results: list[dict[str, Any]] = []
+    imported_rows = 0
+    duplicate_rows = 0
+    rejected_rows = 0
+    generated_rows = 0
+    request_count = 0
+    warning_count = 0
+    errors: list[str] = []
+
+    csv_dir = output_dir / "import-csv"
+    for batch_index, start in enumerate(range(0, len(date_keys), IMPORT_BATCH_MARKET_DATES), start=1):
+        batch_date_keys = date_keys[start : start + IMPORT_BATCH_MARKET_DATES]
+        batch_dates = [date.fromisoformat(item) for item in batch_date_keys]
+        batch_symbols = sorted(
+            {symbol for quote_date in batch_date_keys for symbol in missing_by_date[quote_date]},
+            key=lambda item: symbol_order.get(item, 9999),
+        )
+        rows: list[dict[str, str]] = []
+        batch_errors: list[str] = []
+        batch_generated_rows = 0
+        batch_request_count = 0
+
+        def fetch_one(symbol: str, trade_date: date) -> dict[str, Any]:
+            return build_thetadata_nbbo_import(
+                symbols=[symbol],
+                dates=[trade_date],
+                theta_url=theta_url,
+                interval=IMPORT_INTERVAL,
+                start_time=IMPORT_START_TIME,
+                end_time=IMPORT_END_TIME,
+                min_dte=IMPORT_MIN_DTE,
+                max_dte=IMPORT_MAX_DTE,
+                right=IMPORT_RIGHT,
+                timeout=float(timeout),
+            )
+
+        with ThreadPoolExecutor(max_workers=IMPORT_MAX_WORKERS) as executor:
+            futures = {
+                executor.submit(fetch_one, symbol, trade_date): (symbol, trade_date)
+                for symbol in batch_symbols
+                for trade_date in batch_dates
+            }
+            for future in as_completed(futures):
+                symbol, trade_date = futures[future]
+                try:
+                    fetch_result = future.result()
+                except Exception as exc:
+                    batch_errors.append(f"{symbol} {trade_date.isoformat()}: option history quote failed: {exc}")
+                    continue
+                rows.extend(fetch_result.get("rows") or [])
+                batch_errors.extend(str(item) for item in fetch_result.get("errors") or [])
+                batch_generated_rows += int(fetch_result.get("generated_rows") or 0)
+                batch_request_count += int(fetch_result.get("request_count") or 0)
+
+        generated_rows += batch_generated_rows
+        request_count += batch_request_count
+        import_result: dict[str, Any] | None = None
+        csv_path: Path | None = None
+        if rows:
+            csv_path = csv_dir / (
+                f"thetadata_59_symbol_resume_{batch_date_keys[0].replace('-', '')}_"
+                f"{batch_date_keys[-1].replace('-', '')}_{batch_index:04d}.csv"
+            )
+            _write_csv(csv_path, rows)
+            import_result = import_historical_option_snapshots(
+                csv_path,
+                source_label,
+                dataset_kind=INTRADAY_DATASET_KIND,
+                snapshot_kind=INTRADAY_SNAPSHOT_KIND,
+                db_path=db_path,
+            )
+            imported_rows += int(import_result.get("imported_rows") or 0)
+            duplicate_rows += int(import_result.get("duplicate_rows") or 0)
+            rejected_rows += int(import_result.get("rejected_rows") or 0)
+            warning_count += len(import_result.get("warnings") or [])
+
+        batch_record = {
+            "batch_index": batch_index,
+            "symbols": batch_symbols,
+            "date_from": batch_date_keys[0],
+            "date_to": batch_date_keys[-1],
+            "request_count": batch_request_count,
+            "generated_rows": batch_generated_rows,
+            "csv_path": _rel(csv_path) if csv_path else None,
+            "import_result": import_result,
+            "errors": batch_errors[:5],
+        }
+        batch_results.append(batch_record)
+        print(
+            json.dumps(
+                {
+                    "event": "thetadata_59_symbol_resume_batch",
+                    "batch_index": batch_index,
+                    "date_from": batch_record["date_from"],
+                    "date_to": batch_record["date_to"],
+                    "symbols": len(batch_symbols),
+                    "request_count": batch_record["request_count"],
+                    "generated_rows": batch_record["generated_rows"],
+                    "imported_rows": (import_result or {}).get("imported_rows", 0),
+                    "duplicate_rows": (import_result or {}).get("duplicate_rows", 0),
+                    "rejected_rows": (import_result or {}).get("rejected_rows", 0),
+                    "errors": len(batch_errors),
+                },
+                sort_keys=True,
+            ),
+            flush=True,
+        )
+        if batch_errors:
+            errors.extend(batch_errors)
+            break
+
+    return {
+        "import_attempted": bool(date_keys),
+        "imported_rows": imported_rows,
+        "duplicate_rows": duplicate_rows,
+        "rejected_rows": rejected_rows,
+        "warning_count": warning_count,
+        "generated_rows": generated_rows,
+        "request_count": request_count,
+        "batch_results": batch_results,
+        "errors": errors[:20],
+    }
+
+
+def _provider_option_probe(
+    *,
+    theta_url: str,
+    timeout: float,
+    theta_status: dict[str, Any],
+    provider_recheck: bool,
+) -> dict[str, Any]:
+    if not provider_recheck:
+        return {
+            "status": "not_checked",
+            "available": None,
+            "reason": "provider_recheck_not_requested",
+        }
+    if not theta_status.get("available"):
+        return {
+            "status": "skipped_theta_unavailable",
+            "available": False,
+            "reason": "theta_terminal_not_available",
+        }
+    probe_date = date.fromisoformat(PROVIDER_PROBE_DATE)
+    try:
+        result = build_thetadata_nbbo_import(
+            symbols=list(PROVIDER_PROBE_SYMBOLS),
+            dates=[probe_date],
+            theta_url=theta_url,
+            interval="1m",
+            start_time=PROVIDER_PROBE_TIME,
+            end_time=PROVIDER_PROBE_TIME,
+            min_dte=PROVIDER_PROBE_DTE,
+            max_dte=PROVIDER_PROBE_DTE,
+            right="call",
+            timeout=float(timeout),
+        )
+    except Exception as exc:
+        return {
+            "status": "probe_exception",
+            "available": False,
+            "reason": type(exc).__name__,
+            "error": str(exc)[:500],
+            "symbols": list(PROVIDER_PROBE_SYMBOLS),
+            "date": PROVIDER_PROBE_DATE,
+        }
+    errors = [str(item) for item in result.get("errors") or []]
+    error_text = "\n".join(errors)
+    if "403" in error_text or "Forbidden" in error_text or "FREE subscription" in error_text:
+        status = "blocked_thetadata_options_entitlement"
+        available = False
+    elif errors:
+        status = "probe_errors"
+        available = False
+    elif int(result.get("generated_rows") or 0) <= 0:
+        status = "probe_no_rows"
+        available = False
+    else:
+        status = "options_history_quote_probe_ready"
+        available = True
+    return {
+        "status": status,
+        "available": available,
+        "symbols": list(PROVIDER_PROBE_SYMBOLS),
+        "date": PROVIDER_PROBE_DATE,
+        "time_et": PROVIDER_PROBE_TIME,
+        "dte": PROVIDER_PROBE_DTE,
+        "request_count": result.get("request_count"),
+        "generated_rows": result.get("generated_rows"),
+        "errors": errors[:5],
+    }
+
+
 def build_report(
     *,
     db_path: Path = DEFAULT_DB,
@@ -151,34 +420,68 @@ def build_report(
     finally:
         conn.close()
 
-    missing_rows: list[dict[str, Any]] = []
-    for symbol in symbols:
-        covered = coverage.get(symbol, set())
-        for quote_date in requested_dates:
-            if quote_date not in covered:
-                missing_rows.append(
-                    {
-                        "symbol": symbol,
-                        "quote_date_et": quote_date,
-                        "reason": "trusted_intraday_symbol_date_missing",
-                        "source_label": source_label,
-                        "snapshot_kind": "intraday",
-                    }
-                )
-    shared_dates = set(requested_dates)
-    for symbol in symbols:
-        shared_dates &= coverage.get(symbol, set())
+    pre_import_coverage = coverage
+    pre_import_missing_rows = _build_missing_rows(
+        coverage=pre_import_coverage,
+        requested_dates=requested_dates,
+        symbols=symbols,
+        source_label=source_label,
+    )
+    pre_import_shared_dates = _shared_dates(coverage=pre_import_coverage, requested_dates=requested_dates, symbols=symbols)
 
     theta_status = check_theta_terminal(theta_url, timeout=timeout)
     if not theta_status.get("available"):
         blockers.append("thetaterminal_source_unavailable")
+    provider_probe = _provider_option_probe(
+        theta_url=theta_url,
+        timeout=timeout,
+        theta_status=theta_status,
+        provider_recheck=provider_recheck,
+    )
+    if provider_probe.get("status") == "blocked_thetadata_options_entitlement":
+        blockers.append("thetadata_options_entitlement_blocked")
+    elif provider_recheck and provider_probe.get("available") is False and provider_probe.get("status") != "skipped_theta_unavailable":
+        blockers.append("thetadata_option_history_probe_failed")
 
-    imported_rows = 0
-    import_attempted = False
+    import_summary = {
+        "import_attempted": False,
+        "imported_rows": 0,
+        "duplicate_rows": 0,
+        "rejected_rows": 0,
+        "warning_count": 0,
+        "generated_rows": 0,
+        "request_count": 0,
+        "batch_results": [],
+        "errors": [],
+    }
     if not blockers and not dry_run:
-        # The actual bulk import intentionally remains behind the existing importer and this preflight.
-        # It is not reached unless the terminal is available and all guards pass.
-        blockers.append("bulk_import_execution_not_started_by_preflight_wrapper")
+        import_summary = _run_scoped_missing_import(
+            db_path=db_path,
+            output_dir=output_dir,
+            missing_rows=pre_import_missing_rows,
+            symbols=symbols,
+            source_label=source_label,
+            theta_url=theta_url,
+            timeout=timeout,
+        )
+        if import_summary["errors"]:
+            blockers.append("bulk_import_chunk_errors")
+
+    if import_summary["import_attempted"]:
+        conn = _connect(db_path, read_only=True)
+        try:
+            post_import_coverage = _trusted_symbol_dates(conn, source_label=source_label, start=start_date, end=end_date, symbols=symbols)
+        finally:
+            conn.close()
+    else:
+        post_import_coverage = pre_import_coverage
+    post_import_missing_rows = _build_missing_rows(
+        coverage=post_import_coverage,
+        requested_dates=requested_dates,
+        symbols=symbols,
+        source_label=source_label,
+    )
+    post_import_shared_dates = _shared_dates(coverage=post_import_coverage, requested_dates=requested_dates, symbols=symbols)
 
     if "thetaterminal_source_unavailable" in blockers:
         status = "blocked_thetaterminal_source_unavailable_retry" if resume_missing_only else "blocked_thetaterminal_source_unavailable"
@@ -188,12 +491,20 @@ def build_report(
         status = "blocked_import_approval_token_missing"
     elif "provider_recheck_required_for_resume" in blockers:
         status = "blocked_provider_recheck_required_for_resume"
+    elif "thetadata_options_entitlement_blocked" in blockers:
+        status = "blocked_thetadata_options_entitlement"
+    elif "thetadata_option_history_probe_failed" in blockers:
+        status = "blocked_thetadata_option_history_probe_failed"
     elif dry_run:
         status = "dry_run_ready_for_scoped_import_resume" if resume_missing_only else "dry_run_ready_for_scoped_import"
+    elif "bulk_import_chunk_errors" in blockers:
+        status = "blocked_59_symbol_import_repair_partial_import"
     elif blockers:
         status = "blocked_59_symbol_import_repair"
-    else:
+    elif import_summary["import_attempted"]:
         status = "import_performed"
+    else:
+        status = "no_missing_rows_to_import"
 
     report = {
         "report_id": f"{REPORT_ID}_resume" if resume_missing_only else REPORT_ID,
@@ -207,38 +518,52 @@ def build_report(
         "snapshot_kind": "intraday",
         "db_path": _rel(db_path),
         "theta_terminal": theta_status,
+        "theta_option_history_probe": provider_probe,
         "dry_run": dry_run,
         "resume_missing_only": resume_missing_only,
         "provider_recheck": provider_recheck,
         "approval_token_valid": approval_token == APPROVAL_TOKEN,
-        "import_attempted": import_attempted,
-        "imported_rows": imported_rows,
-        "duplicate_rows": 0,
-        "rejected_rows": 0,
-        "warning_count": 0,
+        "import_attempted": import_summary["import_attempted"],
+        "imported_rows": import_summary["imported_rows"],
+        "duplicate_rows": import_summary["duplicate_rows"],
+        "rejected_rows": import_summary["rejected_rows"],
+        "warning_count": import_summary["warning_count"],
+        "generated_rows": import_summary["generated_rows"],
+        "request_count": import_summary["request_count"],
+        "import_batch_results": import_summary["batch_results"],
+        "import_errors": import_summary["errors"],
         "canonical_universe": symbols,
         "canonical_universe_exact": symbols == expected,
         "requested_market_dates": len(requested_dates),
         "shared_trusted_imported_quote_dates": {
-            "count": len(shared_dates),
-            "first": min(shared_dates) if shared_dates else None,
-            "last": max(shared_dates) if shared_dates else None,
+            "count": len(pre_import_shared_dates),
+            "first": min(pre_import_shared_dates) if pre_import_shared_dates else None,
+            "last": max(pre_import_shared_dates) if pre_import_shared_dates else None,
         },
-        "missing_symbol_date_count": len(missing_rows),
-        "missing_symbol_date_manifest_row_count": len(missing_rows),
+        "pre_import_missing_symbol_date_count": len(pre_import_missing_rows),
+        "missing_symbol_date_count": len(post_import_missing_rows),
+        "missing_symbol_date_manifest_row_count": len(post_import_missing_rows),
         "outside_universe_import_rows": 0,
         "protected_holdout_overlap_rows": 0,
         "source_quality_floor_lowered": False,
         "post_import_shared_trusted_imported_quote_dates": {
-            "count": len(shared_dates),
-            "first": min(shared_dates) if shared_dates else None,
-            "last": max(shared_dates) if shared_dates else None,
+            "count": len(post_import_shared_dates),
+            "first": min(post_import_shared_dates) if post_import_shared_dates else None,
+            "last": max(post_import_shared_dates) if post_import_shared_dates else None,
+        },
+        "post_import_symbol_coverage": {
+            symbol: {
+                "trusted_intraday_dates": len(post_import_coverage.get(symbol, set())),
+                "first": min(post_import_coverage.get(symbol, set())) if post_import_coverage.get(symbol) else None,
+                "last": max(post_import_coverage.get(symbol, set())) if post_import_coverage.get(symbol) else None,
+            }
+            for symbol in symbols
         },
         "pre_import_symbol_coverage": {
             symbol: {
-                "trusted_intraday_dates": len(coverage.get(symbol, set())),
-                "first": min(coverage.get(symbol, set())) if coverage.get(symbol) else None,
-                "last": max(coverage.get(symbol, set())) if coverage.get(symbol) else None,
+                "trusted_intraday_dates": len(pre_import_coverage.get(symbol, set())),
+                "first": min(pre_import_coverage.get(symbol, set())) if pre_import_coverage.get(symbol) else None,
+                "last": max(pre_import_coverage.get(symbol, set())) if pre_import_coverage.get(symbol) else None,
             }
             for symbol in symbols
         },
@@ -264,7 +589,7 @@ def build_report(
         ).get("status"),
         "robust_search_status": _load_json(ROOT / "data" / "profitability-lab" / "regular-options-robust-search-evaluation" / "latest.json").get("status"),
         **READ_ONLY_FLAGS,
-        "quotes_imported": imported_rows > 0,
+        "quotes_imported": import_summary["imported_rows"] > 0,
         "split_audit_gate": {
             "train_months_covered": 0,
             "audit_months_covered": 0,
@@ -283,7 +608,7 @@ def build_report(
         },
     }
     if write_outputs:
-        write_report(report, missing_rows, output_dir=output_dir, docs_report=docs_report)
+        write_report(report, post_import_missing_rows, output_dir=output_dir, docs_report=docs_report)
     return report
 
 
@@ -301,7 +626,10 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Resume missing only: `{str(report.get('resume_missing_only')).lower()}`",
         f"- Provider recheck: `{str(report.get('provider_recheck')).lower()}`",
         f"- ThetaTerminal: `{report['theta_terminal'].get('status')}`",
-        f"- Shared trusted imported quote dates: `{report['shared_trusted_imported_quote_dates']['count']}`",
+        f"- Theta option-history probe: `{report.get('theta_option_history_probe', {}).get('status')}`",
+        f"- Pre-import shared trusted quote dates: `{report['shared_trusted_imported_quote_dates']['count']}`",
+        f"- Post-import shared trusted quote dates: `{report.get('post_import_shared_trusted_imported_quote_dates', report['shared_trusted_imported_quote_dates'])['count']}`",
+        f"- Pre-import missing symbol-date rows: `{report.get('pre_import_missing_symbol_date_count', report['missing_symbol_date_count'])}`",
         f"- Missing symbol-date rows: `{report['missing_symbol_date_count']}`",
         f"- Protected holdout overlap rows: `{report.get('protected_holdout_overlap_rows')}`",
         f"- Outside-universe import rows: `{report.get('outside_universe_import_rows')}`",
@@ -317,7 +645,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     for blocker in report["blockers"]:
         lines.append(f"- `{blocker}`")
     lines.append("")
-    return "\n".join(lines)
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def write_report(report: dict[str, Any], missing_rows: list[dict[str, Any]], *, output_dir: Path, docs_report: Path) -> None:
@@ -330,15 +658,18 @@ def write_report(report: dict[str, Any], missing_rows: list[dict[str, Any]], *, 
     with (output_dir / "missing_symbol_date_manifest.jsonl").open("w", encoding="utf8", newline="\n") as handle:
         for row in missing_rows:
             handle.write(json.dumps(row, sort_keys=True) + "\n")
-    (output_dir / "import_batch_manifest.jsonl").write_text("", encoding="utf8")
+    with (output_dir / "import_batch_manifest.jsonl").open("w", encoding="utf8", newline="\n") as handle:
+        for row in report.get("import_batch_results") or []:
+            handle.write(json.dumps(row, sort_keys=True) + "\n")
     coverage = {
         "shared_trusted_imported_quote_dates": report["shared_trusted_imported_quote_dates"],
         "post_import_shared_trusted_imported_quote_dates": report["post_import_shared_trusted_imported_quote_dates"],
         "pre_import_symbol_coverage": report["pre_import_symbol_coverage"],
+        "post_import_symbol_coverage": report.get("post_import_symbol_coverage"),
         "protected_holdout_overlap_rows": report["protected_holdout_overlap_rows"],
         "outside_universe_import_rows": report["outside_universe_import_rows"],
         "source_quality_floor_lowered": report["source_quality_floor_lowered"],
-        "post_import_note": "No post-import change because import was not attempted.",
+        "post_import_note": "Coverage recomputed after scoped import attempt." if report.get("import_attempted") else "No post-import change because import was not attempted.",
     }
     (output_dir / "post_import_coverage.json").write_text(json.dumps(coverage, indent=2, sort_keys=True) + "\n", encoding="utf8")
 

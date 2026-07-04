@@ -1,6 +1,8 @@
 import io
 import json
+import os
 import shutil
+import sqlite3
 import subprocess
 import tempfile
 import unittest
@@ -184,6 +186,20 @@ class AgentControlTests(unittest.TestCase):
         finally:
             conn.close()
 
+    def test_connect_skips_schema_ddl_when_schema_version_is_current(self):
+        first = agent_control.connect(self.db_path)
+        first.close()
+
+        with mock.patch.object(agent_control, "init_schema", wraps=agent_control.init_schema) as init_schema:
+            second = agent_control.connect(self.db_path)
+            try:
+                timeout = second.execute("PRAGMA busy_timeout").fetchone()[0]
+            finally:
+                second.close()
+
+        self.assertEqual(timeout, 30000)
+        init_schema.assert_not_called()
+
     def test_task_lifecycle_writes_graph_and_event_mirror(self):
         task = agent_control.create_task(
             db_path=self.db_path,
@@ -363,6 +379,454 @@ class AgentControlTests(unittest.TestCase):
         runs = agent_control.list_agent_runs(db_path=self.db_path, status="failed", limit=20)
         self.assertEqual([run["run_id"] for run in runs["runs"]], ["RUN-old-failed"])
 
+    def test_agent_run_ledger_is_append_only_without_maintenance_connection(self):
+        event = agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-append-only",
+            event_type="started",
+            summary="append-only target",
+        )
+        with closing(agent_control.connect(self.db_path)) as conn:
+            migration = conn.execute(
+                "SELECT version FROM schema_migrations WHERE version = ?",
+                (agent_control.CONTROL_SCHEMA_VERSION,),
+            ).fetchone()
+            self.assertIsNotNone(migration)
+            with self.assertRaises(sqlite3.DatabaseError):
+                with conn:
+                    conn.execute(
+                        "UPDATE agent_run_events SET summary = ? WHERE id = ?",
+                        ("mutated", event["id"]),
+                    )
+            with self.assertRaises(sqlite3.DatabaseError):
+                with conn:
+                    conn.execute("DELETE FROM agent_run_events WHERE id = ?", (event["id"],))
+
+        with closing(agent_control.connect(self.db_path, maintenance=True)) as conn:
+            with conn:
+                conn.execute(
+                    "UPDATE agent_run_events SET summary = ? WHERE id = ?",
+                    ("maintenance mutation for audit drill", event["id"]),
+                )
+            mutated = conn.execute("SELECT summary FROM agent_run_events WHERE id = ?", (event["id"],)).fetchone()
+            with self.assertRaises(sqlite3.DatabaseError):
+                with conn:
+                    conn.execute("DELETE FROM agent_run_events WHERE id = ?", (event["id"],))
+        self.assertEqual(mutated["summary"], "maintenance mutation for audit drill")
+
+    def test_agent_run_ledger_anchor_records_and_detects_tampering(self):
+        anchors_path = self.root / "anchors.jsonl"
+        event = agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-anchor",
+            event_type="started",
+            summary="anchor target",
+        )
+
+        report = agent_control.agent_run_anchor_report(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            anchors_path=anchors_path,
+            write_anchor=True,
+        )
+        self.assertEqual(report["status"], "pass")
+        self.assertTrue(anchors_path.exists())
+        self.assertEqual(report["anchor_validation"]["freshness"], "current")
+
+        agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-anchor-new-row",
+            event_type="started",
+            summary="new row after anchor",
+        )
+        stale = agent_control.agent_run_anchor_report(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            anchors_path=anchors_path,
+        )
+        self.assertEqual(stale["status"], "stale")
+        self.assertEqual(stale["anchor_validation"]["issues"], [])
+
+        with closing(agent_control.connect(self.db_path, maintenance=True)) as conn:
+            with conn:
+                conn.execute(
+                    "UPDATE agent_run_events SET summary = ? WHERE id = ?",
+                    ("tampered anchored row", event["id"]),
+                )
+        tampered = agent_control.agent_run_anchor_report(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            anchors_path=anchors_path,
+        )
+        self.assertEqual(tampered["status"], "issues")
+        self.assertTrue(any("mismatch" in issue["issue"] for issue in tampered["anchor_validation"]["issues"]))
+
+    def test_agent_run_ledger_anchor_keeps_zero_row_history_valid_after_events(self):
+        anchors_path = self.root / "anchors.jsonl"
+        empty_anchor = agent_control.agent_run_anchor_report(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            anchors_path=anchors_path,
+            write_anchor=True,
+        )
+        agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-after-empty-anchor",
+            event_type="started",
+            summary="event after empty anchor",
+        )
+        current_anchor = agent_control.agent_run_anchor_report(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            anchors_path=anchors_path,
+            write_anchor=True,
+            anchor_type="maintenance",
+        )
+
+        self.assertEqual(empty_anchor["status"], "pass")
+        self.assertEqual(current_anchor["status"], "pass")
+        self.assertEqual(current_anchor["anchor_validation"]["issues"], [])
+
+    def test_agent_run_ledger_anchor_cli_writes_prompt_report(self):
+        agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-anchor-cli",
+            event_type="started",
+            summary="anchor cli",
+        )
+
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = agent_control.main(
+                [
+                    "memory",
+                    "anchor-ledger",
+                    "--db",
+                    str(self.db_path),
+                    "--events",
+                    str(self.events_path),
+                    "--anchors",
+                    str(self.root / "anchors.jsonl"),
+                    "--write-anchor",
+                    "--prompt-only",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("# Agent Run Ledger Anchor", stdout.getvalue())
+        self.assertIn("Status: pass", stdout.getvalue())
+
+    def test_memory_backup_and_restore_check_validate_bundle(self):
+        agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-backup",
+            event_type="started",
+            summary="backup target",
+        )
+        backup = agent_control.create_memory_backup(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            anchors_path=self.root / "anchors.jsonl",
+            sessions_path=self.root / "sessions.jsonl",
+            backup_root=self.root / "backups",
+        )
+        check = agent_control.restore_check_memory_backup(backup_dir=Path(backup["backup_dir"]))
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = agent_control.main(
+                [
+                    "memory",
+                    "restore-check",
+                    backup["backup_dir"],
+                    "--prompt-only",
+                ]
+            )
+
+        self.assertEqual(backup["status"], "pass")
+        self.assertEqual(check["status"], "pass")
+        self.assertEqual(check["issues"], [])
+        self.assertEqual(exit_code, 0)
+        self.assertIn("# Memory Restore Check", stdout.getvalue())
+        self.assertIn("Status: pass", stdout.getvalue())
+
+    def test_memory_maintenance_logs_run_and_keeps_doctor_passing(self):
+        repo_root = self.root / "maintenance-repo"
+        self._write_minimal_seed_repo(repo_root)
+        db_path = self.root / "maintenance.db"
+        events_path = self.root / "maintenance-events.jsonl"
+        anchors_path = self.root / "maintenance-anchors.jsonl"
+        sessions_path = self.root / "maintenance-sessions.jsonl"
+        backup_root = self.root / "maintenance-backups"
+        runs_dir = self.root / "maintenance-dream-runs"
+        agent_control.run_dream_cycle(
+            db_path=db_path,
+            events_path=events_path,
+            repo_root=repo_root,
+            dreams_dir=self.root / "maintenance-dreams",
+            runs_dir=runs_dir,
+        )
+        agent_control.bootstrap_project_context(
+            db_path=db_path,
+            events_path=events_path,
+            repo_root=repo_root,
+            manifest_dir=self.root / "maintenance-context-packs",
+        )
+
+        result = agent_control.memory_maintenance(
+            db_path=db_path,
+            events_path=events_path,
+            anchors_path=anchors_path,
+            sessions_path=sessions_path,
+            backup_root=backup_root,
+            runs_dir=runs_dir,
+            repo_root=repo_root,
+        )
+        ledger = agent_control.agent_run_ledger_report(db_path=db_path, limit=10)
+        maintenance_run = next(run for run in ledger["runs"] if run["run_id"] == result["run_id"])
+        doctor = agent_control.memory_doctor(
+            db_path=db_path,
+            events_path=events_path,
+            anchors_path=anchors_path,
+            sessions_path=sessions_path,
+            backup_root=backup_root,
+            runs_dir=runs_dir,
+            repo_root=repo_root,
+        )
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = agent_control.main(
+                [
+                    "memory",
+                    "maintenance",
+                    "--db",
+                    str(db_path),
+                    "--events",
+                    str(events_path),
+                    "--anchors",
+                    str(anchors_path),
+                    "--sessions",
+                    str(sessions_path),
+                    "--backup-root",
+                    str(backup_root),
+                    "--runs-dir",
+                    str(runs_dir),
+                    "--repo-root",
+                    str(repo_root),
+                    "--prompt-only",
+                ]
+            )
+
+        self.assertEqual(result["status"], "pass")
+        self.assertTrue(Path(result["backup"]["backup_dir"]).is_dir())
+        self.assertEqual(result["doctor"]["status"], "pass")
+        self.assertEqual(maintenance_run["status"], "succeeded")
+        self.assertEqual(maintenance_run["event_count"], 2)
+        self.assertEqual(doctor["status"], "pass")
+        self.assertEqual(exit_code, 0)
+        self.assertIn("# Memory Maintenance", stdout.getvalue())
+        self.assertIn("Status: pass", stdout.getvalue())
+
+    def test_memory_auto_maintenance_runs_once_then_skips_when_current(self):
+        repo_root = self.root / "auto-maintenance-repo"
+        self._write_minimal_seed_repo(repo_root)
+        db_path = self.root / "auto-maintenance.db"
+        events_path = self.root / "auto-maintenance-events.jsonl"
+        anchors_path = self.root / "auto-maintenance-anchors.jsonl"
+        sessions_path = self.root / "auto-maintenance-sessions.jsonl"
+        backup_root = self.root / "auto-maintenance-backups"
+        runs_dir = self.root / "auto-maintenance-dream-runs"
+        agent_control.run_dream_cycle(
+            db_path=db_path,
+            events_path=events_path,
+            repo_root=repo_root,
+            dreams_dir=self.root / "auto-maintenance-dreams",
+            runs_dir=runs_dir,
+        )
+        agent_control.bootstrap_project_context(
+            db_path=db_path,
+            events_path=events_path,
+            repo_root=repo_root,
+            manifest_dir=self.root / "auto-maintenance-context-packs",
+        )
+
+        first = agent_control.memory_auto_maintenance(
+            db_path=db_path,
+            events_path=events_path,
+            anchors_path=anchors_path,
+            sessions_path=sessions_path,
+            backup_root=backup_root,
+            runs_dir=runs_dir,
+            repo_root=repo_root,
+        )
+        second = agent_control.memory_auto_maintenance(
+            db_path=db_path,
+            events_path=events_path,
+            anchors_path=anchors_path,
+            sessions_path=sessions_path,
+            backup_root=backup_root,
+            runs_dir=runs_dir,
+            repo_root=repo_root,
+        )
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = agent_control.main(
+                [
+                    "memory",
+                    "auto-maintenance",
+                    "--db",
+                    str(db_path),
+                    "--events",
+                    str(events_path),
+                    "--anchors",
+                    str(anchors_path),
+                    "--sessions",
+                    str(sessions_path),
+                    "--backup-root",
+                    str(backup_root),
+                    "--runs-dir",
+                    str(runs_dir),
+                    "--repo-root",
+                    str(repo_root),
+                    "--prompt-only",
+                ]
+            )
+
+        self.assertEqual(first["status"], "pass")
+        self.assertEqual(first["action"], "ran")
+        self.assertTrue(first["reasons"])
+        self.assertEqual(second["status"], "pass")
+        self.assertEqual(second["action"], "skipped")
+        self.assertEqual(second["reasons"], [])
+        self.assertEqual(exit_code, 0)
+        self.assertIn("# Memory Auto-Maintenance", stdout.getvalue())
+        self.assertIn("Action: skipped", stdout.getvalue())
+
+    def test_memory_restore_check_detects_corrupt_backup_file(self):
+        agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-backup-corrupt",
+            event_type="started",
+            summary="backup corruption target",
+        )
+        backup = agent_control.create_memory_backup(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            anchors_path=self.root / "anchors.jsonl",
+            backup_root=self.root / "backups",
+        )
+        backup_events = Path(backup["files"]["events"]["path"])
+        backup_events.write_text(backup_events.read_text(encoding="utf-8") + "\n{\"corrupt\": true}\n", encoding="utf-8")
+
+        check = agent_control.restore_check_memory_backup(backup_dir=Path(backup["backup_dir"]))
+
+        self.assertEqual(check["status"], "fail")
+        self.assertIn("events sha256 mismatch", check["issues"])
+
+    def test_memory_restore_check_detects_semantic_sidecar_corruption_after_manifest_refresh(self):
+        sessions_path = self.root / "sessions.jsonl"
+        sessions_path.write_text(
+            agent_control.canonical_json(
+                {
+                    "session_id": "S-test",
+                    "logged_at": "2026-06-29T00:00:00Z",
+                    "path": "docs/session.md",
+                    "source_sha256": "abc",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-sidecar-corrupt",
+            event_type="started",
+            summary="sidecar target",
+        )
+        backup = agent_control.create_memory_backup(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            anchors_path=self.root / "anchors.jsonl",
+            sessions_path=sessions_path,
+            backup_root=self.root / "backups",
+        )
+        backup_dir = Path(backup["backup_dir"])
+        for label, extra in [
+            ("events", {"corrupt": "events"}),
+            ("anchors", {"anchor_hash": "fake"}),
+            ("sessions", {"corrupt": "sessions"}),
+        ]:
+            path = Path(backup["files"][label]["path"])
+            path.write_text(path.read_text(encoding="utf-8") + agent_control.canonical_json(extra) + "\n", encoding="utf-8")
+        manifest_path = backup_dir / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        for label in ("events", "anchors", "sessions"):
+            manifest["files"][label]["sha256"] = agent_control._file_sha256(Path(manifest["files"][label]["path"]))
+        manifest_without_hash = {key: value for key, value in manifest.items() if key != "manifest_sha256"}
+        manifest["manifest_sha256"] = agent_control._text_sha256(agent_control.canonical_json(manifest_without_hash))
+        manifest_path.write_text(agent_control.canonical_json(manifest), encoding="utf-8")
+
+        check = agent_control.restore_check_memory_backup(backup_dir=backup_dir)
+
+        self.assertEqual(check["status"], "fail")
+        self.assertIn("events.jsonl sha256 does not match latest ledger anchor", check["issues"])
+        self.assertIn("anchors.jsonl does not match database anchor history", check["issues"])
+        self.assertTrue(any("sessions.jsonl" in issue for issue in check["issues"]))
+
+    def test_control_file_lock_blocks_second_holder(self):
+        lock_path = self.root / "agent_control.lock"
+        with agent_control._control_file_lock(lock_path, timeout_seconds=0.1, poll_seconds=0.01):
+            with self.assertRaises(agent_control.AgentControlError):
+                with agent_control._control_file_lock(lock_path, timeout_seconds=0.01, poll_seconds=0.01):
+                    pass
+        with agent_control._control_file_lock(lock_path, timeout_seconds=0.1, poll_seconds=0.01):
+            self.assertTrue(lock_path.exists())
+        self.assertFalse(lock_path.exists())
+
+    def test_control_file_lock_does_not_probe_windows_pids_with_os_kill(self):
+        if agent_control.sys.platform != "win32":
+            self.skipTest("Windows-specific os.kill liveness regression")
+        lock_path = self.root / "agent_control.lock"
+        lock_path.write_text(f"{os.getpid()} {agent_control.utc_now()}\n", encoding="utf-8")
+        try:
+            with mock.patch.object(agent_control.os, "kill", side_effect=AssertionError("os.kill must not probe pids")):
+                with self.assertRaises(agent_control.AgentControlError):
+                    with agent_control._control_file_lock(lock_path, timeout_seconds=0.01, poll_seconds=0.01):
+                        pass
+        finally:
+            if lock_path.exists():
+                lock_path.unlink()
+
+    def test_agent_run_secret_redaction_catches_common_token_shapes(self):
+        private_key = "-----BEGIN PRIVATE KEY-----\nabc123\n-----END PRIVATE KEY-----"
+        event = agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-secret-redaction",
+            event_type="started",
+            title="Token ghp_abcdefghijklmnopqrstuvwxyz123456",
+            summary=f"Anthropic sk-ant-secret12345 and key {private_key}",
+            payload={
+                "message": "OpenAI sk-proj-secret12345 and GitHub ghs_abcdefghijklmnopqrstuvwxyz123456",
+                "nested": {"not_secret": "visible"},
+            },
+        )
+
+        serialized = json.dumps(event)
+        self.assertNotIn("ghp_abcdefghijklmnopqrstuvwxyz123456", serialized)
+        self.assertNotIn("ghs_abcdefghijklmnopqrstuvwxyz123456", serialized)
+        self.assertNotIn("sk-ant-secret12345", serialized)
+        self.assertNotIn("sk-proj-secret12345", serialized)
+        self.assertNotIn("BEGIN PRIVATE KEY", serialized)
+        self.assertIn(agent_control.AGENT_RUN_REDACTED, serialized)
+
     def test_agent_run_ledger_audit_reports_malformed_payload_json(self):
         event = agent_control.record_agent_run_event(
             db_path=self.db_path,
@@ -371,7 +835,7 @@ class AgentControlTests(unittest.TestCase):
             event_type="started",
             summary="will corrupt payload",
         )
-        with closing(agent_control.connect(self.db_path)) as conn:
+        with closing(agent_control.connect(self.db_path, maintenance=True)) as conn:
             with conn:
                 conn.execute(
                     "UPDATE agent_run_events SET payload_json = ? WHERE id = ?",
@@ -550,7 +1014,7 @@ class AgentControlTests(unittest.TestCase):
             event_type="started",
             summary="tamper target",
         )
-        with closing(agent_control.connect(self.db_path)) as conn:
+        with closing(agent_control.connect(self.db_path, maintenance=True)) as conn:
             with conn:
                 conn.execute(
                     "UPDATE agent_run_events SET payload_json = ? WHERE id = ?",
@@ -648,7 +1112,7 @@ class AgentControlTests(unittest.TestCase):
             summary="Long running task.",
         )
         stale_time = (agent_control.datetime.now(agent_control.timezone.utc) - agent_control.timedelta(hours=8)).isoformat()
-        with closing(agent_control.connect(self.db_path)) as conn:
+        with closing(agent_control.connect(self.db_path, maintenance=True)) as conn:
             with conn:
                 conn.execute(
                     "UPDATE agent_run_events SET created_at = ? WHERE id = ?",
@@ -1771,6 +2235,7 @@ class AgentControlTests(unittest.TestCase):
             query="agent-control-plane",
             metadata_filter={"source_type": "repo_file_index"},
             max_depth=0,
+            include_repo_index=True,
         )
         self.assertIn("repo_file:docs/agent-control-plane.md", repo_result["graph_context"]["seed_node_ids"])
 
@@ -1801,18 +2266,21 @@ class AgentControlTests(unittest.TestCase):
             query="stable repo context",
             metadata_filter={"source_type": "repo_file_index", "git_state": "tracked"},
             max_depth=0,
+            include_repo_index=True,
         )
         untracked = agent_control.query_graph(
             db_path=self.db_path,
             query="current workspace context",
             metadata_filter={"source_type": "repo_file_index", "git_state": "untracked"},
             max_depth=0,
+            include_repo_index=True,
         )
         ignored = agent_control.query_graph(
             db_path=self.db_path,
             query="must not be indexed",
             metadata_filter={"source_type": "repo_file_index"},
             max_depth=0,
+            include_repo_index=True,
         )
 
         self.assertEqual(tracked["graph_context"]["seed_node_ids"], ["repo_file:tracked.md"])
@@ -1848,6 +2316,7 @@ class AgentControlTests(unittest.TestCase):
                 query=query,
                 metadata_filter={"source_type": "repo_file_index"},
                 max_depth=0,
+                include_repo_index=True,
             )
             self.assertEqual(result["graph_context"]["seed_node_ids"], [])
         allowed = agent_control.query_graph(
@@ -1855,6 +2324,7 @@ class AgentControlTests(unittest.TestCase):
             query="allowed",
             metadata_filter={"source_type": "repo_file_index"},
             max_depth=0,
+            include_repo_index=True,
         )
         self.assertEqual(allowed["graph_context"]["seed_node_ids"], ["repo_file:data/contracts/allowed.json"])
 
@@ -1875,6 +2345,7 @@ class AgentControlTests(unittest.TestCase):
             query="removed workspace context",
             metadata_filter={"source_type": "repo_file_index"},
             max_depth=0,
+            include_repo_index=True,
         )
         stale_blocker = agent_control.query_graph(
             db_path=self.db_path,
@@ -1918,6 +2389,7 @@ class AgentControlTests(unittest.TestCase):
             query="removed workspace context",
             metadata_filter={"source_type": "repo_file_index"},
             max_depth=0,
+            include_repo_index=True,
         )
         pruned_blocker = agent_control.query_graph(
             db_path=self.db_path,
@@ -2076,6 +2548,11 @@ class AgentControlTests(unittest.TestCase):
             "npm run memory:dream-run",
             "npm run memory:dream-audit",
             "npm run memory:operator-dashboard",
+            "npm run memory:anchor-ledger",
+            "npm run memory:backup",
+            "npm run memory:doctor",
+            "npm run memory:maintenance",
+            "npm run memory:auto-maintenance",
             "npm run memory:research-priorities",
             "npm run memory:profit-learning-sync",
             "npm run memory:profit-learning-audit",
@@ -2096,10 +2573,17 @@ class AgentControlTests(unittest.TestCase):
             "memory:dream-run",
             "memory:dream-audit",
             "memory:operator-dashboard",
+            "memory:anchor-ledger",
+            "memory:backup",
+            "memory:restore-check",
+            "memory:doctor",
+            "memory:maintenance",
+            "memory:auto-maintenance",
             "memory:research-priorities",
             "memory:profit-learning-sync",
             "memory:profit-learning-audit",
             "memory:schedule-dreams",
+            "memory:schedule-maintenance",
             "memory:review-dreams",
             "memory:dreams",
             "memory:eval",
@@ -2878,6 +3362,188 @@ class AgentControlTests(unittest.TestCase):
         self.assertGreaterEqual(digest["graph_counts"]["task"], 1)
         self.assertGreaterEqual(digest["graph_counts"]["blocker"], 1)
         self.assertEqual(digest["recent_events"][0]["event_type"], "task.reported")
+
+    def test_phase10_prunes_dead_schema_tables_and_keeps_blocker_nodes(self):
+        legacy_db_path = self.root / "legacy-agent-control.db"
+        dead_tables = {
+            "messages",
+            "feature_snapshots",
+            "drift_reports",
+            "dataset_versions",
+            "provenance_edges",
+            "blockers",
+        }
+        with closing(sqlite3.connect(legacy_db_path)) as conn, conn:
+            conn.execute("CREATE TABLE schema_migrations(version TEXT PRIMARY KEY, applied_at TEXT, description TEXT)")
+            conn.execute(
+                "INSERT INTO schema_migrations(version, applied_at, description) VALUES (?, ?, ?)",
+                ("agent_control_schema_v2", agent_control.utc_now(), "legacy fixture"),
+            )
+            for table in dead_tables:
+                conn.execute(f"CREATE TABLE {table}(id TEXT)")
+        with closing(agent_control.connect(legacy_db_path)) as conn:
+            tables_after_migration = {
+                row["name"]
+                for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+            }
+            migration = conn.execute(
+                "SELECT 1 FROM schema_migrations WHERE version = ?",
+                (agent_control.CONTROL_SCHEMA_VERSION,),
+            ).fetchone()
+        self.assertFalse(dead_tables & tables_after_migration)
+        self.assertIsNotNone(migration)
+
+        task = agent_control.create_task(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            title="Report graph blocker",
+            pathway="operator",
+        )
+        agent_control.report_task(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            task_id=task["id"],
+            worker_id="reviewer",
+            finding="Found a blocker.",
+            blockers="Need a blocker graph node.",
+        )
+
+        with closing(agent_control.connect(self.db_path)) as conn:
+            tables = {
+                row["name"]
+                for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+            }
+            blocker_nodes = conn.execute(
+                "SELECT count(*) FROM graph_nodes WHERE kind = 'blocker'"
+            ).fetchone()[0]
+
+        self.assertFalse(dead_tables & tables)
+        self.assertGreaterEqual(blocker_nodes, 1)
+
+    def test_phase10_retrieval_freshness_marks_and_demotes_stale_docs(self):
+        repo_root = self.root / "freshness-repo"
+        current_path = repo_root / "docs" / "current.md"
+        stale_path = repo_root / "docs" / "stale.md"
+        current_path.parent.mkdir(parents=True, exist_ok=True)
+        current_body = "shared freshness topic current source"
+        stale_body = "shared freshness topic stale source"
+        current_path.write_text(current_body, encoding="utf-8")
+        stale_path.write_text(stale_body, encoding="utf-8")
+
+        with closing(agent_control.connect(self.db_path)) as conn, conn:
+            agent_control.upsert_graph_node(
+                conn,
+                node_id="knowledge:freshness:stale",
+                kind="knowledge",
+                title="A stale freshness doc",
+                body=stale_body,
+                metadata={
+                    "source_type": "living_doc",
+                    "path": "docs/stale.md",
+                    "content_sha256": agent_control._text_sha256(stale_body),
+                },
+                source_ref="docs/stale.md",
+            )
+            agent_control.upsert_graph_node(
+                conn,
+                node_id="knowledge:freshness:current",
+                kind="knowledge",
+                title="Z current freshness doc",
+                body=current_body,
+                metadata={
+                    "source_type": "living_doc",
+                    "path": "docs/current.md",
+                    "content_sha256": agent_control._text_sha256(current_body),
+                },
+                source_ref="docs/current.md",
+            )
+        stale_path.write_text("shared freshness topic changed source", encoding="utf-8")
+
+        refreshed = agent_control.refresh_retrieval_freshness(db_path=self.db_path, repo_root=repo_root)
+        query = agent_control.query_graph(
+            db_path=self.db_path,
+            query="shared freshness topic",
+            max_depth=0,
+            limit=2,
+        )
+        explanations = query["retrieval"]["seed_explanations"]
+
+        self.assertEqual(refreshed["stale"], 1)
+        self.assertEqual(explanations[0]["source_node_id"], "knowledge:freshness:current")
+        self.assertEqual(explanations[0]["freshness_status"], "current")
+        self.assertEqual(explanations[1]["source_node_id"], "knowledge:freshness:stale")
+        self.assertEqual(explanations[1]["freshness_status"], "stale")
+
+    def test_phase10_rejects_mismatched_metadata_tenant(self):
+        with closing(agent_control.connect(self.db_path)) as conn, conn:
+            with self.assertRaises(agent_control.AgentControlError):
+                agent_control.upsert_graph_node(
+                    conn,
+                    node_id="memory:wrong-tenant",
+                    kind="memory",
+                    title="Wrong tenant",
+                    body="Should be rejected.",
+                    tenant_id=agent_control.DEFAULT_TENANT_ID,
+                    metadata={"source_type": "operating_memory", "tenant_id": "other-project"},
+                )
+
+    def test_phase10_archives_cross_project_fashion_memory(self):
+        with closing(agent_control.connect(self.db_path)) as conn, conn:
+            agent_control.upsert_graph_node(
+                conn,
+                node_id="memory:fashion-test",
+                kind="memory",
+                title="Fashion shopping bot planning loop",
+                body="Cross-project planning.",
+                metadata=agent_control._with_memory_policy_metadata(
+                    {
+                        "source_type": "operating_memory",
+                        "memory_type": "objective",
+                        "memory_status": "active",
+                    },
+                    source_type="operating_memory",
+                    source_quality="operating_memory",
+                ),
+            )
+            agent_control.upsert_graph_node(
+                conn,
+                node_id="episode:fashion-doc-mention",
+                kind="episode",
+                title="Phase 10 documents Fashion cleanup",
+                body="This living-history entry mentions Fashion bot cleanup but is not cross-project memory.",
+                metadata=agent_control._with_memory_policy_metadata(
+                    {
+                        "source_type": agent_control.LIVING_HISTORY_SOURCE_TYPE,
+                        "memory_status": "archived",
+                        "archive_reason": "cross_project_tenant_cleanup",
+                        "content_sha256": "fixture",
+                    },
+                    source_type=agent_control.LIVING_HISTORY_SOURCE_TYPE,
+                    source_quality="living_history",
+                ),
+            )
+
+        archived = agent_control.archive_cross_project_memory(
+            db_path=self.db_path,
+            events_path=self.events_path,
+        )
+        with closing(agent_control.connect(self.db_path)) as conn:
+            row = conn.execute(
+                "SELECT metadata_json FROM graph_nodes WHERE id = ?",
+                ("memory:fashion-test",),
+            ).fetchone()
+            mention = conn.execute(
+                "SELECT metadata_json FROM graph_nodes WHERE id = ?",
+                ("episode:fashion-doc-mention",),
+            ).fetchone()
+        metadata = json.loads(row["metadata_json"])
+        mention_metadata = json.loads(mention["metadata_json"])
+        self.assertEqual(archived["archived_count"], 1)
+        self.assertEqual(archived["repaired_count"], 1)
+        self.assertEqual(metadata["memory_status"], "archived")
+        self.assertEqual(metadata["archive_reason"], "cross_project_tenant_cleanup")
+        self.assertNotEqual(mention_metadata.get("memory_status"), "archived")
+        self.assertNotIn("archive_reason", mention_metadata)
 
     def test_session_log_requires_matching_hash_and_safe_path(self):
         repo_root = self.root / "session-repo"

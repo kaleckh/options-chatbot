@@ -1,6 +1,6 @@
 {
   "report_id": "current_policy_entry_filter_paper_monitor",
-  "generated_at_utc": "2026-06-14T04:27:48Z",
+  "generated_at_utc": "2026-07-03T21:38:37Z",
   "scope": "regular_supervised_trading_desk_entry_filter_forward_monitor",
   "evidence_boundary": {
     "description": "Read-only paper monitor for the current-policy entry-filter champion. It classifies fresh tracked rows after the configured since date and does not mutate scanner guardrails.",
@@ -272,11 +272,11 @@
   "lane_counts": {},
   "ticker_counts": {},
   "artifacts": {
-    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_20260614T042748Z.json",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_20260703T213837Z.json",
     "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_latest.json",
-    "csv": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_20260614T042748Z.csv",
+    "csv": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_20260703T213837Z.csv",
     "latest_csv": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_latest.csv",
-    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_20260614T042748Z.md",
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_20260703T213837Z.md",
     "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_latest.md",
     "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\current-policy-entry-filter-paper-monitor.md"
   }

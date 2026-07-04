@@ -31,7 +31,10 @@ DEFAULT_OUTPUT_DIR = (
     ROOT / "data" / "profitability-lab" / "regular-options-alpaca-underlying-minute-price-surface-import"
 )
 DEFAULT_DOC = ROOT / "docs" / "regular-options-alpaca-underlying-minute-price-surface-import.md"
-DEFAULT_UNIVERSE = ("SPY", "QQQ", "IWM", "DIA")
+OPENING_RANGE_UNIVERSE = ("SPY", "QQQ", "IWM", "DIA")
+FROZEN_13_SYMBOL_UNIVERSE = ("SPY", "QQQ", "IWM", "DIA", "AAPL", "GOOGL", "UNH", "LLY", "JNJ", "XOM", "CVX", "COP", "NEM")
+DEFAULT_UNIVERSE = OPENING_RANGE_UNIVERSE
+SUPPORTED_UNIVERSES = {OPENING_RANGE_UNIVERSE, FROZEN_13_SYMBOL_UNIVERSE}
 NY = ZoneInfo("America/New_York")
 
 READ_ONLY_FLAGS = {
@@ -132,7 +135,7 @@ def build_report(
 ) -> dict[str, Any]:
     symbols = _parse_universe(universe)
     blockers: list[str] = []
-    if symbols != DEFAULT_UNIVERSE:
+    if symbols not in SUPPORTED_UNIVERSES:
         blockers.append("unsupported_universe")
     if approval_token != APPROVAL_TOKEN:
         blockers.append("missing_or_invalid_approval_token")

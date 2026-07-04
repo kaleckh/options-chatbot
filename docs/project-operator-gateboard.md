@@ -7,7 +7,7 @@ This is read-only. It explains where the project is blocked without changing sca
 ## At A Glance
 
 - Overall status: `safe_blocked_no_live_release`
-- Generated at UTC: `2026-06-27T03:53:00Z`
+- Generated at UTC: `2026-07-03T21:38:40Z`
 - Primary message: Data is readable, but release is intentionally blocked in Evidence Path, Profitability Path, Promotion Path, Operator Path.
 
 ## Current Flow
@@ -30,7 +30,7 @@ flowchart LR
 | Evidence Path | `blocked` | Fresh evidence is visible, but nothing is promotion-ready. | candidate_count=34; fresh_exact_entry_count=6; linked_position_count=1; exact_realized_pnl_count=0; promotion_discussion_ready_count=0; validation_outcome_counts={"created": 1, "diagnostic_only": 4, "no_longer_matched": 16, "paper_only": 8, "proof_ineligible": 5} |
 | Profitability Path | `blocked` | Data is clean, but broad missed-pick economics are negative. | priced_rows=210/210; mark_unpriced_count=0; tracked_pnl_complete=4/4; untracked_rows=206; untracked_winners=72; untracked_losers=134; untracked_avg_net_pnl_pct=-16.54%; untracked_profit_factor=0.32; lane_gate_allowed_count=1; lane_gate_blocked_count=7 |
 | Promotion Path | `blocked` | No regular lane is live-validation or auto-track eligible. | lane_count=14; diagnostic_lane_count=3; paper_probation_lane_count=0; live_validation_lane_count=0; auto_track_lane_count=0; global_live_exact_negative_count=0; open_risk_governor_status=open_risk_governor_pass; live_policy_change=False |
-| Operator Path | `blocked` | Operator readback is complete, but no paper/live candidates are eligible. | paper_shortlist_release_gate=no_paper_shortlist_candidates; eligible_paper_review_candidates=0; scorecard_status=visible_product_profitability_progress_but_proof_still_blocked; paper_gate_status=paper_only_no_live_release; open_risk_governor_status=open_risk_governor_pass; open_risk_governor_blockers=[]; suggested_open_rows=1; suggested_attention_trade_count=1; scheduled_scan_heartbeat_status=fresh; days_since_last_scheduled_scan=0; last_scheduled_scan_host=KAESDEVICE; last_scheduled_scan_commit=401d3fdd5f27174cbb9b670d7af987789bfd53b3; ai_commodity_verified=False; ai_commodity_shared_quote_dates=3/100 |
+| Operator Path | `blocked` | Operator readback is complete, but no paper/live candidates are eligible. | paper_shortlist_release_gate=no_paper_shortlist_candidates; eligible_paper_review_candidates=0; filtered_forward_paper_shadow_candidates=0; filtered_forward_open_candidates=0; filtered_forward_tracker_status=filtered_forward_paper_shadow_tracking_active; scorecard_status=visible_product_profitability_progress_but_proof_still_blocked; paper_gate_status=paper_only_no_live_release; open_risk_governor_status=open_risk_governor_pass; open_risk_governor_blockers=[]; suggested_open_rows=1; suggested_attention_trade_count=1; scheduled_scan_heartbeat_status=fresh; days_since_last_scheduled_scan=0; last_scheduled_scan_host=KAESDEVICE; last_scheduled_scan_commit=966870aa581417952837c28423da632acfa3e1be; ai_commodity_verified=False; ai_commodity_shared_quote_dates=3/100 |
 
 ## Operator Next Actions
 
@@ -66,15 +66,16 @@ flowchart LR
 | --- | --- | --- | --- |
 | pathway_registry: `data/contracts/project-pathway-registry.json` | True | project_pathway_registry | n/a |
 | candidate_lifecycle: `data/contracts/candidate-lifecycle-contract.json` | True | candidate_lifecycle_contract | n/a |
-| missed_regular_picks_outcome: `data/forward-tracking/missed_regular_picks_outcome_latest.json` | True | missed_regular_picks_outcome | 2026-06-21T17:20:10Z |
-| fresh_evidence_loop: `data/forward-tracking/regular_options_fresh_evidence_loop_latest.json` | True | fresh_evidence_loop_readback | 2026-06-27T03:48:42Z |
+| missed_regular_picks_outcome: `data/forward-tracking/missed_regular_picks_outcome_latest.json` | True | missed_regular_picks_outcome | 2026-06-27T03:54:08Z |
+| fresh_evidence_loop: `data/forward-tracking/regular_options_fresh_evidence_loop_latest.json` | True | fresh_evidence_loop_readback | 2026-07-03T21:38:39Z |
 | open_position_risk: `data/forward-tracking/regular_open_position_risk_latest.json` | True | n/a | 2026-06-27T03:48:38Z |
 | suggested_trade_close_risk: `data/forward-tracking/suggested_trade_close_risk_latest.json` | True | n/a | 2026-06-27T03:48:38Z |
 | lane_promotion_state: `data/forward-tracking/lane_promotion_state_latest.json` | True | lane_promotion_state_readback | 2026-06-27T03:50:51Z |
-| paper_shortlist: `data/profitability-lab/regular-options-paper-shortlist/latest.json` | True | paper_shortlist_readback | 2026-06-27T03:48:42Z |
+| paper_shortlist: `data/profitability-lab/regular-options-paper-shortlist/latest.json` | True | paper_shortlist_readback | 2026-07-03T21:38:37Z |
+| filtered_forward_paper_shadow_tracker: `data/forward-tracking/regular-options-filtered-forward-paper-shadow/latest.json` | True | filtered_forward_paper_shadow_tracking_active | 2026-07-03T21:38:35Z |
 | operating_scorecard: `data/profitability-lab/regular-options-operating-scorecard/latest.json` | True | visible_product_profitability_progress_but_proof_still_blocked | 2026-06-05T17:28:57Z |
 | ai_commodity_progress: `data/ai-commodity-infra/progress/latest.json` | True | n/a | n/a |
-| scheduled_scan_heartbeat: `data/forward-tracking/scheduled_scan_heartbeat_latest.json` | True | fresh | 2026-06-26T17:46:32Z |
+| scheduled_scan_heartbeat: `data/forward-tracking/scheduled_scan_heartbeat_latest.json` | True | fresh | 2026-07-03T17:45:06Z |
 
 ## Non-Goals
 

@@ -782,16 +782,10 @@ Current 13-symbol candidate-generation surface audit result, if available:
 Current frozen 13-symbol reusable candidate-generation entrypoint result, if available:
 {
   "accepted_profitability": false,
-  "blockers": [
-    "candidate_generation_months_0_below_requested_24",
-    "missing_historical_entry_underlying_price_surface",
-    "missing_historical_option_chain_selection_surface",
-    "missing_historical_scanner_point_in_time_inputs",
-    "missing_lane_specific_point_in_time_feature_inputs",
-    "missing_point_in_time_earnings_calendar_source"
-  ],
+  "blockers": [],
   "coverage": {
-    "blocked_months": [
+    "blocked_months": [],
+    "candidate_generation_months_covered": [
       "2024-06",
       "2024-07",
       "2024-08",
@@ -817,8 +811,7 @@ Current frozen 13-symbol reusable candidate-generation entrypoint result, if ava
       "2026-04",
       "2026-05"
     ],
-    "candidate_generation_months_covered": [],
-    "candidate_generation_months_covered_count": 0,
+    "candidate_generation_months_covered_count": 24,
     "requested_month_count": 24,
     "requested_months": [
       "2024-06",
@@ -851,34 +844,22 @@ Current frozen 13-symbol reusable candidate-generation entrypoint result, if ava
   },
   "daily_candidate_generation_row_count": 6916,
   "daily_status_counts": {
-    "blocked_missing_historical_scanner_point_in_time_inputs": 6916
+    "explicit_no_pick": 3944,
+    "selected_candidate": 2972
   },
   "historical_rows_are_forward_proof": false,
   "no_write": true,
   "read_only": true,
-  "selected_candidate_row_count": 0,
-  "status": "blocked_frozen_13_symbol_candidate_generation_entrypoint"
+  "selected_candidate_row_count": 2972,
+  "status": "frozen_13_symbol_candidate_generation_entrypoint_ready"
 }
 
 Current 13-symbol frozen candidate-generation source-surface materializer result, if available:
 {
   "accepted_profitability": false,
-  "blockers": [
-    "candidate_generation_months_0_below_requested_24",
-    "missing_daily_candidate_generation_diagnostics",
-    "missing_historical_entry_underlying_price_surface",
-    "missing_historical_option_chain_selection_surface",
-    "missing_historical_scanner_point_in_time_inputs",
-    "missing_lane_specific_point_in_time_feature_inputs",
-    "missing_point_in_time_earnings_calendar_source"
-  ],
+  "blockers": [],
   "calendar_coverage": {
-    "calendar_months_covered": [],
-    "calendar_months_covered_count": 0,
-    "coverage_basis": "source_surface_not_frozen_13_symbol_or_missing_month_diagnostics",
-    "covered_months": [],
-    "status": "calendar_coverage_not_proven",
-    "unproven_requested_months": [
+    "calendar_months_covered": [
       "2024-06",
       "2024-07",
       "2024-08",
@@ -904,6 +885,36 @@ Current 13-symbol frozen candidate-generation source-surface materializer result
       "2026-04",
       "2026-05"
     ],
+    "calendar_months_covered_count": 24,
+    "coverage_basis": "explicit_frozen_13_symbol_candidate_generation_calendar_coverage",
+    "covered_months": [
+      "2024-06",
+      "2024-07",
+      "2024-08",
+      "2024-09",
+      "2024-10",
+      "2024-11",
+      "2024-12",
+      "2025-01",
+      "2025-02",
+      "2025-03",
+      "2025-04",
+      "2025-05",
+      "2025-06",
+      "2025-07",
+      "2025-08",
+      "2025-09",
+      "2025-10",
+      "2025-11",
+      "2025-12",
+      "2026-01",
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05"
+    ],
+    "status": "calendar_coverage_proven",
+    "unproven_requested_months": [],
     "zero_selection_months": [],
     "zero_selection_months_explicit": false
   },
@@ -912,31 +923,7 @@ Current 13-symbol frozen candidate-generation source-surface materializer result
   "posthoc_filtering_allowed_as_proof": null,
   "read_only": true,
   "selected_trade_summary": {
-    "selected_entry_months_with_rows": [],
-    "selected_rows_in_window": 0
-  },
-  "source_artifact_universe_exact_13_symbols": null,
-  "status": "blocked_13_symbol_frozen_candidate_generation_source_surface"
-}
-
-Current frozen 13-symbol candidate-generation engine result, if available:
-{
-  "accepted_profitability": false,
-  "audit_consumed_generated_surface": false,
-  "blockers": [
-    "blocked_daily_candidate_generation_coverage",
-    "blocked_latest_audit_rows_below_30",
-    "blocked_train_or_audit_month_coverage",
-    "candidate_generation_months_0_below_requested_24",
-    "missing_historical_entry_underlying_price_surface",
-    "missing_historical_option_chain_selection_surface",
-    "missing_historical_scanner_point_in_time_inputs",
-    "missing_lane_specific_point_in_time_feature_inputs",
-    "missing_point_in_time_earnings_calendar_source"
-  ],
-  "coverage": {
-    "audit_months_covered": 0,
-    "blocked_months": [
+    "selected_entry_months_with_rows": [
       "2024-06",
       "2024-07",
       "2024-08",
@@ -962,11 +949,51 @@ Current frozen 13-symbol candidate-generation engine result, if available:
       "2026-04",
       "2026-05"
     ],
-    "candidate_generation_months_covered": [],
-    "candidate_generation_months_covered_count": 0,
-    "latest_audit_exact_trades": 0,
-    "latest_four_strict_new_candidates": 0,
-    "missing_daily_diagnostics": 24,
+    "selected_rows_in_window": 2972
+  },
+  "source_artifact_universe_exact_13_symbols": null,
+  "status": "ready_13_symbol_frozen_candidate_generation_source_surface"
+}
+
+Current frozen 13-symbol candidate-generation engine result, if available:
+{
+  "accepted_profitability": false,
+  "audit_consumed_generated_surface": false,
+  "blockers": [],
+  "coverage": {
+    "audit_months_covered": 4,
+    "blocked_months": [],
+    "candidate_generation_months_covered": [
+      "2024-06",
+      "2024-07",
+      "2024-08",
+      "2024-09",
+      "2024-10",
+      "2024-11",
+      "2024-12",
+      "2025-01",
+      "2025-02",
+      "2025-03",
+      "2025-04",
+      "2025-05",
+      "2025-06",
+      "2025-07",
+      "2025-08",
+      "2025-09",
+      "2025-10",
+      "2025-11",
+      "2025-12",
+      "2026-01",
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05"
+    ],
+    "candidate_generation_months_covered_count": 24,
+    "latest_audit_exact_trades": 345,
+    "latest_audit_exact_trades_scope": "strict_calendar_coverage_only",
+    "latest_four_strict_new_candidates": 459,
+    "missing_daily_diagnostics": 0,
     "requested_month_count": 24,
     "requested_months": [
       "2024-06",
@@ -994,25 +1021,23 @@ Current frozen 13-symbol candidate-generation engine result, if available:
       "2026-04",
       "2026-05"
     ],
-    "train_months_covered": 0
+    "train_months_covered": 20
   },
   "daily_candidate_generation_row_count": 6916,
-  "decision": "blocked_frozen_candidate_generation_entrypoint_incomplete",
+  "decision": "frozen_13_symbol_candidate_generation_engine_ready",
   "historical_simulated_forward_audit_command": null,
-  "legacy_blocker_aliases": [
-    "missing_frozen_13_symbol_candidate_generation_engine"
-  ],
+  "legacy_blocker_aliases": [],
   "no_write": true,
   "read_only": true,
   "reusable_entrypoint_discovery": {
     "artifact_path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-13-symbol-frozen-candidate-generation-entrypoint\\latest.json",
-    "artifact_status": "blocked_frozen_13_symbol_candidate_generation_entrypoint",
+    "artifact_status": "frozen_13_symbol_candidate_generation_entrypoint_ready",
     "available": true,
     "basis": "frozen_entrypoint_artifact",
     "entrypoint": "scripts/regular_options_frozen_candidate_generation_entrypoint.py"
   },
-  "selected_candidate_row_count": 0,
-  "status": "blocked_frozen_13_symbol_candidate_generation_engine"
+  "selected_candidate_row_count": 2972,
+  "status": "frozen_13_symbol_candidate_generation_engine_ready"
 }
 
 Interpretation: the reusable frozen entrypoint now exists, but the real latest readback still has 0/24 covered candidate-generation months and 0 selected candidates because every daily row is blocked by missing daily candidate-generation diagnostics. Do not repeat the 13-symbol source-surface/no-write/denominator/engine branch unless a real daily frozen candidate-generation source changes this blocker. Treat quote depth alone as insufficient. Choose the next meaningful non-live/non-broker branch unless your stop_exception burden of proof is fully satisfied.
@@ -1698,25 +1723,26 @@ Current PMCC diagonal replay-readiness result, if available:
 Current approved 59-symbol ThetaData OPRA/NBBO source-repair result, if available:
 {
   "accepted_profitability": false,
-  "approval_token_valid": true,
+  "approval_token_valid": false,
   "blockers": [
-    "thetaterminal_source_unavailable"
+    "approval_token_missing_or_invalid"
   ],
   "historical_simulated_forward_status": "blocked_historical_simulated_forward_audit",
   "import_attempted": false,
   "imported_rows": 0,
-  "missing_symbol_date_count": 11565,
+  "missing_symbol_date_count": 11500,
   "quotes_imported": false,
   "shared_trusted_imported_quote_dates": {
     "count": 260,
     "first": "2025-05-22",
     "last": "2026-06-04"
   },
-  "status": "blocked_thetaterminal_source_unavailable",
+  "status": "blocked_import_approval_token_missing",
   "theta_terminal": {
-    "available": false,
-    "error": "<urlopen error [WinError 10061] No connection could be made because the target machine actively refused it>",
-    "status": "unavailable",
+    "available": true,
+    "body_preview": "We have upgraded to API v3. Please use API v3 instead. Update your endpoint URLs to /v3/* format. Consult API v3 documentation for more information: https://docs.thetadata.us/",
+    "http_status": 410,
+    "status": "available_status_endpoint_gone",
     "url": "http://127.0.0.1:25503/v2/system/status"
   }
 }
@@ -1725,10 +1751,8 @@ Interpretation: the original 59-symbol repair artifact is provenance. If it is s
 
 Current tokened 59-symbol ThetaData OPRA/NBBO source-repair resume result, if available:
 {
-  "approval_token_valid": true,
-  "blockers": [
-    "bulk_import_execution_not_started_by_preflight_wrapper"
-  ],
+  "approval_token_valid": false,
+  "blockers": [],
   "import_attempted": false,
   "imported_rows": 0,
   "missing_symbol_date_count": 11565,
@@ -1754,7 +1778,7 @@ Current tokened 59-symbol ThetaData OPRA/NBBO source-repair resume result, if av
     "reason": "not_run_until_import_clears_shared_date_coverage",
     "train_months_covered": 0
   },
-  "status": "blocked_59_symbol_import_repair",
+  "status": "dry_run_ready_for_scoped_import_resume",
   "theta_terminal": {
     "available": true,
     "body_preview": "We have upgraded to API v3. Please use API v3 instead. Update your endpoint URLs to /v3/* format. Consult API v3 documentation for more information: https://docs.thetadata.us/",
@@ -2678,62 +2702,55 @@ Required JSON-like output shape:
 Relevant NEXT_STEPS excerpt:
 # Next Steps
 
-Last updated: 2026-06-27
+Last updated: 2026-06-30
 
 ## Active Historical Robust-Search Track
 
 Current read:
-- Latest blocker-surface refresh after the paid-provider source pass is `2026-06-27T18:36:10Z`. Alpaca SIP underlying daily history, Alpaca SIP underlying minute source rows, base market-regime inputs, direct VIX, and Alpaca-backed dispersion/concentration proxy inputs are cleared. The latest dispersion artifacts report `point_in_time_dispersion_concentration_proxy_available`, `dispersion_proxy_hybrid_replay_readiness_ready`, and selector status `candidate_selected_for_research_only_implementation_approval` with `recommended_operator_approval_question=null` and a bounded research-only task boundary. The Oracle packet is `ready_for_same_session_gpt55_guidance`; the strict-forward operator queue is still `strict_forward_queue_ready_approval_and_market_window_blocked`, `profitability_readiness=false`, and strict completed rows remain `0/30`. Do not start the 30-trade profitability collection loop until a valid market-window run produces real same-day Phase 2 scanner candidates, candidate review clears, and strict-forward completion rows are actually appended and completed under the guarded proof rules.
-- Earlier strict-forward stale-state cleanup remains valid. The dedicated `\OptionsStrictForward30Collector` Windows runtime blocker is cleared: scheduler health is `scheduler_ready_for_next_market_window`, runtime telemetry is `scheduler_runtime_observed_ok`, `Last Run Time=6/27/2026 11:09:20 AM`, `Last Result=0`, and `Next Run Time=6/29/2026 7:35:00 AM`. The stale temp candidate-stager artifact is also cleared: `docs/regular-options-phase2-forward-paper-shadow-candidate-row-stager.md` now reports `blocked_market_window_not_confirmed`, `0` staged rows, and `candidate_jsonl_written=false`. The active `30`-trade strict-forward audit is still not ready for the profitability loop: strict completed rows remain `0/30`, scan tasks are `scan_tasks_ready_for_next_market_window`, throughput is `blocked_no_same_day_phase2_natural_selections` for `target_selection_date=2026-06-26` with `zero_candidate_diagnostics.status=opaque_zero_candidate_diagnosis_missing_symbol_drop_reasons`, candidate review is `candidate_review_blocked_no_scanner_candidates_for_target_date`, and completion monitor is `completion_monitor_waiting_for_first_cohort_row`.
-- Treat the cleared scheduler/stager items as local stale-state cleanup only, not profitability readiness. Remaining active blockers still include valid-market-window and real-candidate requirements, explicit operator approval before any guarded append, missing Phase 2 cohort/open rows/exits, and the broader source/input/quote-surface/provider blockers tracked in the blocker inventory and operator queue. These are not safe to clear by rewriting readbacks or lowering gates.
-- `docs/regular-options-profitability-blocker-inventory.md` is the current whole-surface blocker inventory. It records direct VIX, Alpaca SIP underlying daily history, Alpaca SIP underlying minute price surface for opening-range replay, base point-in-time market-regime inputs, and Alpaca-backed dispersion/concentration proxy inputs as cleared, and keeps the profitability goal open on remaining forward, candidate-generation, macro/earnings, flow, branch-specific input, quote-surface, engine, provider/entitlement, approval, and market-window blockers.
-- `docs/regular-options-strict-forward-operator-queue.md` is the current strict-forward profitability-loop queue, exposed as `npm run options:plan:strict-forward-operator-queue`. Current status is `strict_forward_queue_ready_approval_and_market_window_blocked`: strict forward rows are `0/30`, profitability readiness is `false`, fresh forward capture is blocked by operator approval plus a valid market window, and the selected path is bullish-pullback `layer_4_clean_exact`. The queue is read-only and explicitly forbids live release, broker orders, auto-track, quote import, evidence-store mutation, cohort append, holdout consumption, proof-bar changes, scanner/strategy/stop/sizing changes, promotion, and treating historical rows as forward proof.
-- `docs/regular-options-strict-forward-market-window-readiness-refresh.md` is the latest no-write loop refresh selected by GPT-5.5 Pro after the queue. Current status is `market_window_blocked_no_candidate_jsonl`: `0/30` strict forward rows, `accepted_profitability=false`, `profitability_readiness=false`, `historical_rows_are_forward_proof=false`, `market_window_status=market_closed`, `candidate_jsonl_exists=false`, `candidate_rows=0`, `append_allowed=false`, `operator_approval_required=true`, and `scan_task_health_status=scan_tasks_ready_for_next_market_window` with no scan-task blockers. Source readbacks are current after the 2026-06-27 refresh chain, with `paper_shadow_evidence_plan=paper_shadow_evidence_collecting`, market preflight `blocked_market_closed`, and robust-edge discovery `paper_shadow_only`.
-- `docs/regular-options-forward-candidate-throughput-audit.md` is the current scan-pick throughput readback, exposed as `npm run options:audit:forward-candidate-throughput`. Current status is `blocked_no_same_day_phase2_natural_selections`: `550` scan-pick rows, `1` post-freeze Phase 2 row, `0` target-date Phase 2 rows for `2026-06-26`, both frozen-lane scheduled sessions present, `0` staged candidates, and stager rejects dominated by non-Phase-2/pre-freeze/non-preregistered rows. Standalone weekend/pre-open refreshes now target the latest completed market day, so this is true candidate starvation rather than a false Saturday missing-session blocker. The scheduled drop-stage summary reports `candidate_starvation_from_scan_filters` with total drop count `63`; scan-funnel drops were led by `momentum=50`, `history_or_liquidity=8`, `tech_score=2`, `direction_score=1`, `ev_floor=1`, and `option_liquidity=1`. Treat scheduled-session labels such as `policy_not_applied` as secondary when there are `0` scan picks; the actionable blocker is candidate starvation under current filters. Future scheduled sessions now persist symbol-level scan-drop reasons into the forward ledger for this audit; the existing June 26 sessions predate that persistence and therefore show `0` symbol drop reasons with `candidate_starvation_evidence_status=stage_counts_only_waiting_for_symbol_drop_reasons`.
-- `npm run options:scan:forward-cohort-sweep` is the passive market-window scanner wrapper for the frozen Phase 2 cohort. It runs/checks `volatility_expansion_observation` and `bullish_pullback_observation` individually, keeps portfolio/profitability gates on, and forces `OPTIONS_SCAN_AUTO_TRACK=0`. The June 26 ledger has both frozen-lane scheduled sessions (`8293` bullish pullback, `8294` volatility expansion), both with `0` picks, so the current blocker is true candidate starvation under current gates rather than a skipped volatility scan.
-- `npm run options:goal-loop:strict-forward-30` is the active strict-forward coordinator. Current use is read-only/closed-window unless a valid market window is explicitly confirmed. Its latest generated next-window command is `npm run options:goal-loop:strict-forward-30 -- --selection-date 2026-06-29 --market-window-confirmed --market-window-status open --run-scan-sweep --json`; it still defaults to no append and no live/broker/auto-track. The top-level report now carries `scan_task_health_status=scan_tasks_ready_for_next_market_window` plus scan-task blockers, so broken 11:00/11:30 scan feeders are visible without opening downstream review artifacts. Only after real candidate rows are staged and independently reviewed should any guarded append be considered through the existing tokened append path.
-- `npm run options:goal-loop:strict-forward-30-collector` is the bounded market-window collector for the active `30`-row forward-audit goal. Latest status is `waiting_for_valid_market_window`: strict forward rows are still `0/30`, candidate rows are `0`, no candidate JSONL exist
+- The frozen 13-symbol historical candidate-generation chain is runnable end to end from source-surface tracking through simulated-forward audit, train-selected profitability iteration, canonical filtered audit, and prospective filtered paper-shadow tracking: `npm run options:source-acquisition:sec-earnings-calendar`, `npm run options:source-import:earnings-calendar`, `npm run options:research:point-in-time-earnings-calendar`, `npm run options:research:historical-scanner-input-surface-tracker`, `npm run options:research:historical-frozen-scanner-replay-adapter`, `npm run options:research:historical-frozen-adapter-exit-quote-repair-demand`, `npm run options:research:13-symbol-frozen-daily-candidate-decisions`, `npm run options:research:13-symbol-frozen-candidate-generation-entrypoint`, `npm run options:research:13-symbol-frozen-candidate-generation-source-surface`, `npm run options:research:13-symbol-frozen-candidate-generation-engine`, `npm run options:audit:historical-simulated-forward`, `npm run options:research:historical-profitability-filter-iteration`, `npm run options:audit:historical-filtered-simulated-forward`, and `npm run options:track:filtered-forward-paper-shadow`. Current data/readiness blockers are cleared for this audit slice: SEC Item 2.02 observed earnings-release staging wrote `74` source rows, tokened import materialized them for all 9 equity symbols, point-in-time earnings readiness is `point_in_time_earnings_calendar_ready`, the adapter is `historical_frozen_scanner_replay_adapter_ready`, scanner input surfaces are ready, exit-quote repair demand is empty, and the engine is `frozen_13_symbol_candidate_generation_engine_ready` with `24/24` candidate-generation months, `20` train months, `4` audit months, `459` latest-four strict-new candidates, and `345` strict latest-audit exact trades. The broad historical simulated-forward audit remains blocked on current economics: combined has `2,851` exact rows, PF `0.879`, avg P&L `-4.62%`, and bootstrap PF lower bound `0.82`; train has `2,506` exact rows, PF `0.8512`, avg `-5.73%`, and PF lower bound `0.79`; latest-four audit months `2026-02` through `2026-05` have `345` exact rows, PF `1.098`, avg `+3.49%`, and bootstrap PF lower bound `0.90`, so status is still `blocked_historical_simulated_forward_audit` with blocker `audit_bootstrap_pf_lb_not_above_1`. The filter iteration found one train-selected historical research candidate: top 8 train-ranked tickers (`NEM`, `JNJ`, `GOOGL`, `AAPL`, `IWM`, `CVX`, `SPY`, `QQQ`) plus prior-20-trading-day return at least `10.990605%`; the canonical filtered audit consumes that accepted filter without additional search/tuning and passes with `blockers=[]`, train `241` rows, PF `1.3743`, PF lower bound `1.07`, avg `+10.76%`, and latest-four audit `65` rows, PF `2.4729`, PF lower bound `1.54`, avg `+29.58%`. The filtered forward paper-shadow tracker is active from stable timestamp `2026-06-30T05:03:45Z` with `0` matched/open rows so far; daily refreshes preserve that activation cutoff, it rejects pre-start rows and same-day rows without a post-start source timestamp, and future scheduled scan logs now preserve scanner `signal_ret20` / `ret20` as the tracker-required `prior_20_trading_day_return_pct` feature. Existing old rows can still show `missing_prior_20_trading_day_return_pct`; that is not a blocker for future rows. Windows Task Scheduler task `\OptionsDailyOps` now runs `scripts/run_daily_ops.bat` at `15:30` local time on weekdays; the registration was manually triggered and completed with Task Scheduler result `0`, daily ops `22` / `22`, and tracker step `pass` at `2026-06-30T05:54:24Z`. Next safe work is reviewer/operator decision on whether to draft a separately approved scanner-policy proposal, or to run another preregistered robustness slice before any policy proposal. The deterministic local materializer remains `scanner_parity=false` and `production_scanner_replay=false`; do not call this accepted profitability, fresh forward proof, scanner-parity proof, proof-complete, live, or broker-tracked.
+- Agent runtime memory now has the requested unattended observability and integrity upgrades: `npm run memory:run-ledger`, `npm run memory:anchor-ledger`, `npm run memory:backup`, `npm run memory:doctor`, `npm run memory:maintenance`, `npm run memory:auto-maintenance`, `npm run memory:daily-brief`, `npm run memory:agent-eval`, `npm run memory:blocker-autopsy`, and `npm run memory:inbox`. The Windows control-plane lock must use the non-destructive process probe in `scripts/agent_control.py`; do not use `os.kill(pid, 0)` for Windows lock liveness. These are orchestration-only readbacks over local memory/run state; approval notes in them are not operator authorization for append, evidence mutation, quote import, live validation, auto-track, broker action, scanner/proof-bar changes, holdout use, or promotion. Use `memory:daily-brief` / `memory:inbox` at the start of unattended follow-ups, `memory:auto-maintenance` for routine if-needed backup/doctor/anchor upkeep, `memory:schedule-maintenance` to keep that local guard live through Windows Task Scheduler, and `memory:doctor` when validating the control plane itself.
+- The `codex/profitable-lane-debate-20260628` subagent-debate implementation is now integrated into `main` as a scoped profitability slice. The final debate actions are covered by `docs/research-decisions/profitable-lane-subagent-debate-2026-06-28.md`, `npm run options:audit:forward-candidate-throughput -- --json`, and `npm run options:research:dispersion-proxy-hybrid-bounded-replay -- --json`. Focused verification passed (`20` tests). Current state is ready to iterate safely on profitability evidence collection, but it is not proof-complete or profitability-ready: strict completed forward rows remain `0/30`, `candidate_jsonl_exists=false`, candidate review is `candidate_review_blocked_no_scanner_candidates_for_target_date`, completion monitor is `completion_monitor_waiting_for_first_cohort_row`, and no append/live/autotrack/broker/quote-import/evidence-mutation/proof-bar path has been enabled.
+- The next safe action is the already-scheduled no-append strict-forward market-window collection on `2026-06-29`. Scheduler health reports `scheduler_ready_for_next_market_window`, scan-task health reports `scan_tasks_ready_for_next_market_window`, and the auto-window collector currently reports `auto_window_collector_waiting_for_open_market_window` with `0` strict rows and `30` remaining. After the `07:35`, `11:00`, and `11:30` local scheduled windows, inspect the candidate-review packet and throughput audit. Only if real same-day Phase 2 candidate rows exist and validation reports `append_allowed=true` should the separate guarded append path be considered with an explicit operator token.
+- Current candidate-starvation evidence is still diagnostic rather than solved. The forward-candidate throughput audit loads the authoritative ledger, sees both scheduled frozen-lane sessions, and reports `blocked_no_same_day_phase2_natural_selections` with aggregate scheduled drop count `63` led by `momentum=50`, `history_or_liquidity=8`, `tech_score=2`, `direction_score=1`, `ev_floor=1`, and `option_liquidity=1`. It still reports `candidate_starvation_evidence_status=stage_counts_only_waiting_for_symbol_drop_reasons`, so future scheduled sessions need symbol-level drop reasons before changing scanner/filter policy.
+- The bounded dispersion-proxy hybrid replay is implemented and runnable, but currently stops as `blocked_dispersion_proxy_hybrid_bounded_replay`: it loads the readiness and point-in-time proxy artifacts, builds a `494`-row denominator, prices `0` exact rows, and identifies `missing_dispersion_pair_candidate_rows` as the smallest blocker. Treat this as a no-write replay blocker surface, not accepted profitability or a reason to import quotes.
+- The ThetaData t
 
 Relevant DECISIONS excerpt:
 # Decisions
 
-## 2026-06-27: Paid Provider Source Priority And Underlying Source Materialization
+## 2026-06-30: Filtered Historical Candidate Tracking Is Paper-Shadow Dashboard Evidence Only
 
-Regular-options profitability blocker repair should prefer paid provider data already available to the operator before falling back to public web sources. Alpaca and ThetaData are first-choice import/probe sources for market data blockers; web sources are acceptable only when those providers do not cover the required field family or current provider state blocks the exact source.
+The passed canonical filtered historical audit is useful for forward monitoring, but backfilling old scan picks into the dashboard would overstate prospective evidence.
 
-Durable decision: Alpaca SIP adjusted daily bars were staged as `point_in_time_underlying_daily_ohlcv_adjusted_v1` and tokened-imported through `npm run options:source-import:underlying-daily-history`, writing `6,422` generated source rows without replay, quote import, evidence-store mutation, live validation, broker action, auto-track, holdout consumption, proof-bar change, or promotion. `npm run options:research:point-in-time-market-regime-inputs` now reports `point_in_time_market_regime_inputs_ready` with `494` / `494` requested dates and `24` / `24` months covered. `npm run options:source-import:dispersion-concentration-proxy -- --approval-token APPROVE_DISPERSION_CONCENTRATION_PROXY_SOURCE_IMPORT --no-replay --json` now derives `6,422` Alpaca-backed dispersion/concentration proxy source rows from those daily rows, and `npm run options:research:dispersion-proxy-hybrid-replay-readiness -- --json` reports `dispersion_proxy_hybrid_replay_readiness_ready` with `blockers=[]`. The daily OHLCV, base market-regime, opening-range underlying-minute source, and dispersion/concentration source/input readiness blockers are cleared, while candidate-generation diagnostics, macro/earnings, flow, branch-specific inputs, quote surfaces, real forward rows, approvals, and market-window blockers remain.
+Durable decision: `scripts/build_regular_options_filtered_forward_paper_shadow_tracker.py`, exposed as `npm run options:track:filtered-forward-paper-shadow`, consumes the frozen accepted filter from `regular-options-historical-filtered-simulated-forward-audit/latest.json` and evaluates only prospective scan-pick rows from the stable filtered-policy activation timestamp forward unless an explicit `--tracking-start-at-utc` / `--tracking-start-date` is supplied. The tracker reads prior active tracker artifacts and keeps the earliest matching `tracking_start_at_utc`, so daily refreshes do not move the cutoff forward. Same-day rows must carry a reliable source timestamp at or after that cutoff, otherwise they fail closed as missing or pre-start timestamp rows. `scripts/log_scan_picks.py` must preserve scanner `signal_ret20` / `ret20` as `prior_20_trading_day_return_pct` and nested `signal_evidence` for future scheduled scan rows, because that is the frozen filter feature the tracker audits prospectively. Its rows are `forward_paper_shadow` dashboard/reporting candidates and feed the candidate outcome ledger plus project gateboard, but they are not live trades, Alpaca paper orders, tracked-position mutations, scanner policy approval, accepted profitability, promotion evidence, quote import, proof-bar changes, or broker permission. The latest real run is active with stable tracking start timestamp `2026-06-30T05:03:45Z`, `0` matched/open rows, and rejected older rows as `pre_tracking_start_date`.
 
-ThetaTerminal source state also changed. The local v3 terminal is reachable and the scoped 59-symbol resume dry-run preflight is ready, but the non-dry wrapper still reports `blocked_59_symbol_import_repair` / `bulk_import_execution_not_started_by_preflight_wrapper`, and a direct OPRA quote dry-run returned `403 Forbidden` while the loaded terminal banner showed `Options: FREE`. Do not repeat stale connection-refused conclusions; treat this as scoped import execution/entitlement-source state until the configured ThetaData account/entitlement and import wrapper path are proven.
+Windows Task Scheduler task `\OptionsDailyOps` now runs `scripts/run_daily_ops.bat` on weekdays at `15:30` local time. The wrapper runs `scripts/run_daily_ops.py --continue-on-failure --json` through the repo venv and refreshes the filtered forward paper-shadow tracker, candidate outcome ledger, gateboard, and daily readback after the market-window scan tasks. The task was manually triggered after registration and completed with Task Scheduler result `0`; daily ops completed `22` / `22` steps with `0` failures and tracker status `pass`.
 
-## 2026-06-27: Agent Runtime Memory Is An Active Agent Workflow, Not A Passive Database
+## 2026-06-29: SEC Item 2.02 Earnings Releases Clear Local PIT Readiness, Not Profitability
 
-Future agents must treat the options runtime memory graph as an active handoff and writeback surface for multi-step, resumed, CEO-style, audit, or subagent work.
+The frozen 13-symbol historical audit needed an earnings-risk source before equity rows could be materialized without silently ignoring event risk. A paid vendor scheduled historical calendar was not available locally, but SEC company submissions provide official point-in-time observed Item 2.02 8-K earnings-release filings.
 
-Durable decision: repo startup now points agents to `docs/agent-control-plane.md` for meaningful multi-step work, and the first agent commands are `npm run memory:bootstrap` and `npm run memory:context -- --goal "<goal>" --pathway operator --prompt-only`. Reviewed worker/subagent reports can be made durable through the explicit `npm run memory:writeback -- <task-id> --summary "..."` alias, which fails closed unless a worker report exists and accepted operating-memory nodes are written. `npm run memory:review-dreams` now emits a prompt-ready review packet for proposed dreams, accepted dream lessons/constraints, and dream-origin open questions. Dream proposals validate shape at proposal time, including entry object type, duplicate IDs, metadata object shape, evidence/supersedes list shape, and non-negative integer `freshness_days`, so malformed dreams do not fail later during acceptance. Context packs include accepted dream-derived lessons and constraints by default so agents do not need to know a special query to benefit from prior dream loops.
+Durable decision: `scripts/build_regular_options_sec_earnings_calendar_source.py`, exposed as `npm run options:source-acquisition:sec-earnings-calendar`, stages SEC Item 2.02 observed release rows into the point-in-time earnings-calendar CSV schema, and the tokened importer materializes them as generated source rows. Because observed filings are not scheduled future-calendar snapshots, the historical adapter must filter earnings events by `known_at_utc` and `source_retrieved_at_utc` relative to each candidate decision timestamp; events not known by the candidate date cannot block that historical candidate. This source can clear local earnings-calendar readiness for the historical audit, but it does not prove scanner parity, accepted profitability, fresh forward proof, live validation, auto-track, broker permission, proof-bar changes, or lane promotion.
 
-Automated dreaming runs through `npm run memory:dream-run` and the registered Windows task `\OptionsMemoryDreaming`. The automation is deterministic: it extracts only explicit `Lesson:`, `Constraint:`, and `Open question:` lines from logged session transcript nodes and their transcript files, then auto-accepts only same-tenant session-transcript-graph-evidence-backed `lesson`, `constraint`, and `open_question` entries under `auto_dream_v1`. It auto-rejects decisions, blockers, supersession attempts, observed-confidence claims, unevidenced or fabricated-evidence entries, self-referential dream evidence, non-session evidence, unreadable transcript-source sessions, and any high-risk options-action wording including auto-track, broker/order, live-validation, evidence-store mutation, quote import, protected-holdout, scanner-policy, proof-bar, promotion, and stop/sizing wording. Audits are available through `npm run memory:dream-audit` and `data/agent-control/dream-runs/latest.md`.
+After the SEC import and full exit-quote repair, the frozen engine proves `24/24` candidate-generation months and the broad historical simulated-forward audit reaches `2,851` exact rows, but the broad audit remains blocked on `audit_bootstrap_pf_lb_not_above_1` because the latest-four audit bootstrap PF lower bound is `0.90`. The separate train-selected historical filter iteration found one research candidate, top 8 train-ranked tickers plus prior-20-trading-day return at least `10.990605%`. The canonical filtered simulated-forward audit consumes that accepted filter without additional search or tuning and passes with `blockers=[]`, train `241` rows, PF lower bound `1.07`, and latest-four audit `65` rows, PF lower bound `1.54`; this is a historical filtered-audit readback only, not scanner parity, accepted profitability, fresh forward proof, live validation, auto-track, broker permission, proof-bar change, scanner-policy change, or lane promotion.
 
-All operating-memory nodes are machine-labeled `authority_scope=orchestration_only` and `does_not_authorize_trading_or_evidence_mutation=true`. Memory remains useful for coordination, recovery, lessons, blockers, and review context only. It does not authorize evidence mutation, scanner policy changes, proof-bar changes, broker action, promotion, live validation, quote import, stop/sizing changes, protected-holdout use, or treating task acceptance, worker reports, dreams, or historical rows as options proof.
+## 2026-06-29: Routine Memory Maintenance Must Self-Log In The Run Ledger
 
-## 2026-06-27: Strict-Forward Profitability Handoffs Fail Closed On Runtime And Fresh Zero-Candidate Evidence
+The memory backup and doctor commands can validate local runtime memory, but routine maintenance also needs to leave an auditable agent-run trail for future unattended sessions.
 
-Strict-forward profitability handoffs must not treat configured scheduled tasks, stale throughput artifacts, or empty candidate files as enough evidence to continue the `30`-trade forward audit.
+Durable decision: `npm run memory:maintenance` is the standard self-logging memory health command. It records started/completed or failed run-ledger events, creates a hashed memory backup, runs `memory:doctor`, writes a final `maintenance` ledger anchor after the terminal run event, and re-runs doctor so the ledger anchor remains current after maintenance. This uses only local `data/agent-control/` memory state and does not change scanner, evidence, proof, promotion, or trading behavior.
 
-Durable decision: `scripts/build_regular_options_strict_forward_30_scheduler_health.py` separates scheduler configuration from actual runtime telemetry and fails closed as `scheduler_runtime_blocked` when `\OptionsStrictForward30Collector` is stale, failed, or unobservable. `scripts/build_regular_options_strict_forward_scan_task_health.py` evaluates the 11:00/11:30 scheduled scan feeders as weekday daily tasks, not as repeated 30-minute collectors. `scripts/build_regular_options_forward_candidate_throughput_audit.py` emits scoped `zero_candidate_diagnostics` only for target-date, post-freeze, scheduled-session zero-candidate states and avoids false zero-candidate claims when ledger sources are unavailable, target dates are pre-freeze, or scheduled scan picks exist. `scripts/build_regular_options_strict_forward_30_candidate_review_packet.py` loads the throughput latest artifact, requires it to be fresh and same-target before using zero-candidate evidence, and surfaces that evidence in the review packet without appending or authorizing live paths.
+`npm run memory:auto-maintenance` is the live local guard around that command. It checks the latest successful maintenance age, latest backup age, ledger-anchor status, and doctor status, then skips cleanly or runs `memory:maintenance`. `npm run memory:schedule-maintenance` registers the Windows task `\OptionsMemoryMaintenance`, which periodically calls the guard; the guard decides whether work is necessary. This remains memory-only automation under `data/agent-control/`.
 
-This is read-only blocker reporting. It does not append cohort rows, enable live validation, enable auto-track, submit broker orders, import quotes, lower proof bars, mutate evidence stores, promote lanes, or treat historical rows as forward proof.
+## 2026-06-29: Earnings Source Planning And Exit-Quote Repair Are Daily-Tracked But Do Not Clear Proof
 
-## 2026-06-27: Agent-Control Task Lifecycle Writes Use Guarded Status Transitions
+The paid ThetaData path cleared the historical adapter's repairable missing-exit-quote demand, but the 20+4 historical audit still needs a point-in-time earnings source and full daily candidate/no-pick denominator coverage before it can be treated as proof-complete.
 
-The runtime memory graph's task ledger must not allow stale concurrent writers to regress task state after a task has already reached a terminal or newer lifecycle state.
+Durable decision: `scripts/build_regular_options_historical_frozen_adapter_exit_quote_repair_demand.py` bridges selected adapter rows with `missing_trusted_exit_quote` into the exact ThetaData import format, while excluding non-importable `missing_market_day_for_policy_exit` rows. After the paid ThetaData import, the bridge reports `exit_quote_repair_demand_empty` with `0` repairable rows and `43` excluded market-day policy exits. `scripts/build_regular_options_earnings_calendar_source_repair_packet.py`, exposed as `npm run options:source-plan:earnings-calendar`, is the read-only source acquisition packet for the remaining earnings blocker. The tokened earnings importer allows future scheduled earnings dates only when `known_at_utc` is no later than the source snapshot/as-of date; this preserves the need to cover `window_end + max_dte` without treating current/live calendars or earnings actuals as historical point-in-time proof. `scripts/run_daily_ops.py` now refreshes earnings readiness, the earnings source-repair packet, the input-surface tracker, the frozen replay chain, the exit quote demand bridge, and the historical audit in a `19`-step read-only chain.
 
-Durable decision: `scripts/agent_control.py` now uses compare-and-swap-style guarded updates for `claim`, `report`, and `accept`. Each transition writes only when the current database status is still in the allowed source set, otherwise the transaction rolls back with a controlled concurrency error. This keeps submitted reports, claims, accepted decisions, graph status metadata, and operating-memory writeback aligned under concurrent CEO/worker activity.
+Current selected-row diagnostics are `855` exact rows across `22` selected months. The latest four simulated-forward months (`2026-02` through `2026-05`) have `128` exact rows, PF `1.901`, avg P&L `+21.74%`, and bootstrap PF lower bound `1.36`, but train is weak (`727` rows over `18` months, PF `0.8842`, avg `-3.89%`) and combined selected rows are flat (`855` rows, PF `0.9983`, avg `-0.05%`). The audit remains blocked by full denominator coverage `0/24`, selected-row month coverage `22/24`, train coverage `18/20`, missing PIT earnings source rows, and incomplete PIT scanner/candidate-generation diagnostics.
 
-This is local orchestration and memory integrity only. It does not authorize evidence mutation, scanner policy changes, proof-bar changes, broker action, promotion, live validation, quote import, or treating task acceptance as options proof.
-
-## 2026-06-27: Strict-Forward Readiness, Review, And Completion Require Scan-Task Health
-
-Strict-forward review and completion must not be able to report fresh dependencies when the scheduled scan feeders are broken. Scheduler h
+This is source pla
 
 Relevant PROJECT_CONTEXT excerpt:
 # Project Context
@@ -2742,6 +2759,8 @@ This repository is a mixed Next.js and FastAPI options research system. The acti
 
 The proof/evidence contract for those views is versioned at `data/contracts/proof-evidence-contract.json` and explained in `docs/proof-evidence-contract.md`. Backend proof predicates remain authoritative; frontend evidence groups flow from generated `src/lib/generated/proofEvidenceContract.ts` through `src/lib/trading-desk/proofContract.ts` as display/readability wrappers around the same proof classes, quote evidence classes, research/backfill markers, top-level and source-snapshot backfill/migration identity fields, and exit-basis tokens. Compact Trading Desk rows emit read-time `evidence_group` and `quote_evidence_class` diagnostics from the same contract; those labels are not persisted authority and stale frontend labels fail closed by contract version. Read-only audit and research reports use `scripts/quote_evidence_readback.py` for the same quote-class vocabulary, while separately labeling research/backfill row policy and production-proof falsehood. The generated `docs/proof-invariant-table.md`, sourced from `data/contracts/proof-invariant-cases.json`, is the shared backend/frontend regression matrix for raw exact, production proof, Truth-grade, and realized-P&L boundaries.
 
+The local agent-control memory graph is an active orchestration surface, not a trading authority. `scripts/agent_control.py` owns the runtime SQLite graph under ignored `data/agent-control/`; future agents should recover context with `npm run memory:bootstrap`, build focused handoffs with `npm run memory:context`, audit automation with `npm run memory:operator-dashboard`, inspect run history with `npm run memory:run-ledger`, anchor/backup/doctor the local ledger with `npm run memory:anchor-ledger`, `npm run memory:backup`, and `npm run memory:doctor`, run self-logging backup/doctor/anchor maintenance with `npm run memory:maintenance`, let the local guard run that maintenance only when needed with `npm run memory:auto-maintenance`, read unattended handoffs with `npm run memory:daily-brief`, run control-plane checks with `npm run memory:agent-eval`, triage repeated blockers with `npm run memory:blocker-autopsy`, inspect pending attention items with `npm run memory:inbox`, sync allowlisted generated profitability readbacks with `npm run memory:profit-learning-sync`, audit that sync with `npm run memory:profit-learning-audit`, and inspect research-only provenance with `npm run memory:research-priorities`. Memory graph v2 stamps accepted memory with `authority_scope=orchestration_only`, uses `retrieval_documents` FTS/BM25 plus source-quality explanations for graph queries, writes context manifests for audit, records tenant-scoped agent run events with hash-chain validation, anchors and backs up local run-ledger state with restore-check manifests, self-logs memory maintenance runs in the ledger, and records zero-candidate/profit-learning episodes and hypotheses as research provenance only. The Windows task registered by `npm run memory:schedule-maintenance` calls the auto-maintenance guard periodically; it is local memory upkeep only. The control-plane lock uses a non-destructive Windows PID probe; agents must not reintroduce `os.kill(pid, 0)` for Windows lock liveness because it can terminate the probed session. None of these memory surfaces authorize cohort append, evidence mutation, quote import, scanner/strategy changes, proof-bar changes, live validation, auto-track, broker action, stop/sizing changes, promotion, protected-holdout use, or treating historical rows as forward proof.
+
 AI commodity / commodity-infrastructure options is a separate proof-first strategy lane under `data/ai-commodity-infra/` and `scripts/run_ai_commodity_opra_progress.py`. The generated isolation owner is `docs/ai-commodity-isolation.md`, backed by `data/contracts/ai-commodity-isolation.json`. Its preferred final proof path is Alpaca SIP/OPRA bid/ask snapshot replay using `alpaca_opra_daily_snapshot` rows in `data/options-validation/options_history.db`.
 
 The lane must not claim profitability from underlying bars, option OHLC bars, last trades, stale snapshots, indicative feeds, midpoint-only fills, tiny samples, or in-sample-only sweeps. Final promotion requires point-in-time bid/ask or NBBO replay with realistic costs and validation splits.
@@ -2749,9 +2768,6 @@ The lane must not claim profitability from underlying bars, option OHLC bars, la
 Regular-options metric readbacks must now use the same proof posture. WFO simulation charges slippage and per-contract fees, expiry settlement uses expiry-day prices, blank/unknown evidence classes quarantine instead of fail-opening to live evidence, profit factor is nullable for no-loss samples, and PF claims use net USD P&L where available. The fresh forward evidence funnel still has `0` exact realized P&L rows and `0` promotion-ready rows; the current named-gate defect report is `docs/fresh-executable-evidence-defect-report-2026-06-09.md`. QQQ `id=537` now has a fresh executable exact HOLD review and SBUX `id=104` is closed from executable exact side-aware exit evidence, so the remaining fresh-evidence gate is legitimate exact realized exit P&L for QQQ `id=537` or another fresh candidate.
 
 The regular supervised scanner safety contract is now lane-wide and metadata-driven. Regular playbooks default to fresh live validation and `position_tracking_mode=auto_track`; AI Commodity remains separate with scanner/tracked-position tracking disabled. Production scans default to portfolio caps on; caps-off scans are diagnostic unless explicitly allowed. Scanner-origin position and suggested-trade creation requires verified archived forward-scan lineage, a caps-enforced source scan, source `creation_eligible=true`, a current guardrail rerun, and exact-contract proof eligibility. When caps are enforced, existing positions, same-ticker/exact-spread exposure, max concurrent positions, cost-risk, drawdown, daily/weekly loss, sector/regime caps, and correlated-index exposure are hard blockers for auto-track and scanner-origin creation; near-cap notes and sizing reductions may remain cautions. Historical/research rows must use explicit manual modes and remain separated from production proof; control/scout proof labels do not make fresh executable regular rows paper-review-only.
-The scanner creation safety contract is versioned at `data/contracts/scanner-creation-safety-contract.json` and explained in `docs/scanner-creation-safety-contract.md`. Scheduled auto-track requires explicit market-open state, an available caps-enforced exposure snapshot, auto-track playbook metadata, source `creation_eligible=true`, no creation blockers, proof eligibility, fresh profitability/promotion artifacts, and a passing regular open-risk governor; unknown market, exposure, lane, proof, or open-risk state is not a creation event. Manual Alpaca paper execution uses the same scanner-origin creation gate, submits exactly `1` contract through the Alpaca paper endpoint when explicitly enabled, and records broker-paper metadata separately from OPRA/NBBO production-proof evidence.
-The candidate lifecycle status contract is generated by `scripts/candidate_lifecycle.py` at `data/contracts/candidate-lifecycle-contract.json`, `docs/candidate-lifecycle-contract.md`, and `src/lib/generated/candidateLifecycleContract.ts`. Queue builders, profitability/promotion gates, pending validation, disposition reporting, and fresh-evidence readbacks use this shared status/outcome vocabulary so paper-only, diagnostic, pending, and validation-attempted rows cannot disappear because a new status was added in only one module. Paper/probation lanes use `pending_paper_exact_evidence` for exact evidence collection; they do not enter `pending_live_validation`.
-The Phase 2 regular-options forward cohort is preregistered at `data/contracts/forward-cohort-preregistration.json`, with generated doc `docs/forward-cohort-preregistration.md`. Freeze date is `2026-06-14` and eval date is `2026-07-28`. The frozen lanes are `volatility_expansion_observation` and the clean `bullish_pullback_observation` carrier set (`IWM`, `AAPL`, `GOOGL`, `UNH`, `LLY`, `JNJ`, `XOM`, `CVX`, `COP`, `NEM`). `scripts/lane_promotion_state.py`, daily all-lanes/starvation checks, audit completeness guards, scheduled scan logging, and pending validation read this contract so every other regular lane is parked outside the cohort with scans and chores disabled until evaluation or an explicit refreeze. The contract does not lower existing proof bars, consume the protected holdout, submit orders, or convert research/backfill rows into production proof.
-Phase 2 candidat
+The scanner creation sa
 
 ```

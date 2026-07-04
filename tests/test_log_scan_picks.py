@@ -423,6 +423,34 @@ class LogScanPicksTests(unittest.TestCase):
 
         self.assertEqual(fill_price, 11.34)
 
+    def test_build_log_record_preserves_prior_20_signal_for_forward_tracker(self):
+        pick = _make_pick("AAPL", debit=3.2)
+        pick.update(
+            {
+                "signal_variant": "pullback_uptrend",
+                "signal_family": "bullish_pullback",
+                "ret5": -0.8,
+                "signal_ret5": -1.2,
+                "signal_ret20": 12.3456,
+            }
+        )
+
+        record = log_scan_picks._build_log_record(
+            pick,
+            run_at=_WeekdayDateTime(2026, 6, 30, 11, 15, 0),
+            scan_result={"playbook": {"id": "bullish_pullback_observation"}},
+        )
+
+        self.assertEqual(record["scan_date"], "2026-06-30")
+        self.assertEqual(record["signal_ret20"], 12.3456)
+        self.assertEqual(record["prior_20_trading_day_return_pct"], 12.3456)
+        self.assertEqual(
+            record["signal_evidence"]["prior_20_trading_day_return_pct"],
+            12.3456,
+        )
+        self.assertEqual(record["signal_evidence"]["prior_20_trading_day_return_source"], "scan_pick_signal")
+        self.assertEqual(record["signal_evidence"]["signal_variant"], "pullback_uptrend")
+
     def test_build_fill_attempt_record_persists_selected_spread_and_auto_track_status(self):
         pick = _make_pick("SPY", debit=5.0)
         pick.update(

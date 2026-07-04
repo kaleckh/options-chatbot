@@ -88,6 +88,49 @@ class RegularOptions13SymbolFrozenCandidateGenerationSourceSurfaceTests(unittest
         self.assertEqual(report["calendar_coverage"]["calendar_months_covered_count"], 1)
         self.assertEqual(report["selected_trade_summary"]["selected_rows_in_window"], 1)
         self.assertEqual(report["selected_trades"][0]["ticker"], "SPY")
+        self.assertFalse(report["scanner_parity"])
+        self.assertFalse(report["production_scanner_replay"])
+        self.assertEqual(report["candidate_materialization_basis"], "deterministic_local_pit_candidate_materializer_v1")
+        self.assertFalse(report["selected_trades"][0]["scanner_parity"])
+        self.assertFalse(report["selected_trades"][0]["production_scanner_replay"])
+
+    def test_exact_blocked_source_exports_partial_audit_selected_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source_path = Path(tmp) / "source.json"
+            source = _source_candidate(
+                covered_months=[],
+                selected_trades=[
+                    {
+                        "entry_date": "2026-03-10",
+                        "ticker": "SPY",
+                        "lane_id": "fixture",
+                        "exact_priced": True,
+                        "pnl_pct": 7.5,
+                        "proof_grade": "trusted_intraday_opra_nbbo",
+                    }
+                ],
+            )
+            source["blockers"] = ["missing_point_in_time_earnings_calendar_source"]
+            _write_json(source_path, source)
+            report = surface.build_report(
+                source_candidate_generation_path=source_path,
+                window_start="2026-03-01",
+                window_end="2026-03-31",
+                generated_at_utc="2026-06-23T00:00:00Z",
+            )
+
+        self.assertEqual(report["status"], "blocked_13_symbol_frozen_candidate_generation_source_surface")
+        self.assertEqual(report["calendar_coverage"]["calendar_months_covered_count"], 0)
+        self.assertIn("missing_daily_candidate_generation_diagnostics", report["blockers"])
+        self.assertIn("missing_point_in_time_earnings_calendar_source", report["blockers"])
+        self.assertEqual(report["selected_trade_summary"]["selected_rows_in_window"], 1)
+        self.assertTrue(report["month_diagnostics"][0]["partial_audit_candidate"])
+        self.assertFalse(report["month_diagnostics"][0]["candidate_generation_proven"])
+        self.assertTrue(report["selected_trades"][0]["partial_audit_candidate"])
+        self.assertFalse(report["selected_trades"][0]["candidate_generation_month_proven"])
+        self.assertEqual(report["selected_trades"][0]["pnl_pct"], 7.5)
+        self.assertFalse(report["selected_trades"][0]["scanner_parity"])
+        self.assertFalse(report["selected_trades"][0]["production_scanner_replay"])
 
     def test_exact_source_surface_can_prove_zero_pick_month(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

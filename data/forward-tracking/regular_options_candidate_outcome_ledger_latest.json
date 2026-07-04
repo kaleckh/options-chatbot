@@ -1,17 +1,25 @@
 {
   "artifacts": {
     "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-candidate-outcome-ledger.md",
-    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_20260627T034842Z.json",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_20260703T213840Z.json",
     "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.json",
     "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.md",
-    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_20260627T034842Z.md"
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_20260703T213840Z.md"
   },
-  "generated_at_utc": "2026-06-27T03:48:42Z",
+  "generated_at_utc": "2026-07-03T21:38:40Z",
   "inputs": {
+    "filtered_forward_paper_shadow_tracker": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-07-03T21:38:35Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular-options-filtered-forward-paper-shadow\\latest.json",
+      "required": false,
+      "status": "loaded"
+    },
     "fresh_evidence_loop": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-27T03:48:42Z",
+      "generated_at_utc": "2026-07-03T21:38:39Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fresh_evidence_loop_latest.json",
       "required": true,
       "status": "loaded"
@@ -27,7 +35,7 @@
     "paper_shortlist": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-27T03:48:42Z",
+      "generated_at_utc": "2026-07-03T21:38:37Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-paper-shortlist\\latest.json",
       "required": false,
       "status": "loaded"
@@ -7233,6 +7241,32 @@
   "schema_version": 1,
   "scope": "regular_options_profitability_candidate_outcomes",
   "source_summaries": {
+    "filtered_forward_paper_shadow_tracker": {
+      "appendable_entry_count": 0,
+      "by_scan_date": {},
+      "by_ticker": {},
+      "completed_candidate_count": 0,
+      "daily_signal_matched_row_count": 0,
+      "duplicate_daily_signal_identity_count": 0,
+      "entry_rows_appended_count": 0,
+      "evaluated_scan_row_count": 0,
+      "matched_but_unappendable_counts": {},
+      "matched_but_unappendable_missing_entry_provenance_count": 0,
+      "matched_candidate_count": 0,
+      "matched_rows_log_identity_schema": "policy_ticker_scan_date_direction_v2",
+      "matched_rows_log_identity_schema_current": true,
+      "open_candidate_count": 0,
+      "raw_matched_scan_row_count": 0,
+      "rejected_counts": {
+        "missing_prior_20_trading_day_return_pct": 285,
+        "pre_tracking_start_date": 265
+      },
+      "same_day_signal_duplicate_matches_suppressed_count": 0,
+      "source_scan_row_count": 550,
+      "tracking_start_at_utc": "2026-06-30T05:03:45Z",
+      "tracking_start_date": "2026-06-30",
+      "tracking_start_source": "frozen_policy_contract"
+    },
     "fresh_evidence_loop": {
       "candidate_count": 34,
       "candidate_status_counts": {
@@ -7397,9 +7431,11 @@
     },
     "exact_exit_bridge_count": 1,
     "exact_realized_pnl_count": 0,
+    "filtered_forward_open_candidate_count": 0,
+    "filtered_forward_paper_shadow_candidate_count": 0,
     "fresh_candidate_count": 34,
     "input_status_counts": {
-      "loaded": 5
+      "loaded": 6
     },
     "ledger_row_count": 91,
     "live_policy_change": false,

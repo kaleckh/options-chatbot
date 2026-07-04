@@ -4,7 +4,7 @@ Status: `auto_window_collector_waiting_for_open_market_window`.
 
 - Market-window status: `closed`.
 - Timing status: `after_market_close_or_non_market_day`.
-- Current market date: `2026-06-27`.
+- Current market date: `2026-07-03`.
 - Strict completed forward rows: `0/30`.
 - Remaining rows: `30`.
 - Accepted profitability: `false`.

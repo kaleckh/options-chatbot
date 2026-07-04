@@ -1,0 +1,124 @@
+{
+  "accepted_profitability": false,
+  "auto_track_enabled": false,
+  "broker_order_allowed": false,
+  "conditions": [
+    {
+      "field": "ticker",
+      "op": "in",
+      "value": [
+        "NEM",
+        "JNJ",
+        "GOOGL",
+        "AAPL",
+        "IWM",
+        "CVX",
+        "SPY",
+        "QQQ"
+      ]
+    },
+    {
+      "field": "signal_evidence.prior_20_trading_day_return_pct",
+      "op": "gte",
+      "value": 10.990605
+    }
+  ],
+  "conditions_sha256": "3b10d0306800e1a203480b80e4fafda03d5e1b6443d8d294cbf8ff7f20324967",
+  "description": "Top 8 tickers ranked by train PF then average return. plus signal_evidence.prior_20_trading_day_return_pct gte 10.9906, threshold chosen from train quantiles only.",
+  "evidence_stores_mutated": false,
+  "filter_id": "train_ranked_top_8_tickers__signal_evidence_prior_20_trading_day_return_pct_gte_10.9906",
+  "forward_rows_are_profitability_proof": false,
+  "frozen_at_utc": "2026-07-02T02:22:02Z",
+  "historical_rows_are_forward_proof": false,
+  "live_validation_enabled": false,
+  "policy_id": "historical_filtered_candidate_policy_v1",
+  "prohibited_actions": [
+    "do_not_change_scanner_policy_from_filtered_policy_freeze",
+    "do_not_promote_lanes_from_filtered_policy_freeze",
+    "do_not_enable_live_validation_or_auto_track_from_filtered_policy_freeze",
+    "do_not_submit_broker_orders_from_filtered_policy_freeze",
+    "do_not_import_quotes_from_filtered_policy_freeze",
+    "do_not_mutate_evidence_stores_from_filtered_policy_freeze",
+    "do_not_lower_proof_bars_from_filtered_policy_freeze",
+    "do_not_consume_protected_holdout_from_filtered_policy_freeze",
+    "do_not_treat_historical_rows_as_forward_profitability_proof"
+  ],
+  "protected_holdout_consumed": false,
+  "provenance": {
+    "audit_months_at_freeze": [
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05"
+    ],
+    "filter_iteration_artifact": {
+      "generated_at_utc": "2026-07-01T21:36:48Z",
+      "path": "data/profitability-lab/regular-options-historical-profitability-filter-iteration/latest.json",
+      "report_id": "regular_options_historical_profitability_filter_iteration",
+      "sha256": "6bda10c9fa372f62b5027920e017361bfcb856dec0cb1d67eedbc7dc7470848d",
+      "status": "historical_profitability_filter_iteration_candidate_found"
+    },
+    "filtered_audit_artifact": {
+      "generated_at_utc": "2026-07-01T21:36:49Z",
+      "path": "data/profitability-lab/regular-options-historical-filtered-simulated-forward-audit/latest.json",
+      "report_id": "regular_options_historical_filtered_simulated_forward_audit",
+      "sha256": "7199ea885e3b345c9c4f6fc4394ebb9a5b16288c6fade27090653a9cf7ffece2",
+      "status": "historical_filtered_simulated_forward_audit_passed"
+    },
+    "train_months_at_freeze": [
+      "2024-06",
+      "2024-07",
+      "2024-08",
+      "2024-09",
+      "2024-10",
+      "2024-11",
+      "2024-12",
+      "2025-01",
+      "2025-02",
+      "2025-03",
+      "2025-04",
+      "2025-05",
+      "2025-06",
+      "2025-07",
+      "2025-08",
+      "2025-09",
+      "2025-10",
+      "2025-11",
+      "2025-12",
+      "2026-01"
+    ],
+    "window_months_at_freeze": [
+      "2024-06",
+      "2024-07",
+      "2024-08",
+      "2024-09",
+      "2024-10",
+      "2024-11",
+      "2024-12",
+      "2025-01",
+      "2025-02",
+      "2025-03",
+      "2025-04",
+      "2025-05",
+      "2025-06",
+      "2025-07",
+      "2025-08",
+      "2025-09",
+      "2025-10",
+      "2025-11",
+      "2025-12",
+      "2026-01",
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05"
+    ]
+  },
+  "quotes_imported": false,
+  "read_only": true,
+  "report_id": "regular_options_frozen_filtered_policy",
+  "research_only": true,
+  "scanner_policy_changed": false,
+  "schema_version": 1,
+  "tracking_start_at_utc": "2026-06-30T05:03:45Z"
+}

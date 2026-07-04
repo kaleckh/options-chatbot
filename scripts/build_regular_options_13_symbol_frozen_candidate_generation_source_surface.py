@@ -79,6 +79,19 @@ FORBIDDEN_ACTIONS = [
     "count_quote_depth_as_no_pick_proof",
     "count_historical_rows_as_forward_proof",
 ]
+DEFAULT_CANDIDATE_MATERIALIZATION_BASIS = "deterministic_local_pit_candidate_materializer_v1"
+
+
+def _source_non_parity(source: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "candidate_materialization_basis": str(
+            source.get("candidate_materialization_basis") or DEFAULT_CANDIDATE_MATERIALIZATION_BASIS
+        ),
+        "scanner_parity": bool(source.get("scanner_parity")) if "scanner_parity" in source else False,
+        "production_scanner_replay": bool(source.get("production_scanner_replay"))
+        if "production_scanner_replay" in source
+        else False,
+    }
 
 
 def _utc_now_iso() -> str:
@@ -113,6 +126,9 @@ def _audit_row(row: dict[str, Any], index: int) -> dict[str, Any]:
     item.setdefault("production_proof", False)
     item.setdefault("research_backfill", True)
     item.setdefault("selection_timestamp_basis", "frozen_13_symbol_candidate_generation_source_surface")
+    item.setdefault("scanner_parity", False)
+    item.setdefault("production_scanner_replay", False)
+    item.setdefault("candidate_materialization_basis", DEFAULT_CANDIDATE_MATERIALIZATION_BASIS)
     return item
 
 
@@ -140,6 +156,7 @@ def build_report(
     source, source_meta = _load_json(source_candidate_generation_path)
     requested_months = _month_range(start, end)
     source_universe = _candidate_universe(source)
+    non_parity = _source_non_parity(source)
     source_months = _candidate_months(source)
     source_blockers = [str(item) for item in _as_list(source.get("blockers"))]
     covered_months = set(source_months.get("covered_months") or [])
@@ -173,17 +190,23 @@ def build_report(
         if outside_count:
             blockers.append("outside_universe_source_rows_present")
         proven = bool(attempted and exact_source and not outside_count)
+        partial_audit_candidate = bool(exact_source and not outside_count)
         explicit_no_pick = bool(proven and month in zero_months and not selected_allowed)
-        if proven:
+        if partial_audit_candidate:
             for row in selected_allowed:
-                selected_rows.append(_audit_row(row, len(selected_rows) + 1))
+                audited = _audit_row(row, len(selected_rows) + 1)
+                audited["partial_audit_candidate"] = not proven
+                audited["candidate_generation_month_proven"] = proven
+                audited.update(non_parity)
+                selected_rows.append(audited)
         month_diagnostics.append(
             {
                 "month": month,
                 "candidate_generation_attempted": attempted,
                 "candidate_generation_proven": proven,
+                "partial_audit_candidate": partial_audit_candidate,
                 "explicit_no_pick_proof": explicit_no_pick,
-                "selected_trade_count": len(selected_allowed) if proven else 0,
+                "selected_trade_count": len(selected_allowed) if partial_audit_candidate else 0,
                 "outside_universe_source_row_count": outside_count,
                 "protected_holdout_overlap": False,
                 "audit_coverable": bool(proven and (selected_allowed or explicit_no_pick)),
@@ -226,7 +249,9 @@ def build_report(
             **source_universe,
             "source_artifact_universe_exact_13_symbols": exact_source,
             "posthoc_filtering_allowed_as_proof": False,
+            **non_parity,
         },
+        **non_parity,
         "calendar_coverage": {
             "status": "calendar_coverage_proven" if not blockers else "calendar_coverage_not_proven",
             "coverage_basis": (
@@ -303,7 +328,17 @@ def render_markdown(report: dict[str, Any]) -> str:
     if blockers := _as_list(report.get("blockers")):
         lines.extend(["", "## Blockers", ""])
         lines.extend(f"- `{blocker}`" for blocker in blockers)
-    lines.append("")
+    lines.extend(
+        [
+            "",
+            "## Boundary",
+            "",
+            f"- Candidate materialization basis: `{report.get('candidate_materialization_basis')}`.",
+            f"- Scanner parity: `{report.get('scanner_parity')}`.",
+            f"- Production scanner replay: `{report.get('production_scanner_replay')}`.",
+            "",
+        ]
+    )
     return "\n".join(lines)
 
 

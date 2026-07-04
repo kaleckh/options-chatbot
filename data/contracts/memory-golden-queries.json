@@ -1,0 +1,64 @@
+{
+  "version": "memory_golden_queries_v1",
+  "queries": [
+    {
+      "name": "strict-forward blockers avoid repo mirror",
+      "query": "strict forward",
+      "expect_source_types": ["profit_learning_sync", "gateboard_pathway", "living_doc"],
+      "expect_no_source_types": ["repo_file_index"]
+    },
+    {
+      "name": "gateboard recovery",
+      "query": "gateboard",
+      "expect_source_types": ["gateboard_blocker", "gateboard_pathway", "gateboard_source_artifact"],
+      "expect_no_source_types": ["repo_file_index"]
+    },
+    {
+      "name": "memory doctor and backup",
+      "query": "memory backup",
+      "expect_source_types": ["living_history_ingest", "control_plane_doc", "living_doc", "startup_doc", "package_manifest", "static_memory_graph_node"],
+      "expect_no_source_types": ["repo_file_index"]
+    },
+    {
+      "name": "agent control plane",
+      "query": "agent control memory graph",
+      "expect_source_types": ["control_plane_doc", "living_doc", "static_memory_graph_node"],
+      "expect_no_source_types": ["repo_file_index"]
+    },
+    {
+      "name": "project active scope",
+      "query": "active regular options scope",
+      "expect_source_types": ["living_history_ingest", "living_doc", "startup_doc"],
+      "expect_no_source_types": ["repo_file_index"]
+    },
+    {
+      "name": "filtered tracker context",
+      "query": "filtered forward",
+      "expect_source_types": ["living_history_ingest", "living_doc", "gateboard_pathway", "gateboard_source_artifact"],
+      "expect_no_source_types": ["repo_file_index"]
+    },
+    {
+      "name": "ThetaData entitlement blocker",
+      "query": "ThetaData",
+      "expect_source_types": ["living_history_ingest", "profit_learning_sync", "living_doc", "gateboard_pathway", "startup_doc"],
+      "expect_no_source_types": ["repo_file_index"]
+    },
+    {
+      "name": "dream automation",
+      "query": "memory dream run audit",
+      "expect_source_types": ["control_plane_doc", "living_doc", "dream_run"],
+      "expect_no_source_types": ["repo_file_index"]
+    },
+    {
+      "name": "code filename excluded by default",
+      "query": "scripts agent_control.py",
+      "expect_no_source_types": ["repo_file_index"]
+    },
+    {
+      "name": "code filename opt-in",
+      "query": "scripts agent_control.py",
+      "include_repo_index": true,
+      "expect_source_types": ["repo_file_index"]
+    }
+  ]
+}

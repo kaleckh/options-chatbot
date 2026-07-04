@@ -1,0 +1,119 @@
+{
+  "accepted_profitability": false,
+  "artifacts": {
+    "candidate_rows_jsonl": "data/forward-tracking/regular-options-filtered-forward-paper-shadow/candidate_rows.jsonl",
+    "docs_report": "docs/regular-options-filtered-forward-paper-shadow-tracker.md",
+    "json": "data/forward-tracking/regular-options-filtered-forward-paper-shadow/regular_options_filtered_forward_paper_shadow_tracker_20260630T061151Z.json",
+    "latest_json": "data/forward-tracking/regular-options-filtered-forward-paper-shadow/latest.json",
+    "latest_markdown": "data/forward-tracking/regular-options-filtered-forward-paper-shadow/latest.md",
+    "markdown": "data/forward-tracking/regular-options-filtered-forward-paper-shadow/regular_options_filtered_forward_paper_shadow_tracker_20260630T061151Z.md"
+  },
+  "auto_track_enabled": false,
+  "blockers": [],
+  "broker_order_allowed": false,
+  "candidate_rows": [],
+  "evidence_stores_mutated": false,
+  "forward_rows_are_profitability_proof": false,
+  "forward_tracking": {
+    "by_scan_date": {},
+    "by_ticker": {},
+    "completed_candidate_count": 0,
+    "evaluated_scan_row_count": 0,
+    "matched_candidate_count": 0,
+    "open_candidate_count": 0,
+    "rejected_counts": {
+      "missing_prior_20_trading_day_return_pct": 285,
+      "pre_tracking_start_date": 265
+    },
+    "source_scan_row_count": 550,
+    "tracking_start_at_utc": "2026-06-30T05:03:45Z",
+    "tracking_start_date": "2026-06-30",
+    "tracking_start_source": "previous_tracker_artifacts"
+  },
+  "frozen_filter": {
+    "conditions": [
+      {
+        "field": "ticker",
+        "op": "in",
+        "value": [
+          "NEM",
+          "JNJ",
+          "GOOGL",
+          "AAPL",
+          "IWM",
+          "CVX",
+          "SPY",
+          "QQQ"
+        ]
+      },
+      {
+        "field": "signal_evidence.prior_20_trading_day_return_pct",
+        "op": "gte",
+        "value": 10.990605
+      }
+    ],
+    "conditions_text": "ticker in NEM,JNJ,GOOGL,AAPL,IWM,CVX,SPY,QQQ; signal_evidence.prior_20_trading_day_return_pct gte 10.990605",
+    "description": "Top 8 tickers ranked by train PF then average return. plus signal_evidence.prior_20_trading_day_return_pct gte 10.9906, threshold chosen from train quantiles only.",
+    "filter_id": "train_ranked_top_8_tickers__signal_evidence_prior_20_trading_day_return_pct_gte_10.9906",
+    "freeze_rule": "consume the accepted historical filtered audit filter exactly; do not retune from forward rows",
+    "source_report_id": "regular_options_historical_profitability_filter_iteration",
+    "source_status": "historical_profitability_filter_iteration_candidate_found"
+  },
+  "generated_at_utc": "2026-06-30T06:11:51Z",
+  "historical_audit_context": {
+    "accepted_historical_filtered_audit": true,
+    "accepted_profitability": false,
+    "audit_avg_pnl_pct": 29.58,
+    "audit_exact_trade_count": 65,
+    "audit_pf_lb_5pct": 1.54,
+    "audit_profit_factor": 2.4729,
+    "historical_rows_are_forward_proof": false,
+    "status": "historical_filtered_simulated_forward_audit_passed"
+  },
+  "inputs": {
+    "filtered_audit": {
+      "exists": true,
+      "path": "data/profitability-lab/regular-options-historical-filtered-simulated-forward-audit/latest.json",
+      "status": "loaded"
+    },
+    "source_scan_picks": {
+      "bad_row_count": 0,
+      "exists": true,
+      "path": "data/forward-tracking/scan_picks.jsonl",
+      "row_count": 550,
+      "sha256": "abc426b6896495bf22e291f06831bd2378bb76bdc2fc40e4d5d14250bdae6fda",
+      "status": "loaded"
+    },
+    "underlying_daily_source_rows": {
+      "bad_row_count": 0,
+      "exists": true,
+      "path": "data/profitability-lab/regular-options-point-in-time-underlying-daily-history/source_rows.jsonl",
+      "row_count": 6422,
+      "status": "loaded"
+    }
+  },
+  "live_trade": false,
+  "live_validation_enabled": false,
+  "prohibited_actions": [
+    "do_not_submit_broker_order_from_filtered_forward_tracker",
+    "do_not_enable_live_validation_from_filtered_forward_tracker",
+    "do_not_enable_auto_track_from_filtered_forward_tracker",
+    "do_not_mutate_tracked_positions_from_filtered_forward_tracker",
+    "do_not_import_quotes_from_filtered_forward_tracker",
+    "do_not_change_scanner_policy_from_filtered_forward_tracker",
+    "do_not_lower_proof_bars_from_filtered_forward_tracker",
+    "do_not_promote_from_filtered_forward_tracker"
+  ],
+  "protected_holdout_consumed": false,
+  "quotes_imported": false,
+  "read_only": true,
+  "report_id": "regular_options_filtered_forward_paper_shadow_tracker",
+  "scanner_policy_changed": false,
+  "schema_version": 1,
+  "status": "filtered_forward_paper_shadow_tracking_active",
+  "tracking_label": "Historical filtered candidate v1 forward paper-shadow tracker",
+  "tracking_policy_id": "historical_filtered_candidate_v1",
+  "tracking_start_at_utc": "2026-06-30T05:03:45Z",
+  "tracking_start_date": "2026-06-30",
+  "tracking_start_source": "previous_tracker_artifacts"
+}

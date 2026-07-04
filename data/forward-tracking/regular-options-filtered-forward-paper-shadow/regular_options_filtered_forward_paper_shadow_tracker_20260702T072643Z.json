@@ -1,0 +1,237 @@
+{
+  "accepted_profitability": false,
+  "approval_authority": false,
+  "artifacts": {
+    "candidate_rows_jsonl": "data/forward-tracking/regular-options-filtered-forward-paper-shadow/candidate_rows.jsonl",
+    "docs_report": "docs/regular-options-filtered-forward-paper-shadow-tracker.md",
+    "json": "data/forward-tracking/regular-options-filtered-forward-paper-shadow/regular_options_filtered_forward_paper_shadow_tracker_20260702T072643Z.json",
+    "latest_json": "data/forward-tracking/regular-options-filtered-forward-paper-shadow/latest.json",
+    "latest_markdown": "data/forward-tracking/regular-options-filtered-forward-paper-shadow/latest.md",
+    "markdown": "data/forward-tracking/regular-options-filtered-forward-paper-shadow/regular_options_filtered_forward_paper_shadow_tracker_20260702T072643Z.md",
+    "matched_rows_log": "data/forward-tracking/regular-options-filtered-forward-paper-shadow/matched_rows.jsonl"
+  },
+  "auto_track_enabled": false,
+  "blockers": [],
+  "broker_order_allowed": false,
+  "candidate_rows": [],
+  "duplicate_daily_signal_identities": [],
+  "evidence_stores_mutated": false,
+  "forward_evidence_bar": {
+    "accepted_profitability": false,
+    "approval_authority": false,
+    "bar_contract": {
+      "exists": true,
+      "path": "data/contracts/regular-options-filtered-forward-evidence-bar-v1.json",
+      "sha256": "69cd8419beb59207f188d6e5e076971df3acf5336bf3cab1502430c2a889b309",
+      "status": "loaded"
+    },
+    "bar_id": "regular_options_filtered_forward_evidence_bar_v1",
+    "calendar_month_count": 0,
+    "can_change_scanner_policy": false,
+    "checks": {
+      "calendar_months_with_rows": false,
+      "completed_rows": false,
+      "fixture_rows": true,
+      "percent_cluster_pf_lb": false,
+      "percent_metric_complete": true,
+      "ticker_week_clusters": false,
+      "total_net_pnl_usd": false,
+      "usd_cluster_pf_lb": false,
+      "usd_metric_complete": true
+    },
+    "completed_forward_rows": 0,
+    "criteria_met_reporting_only": false,
+    "evaluation_permitted": false,
+    "evaluation_waits_for_min_completed_rows": true,
+    "fixture_row_count": 0,
+    "max_fixture_rows": 0,
+    "percent_cluster_bootstrap": null,
+    "percent_metric_row_count": 0,
+    "required_calendar_months": 3,
+    "required_completed_forward_rows": 30,
+    "required_ticker_week_clusters": 8,
+    "status": "waiting_for_min_completed_forward_rows",
+    "ticker_week_cluster_count": 0,
+    "total_net_pnl_usd": null,
+    "usd_cluster_bootstrap": null,
+    "usd_metric_row_count": 0
+  },
+  "forward_rows_are_profitability_proof": false,
+  "forward_tracking": {
+    "appendable_entry_count": 0,
+    "by_scan_date": {},
+    "by_ticker": {},
+    "completed_candidate_count": 0,
+    "daily_signal_matched_row_count": 0,
+    "duplicate_daily_signal_identity_count": 0,
+    "entry_rows_appended_count": 0,
+    "evaluated_scan_row_count": 0,
+    "matched_but_unappendable_counts": {},
+    "matched_but_unappendable_missing_entry_provenance_count": 0,
+    "matched_candidate_count": 0,
+    "matched_rows_log_identity_schema": "policy_ticker_scan_date_direction_v2",
+    "matched_rows_log_identity_schema_current": true,
+    "open_candidate_count": 0,
+    "raw_matched_scan_row_count": 0,
+    "rejected_counts": {
+      "missing_prior_20_trading_day_return_pct": 285,
+      "pre_tracking_start_date": 265
+    },
+    "same_day_signal_duplicate_matches_suppressed_count": 0,
+    "source_scan_row_count": 550,
+    "tracking_start_at_utc": "2026-06-30T05:03:45Z",
+    "tracking_start_date": "2026-06-30",
+    "tracking_start_source": "frozen_policy_contract"
+  },
+  "frozen_filter": {
+    "computed_conditions_sha256": "3b10d0306800e1a203480b80e4fafda03d5e1b6443d8d294cbf8ff7f20324967",
+    "conditions": [
+      {
+        "field": "ticker",
+        "op": "in",
+        "value": [
+          "NEM",
+          "JNJ",
+          "GOOGL",
+          "AAPL",
+          "IWM",
+          "CVX",
+          "SPY",
+          "QQQ"
+        ]
+      },
+      {
+        "field": "signal_evidence.prior_20_trading_day_return_pct",
+        "op": "gte",
+        "value": 10.990605
+      }
+    ],
+    "conditions_sha256": "3b10d0306800e1a203480b80e4fafda03d5e1b6443d8d294cbf8ff7f20324967",
+    "conditions_text": "ticker in NEM,JNJ,GOOGL,AAPL,IWM,CVX,SPY,QQQ; signal_evidence.prior_20_trading_day_return_pct gte 10.990605",
+    "contract_path": "data/contracts/regular-options-frozen-filtered-policy-v1.json",
+    "contract_sha256": "2054eafc577ddc10f4cd4bbd4c4b4133c6e82d3d8bd7be2d6bd1dc547dc42b00",
+    "description": "Top 8 tickers ranked by train PF then average return. plus signal_evidence.prior_20_trading_day_return_pct gte 10.9906, threshold chosen from train quantiles only.",
+    "filter_id": "train_ranked_top_8_tickers__signal_evidence_prior_20_trading_day_return_pct_gte_10.9906",
+    "freeze_rule": "consume the hash-pinned frozen policy contract exactly; do not retune from filtered audit or forward rows",
+    "policy_id": "historical_filtered_candidate_policy_v1",
+    "source": "frozen_policy_contract"
+  },
+  "generated_at_utc": "2026-07-02T07:26:43Z",
+  "historical_audit_context": {
+    "accepted_historical_filtered_audit": false,
+    "accepted_profitability": false,
+    "audit_avg_pnl_pct": 30.87,
+    "audit_exact_trade_count": 57,
+    "audit_pf_lb_5pct": 1.15,
+    "audit_profit_factor": 2.511,
+    "historical_rows_are_forward_proof": false,
+    "status": "blocked_historical_filtered_simulated_forward_audit"
+  },
+  "inputs": {
+    "filtered_audit": {
+      "exists": true,
+      "path": "data/profitability-lab/regular-options-historical-filtered-simulated-forward-audit/latest.json",
+      "status": "loaded"
+    },
+    "forward_evidence_bar_contract": {
+      "exists": true,
+      "path": "data/contracts/regular-options-filtered-forward-evidence-bar-v1.json",
+      "sha256": "69cd8419beb59207f188d6e5e076971df3acf5336bf3cab1502430c2a889b309",
+      "status": "loaded"
+    },
+    "matched_rows_log": {
+      "bad_row_count": 0,
+      "exists": true,
+      "path": "data/forward-tracking/regular-options-filtered-forward-paper-shadow/matched_rows.jsonl",
+      "row_count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "status": "loaded"
+    },
+    "policy_contract": {
+      "exists": true,
+      "path": "data/contracts/regular-options-frozen-filtered-policy-v1.json",
+      "sha256": "2054eafc577ddc10f4cd4bbd4c4b4133c6e82d3d8bd7be2d6bd1dc547dc42b00",
+      "status": "loaded"
+    },
+    "scan_task_health": {
+      "exists": true,
+      "path": "data/forward-tracking/regular_options_strict_forward_scan_task_health_latest.json",
+      "sha256": "fe513063646629df7c0e5a8f1558dcac768dd65da07625e5276235508e47e799",
+      "status": "loaded"
+    },
+    "source_scan_picks": {
+      "bad_row_count": 0,
+      "exists": true,
+      "path": "data/forward-tracking/scan_picks.jsonl",
+      "row_count": 550,
+      "sha256": "abc426b6896495bf22e291f06831bd2378bb76bdc2fc40e4d5d14250bdae6fda",
+      "status": "loaded"
+    },
+    "underlying_daily_source_rows": {
+      "bad_row_count": 0,
+      "exists": true,
+      "path": "data/profitability-lab/regular-options-point-in-time-underlying-daily-history/source_rows.jsonl",
+      "row_count": 6422,
+      "status": "loaded"
+    }
+  },
+  "latest_filtered_audit_filter": {
+    "conditions_sha256": "3b10d0306800e1a203480b80e4fafda03d5e1b6443d8d294cbf8ff7f20324967",
+    "filter_id": "train_ranked_top_8_tickers__signal_evidence_prior_20_trading_day_return_pct_gte_10.9906",
+    "source_report_id": "regular_options_frozen_filtered_policy",
+    "source_status": "frozen_contract_loaded"
+  },
+  "live_trade": false,
+  "live_validation_enabled": false,
+  "matched_but_unappendable_rows": [],
+  "parity_disclosure": {
+    "additional_forward_scanner_gates": [
+      "momentum",
+      "tech_score",
+      "history_or_liquidity",
+      "option_liquidity",
+      "portfolio_and_profitability_gates"
+    ],
+    "expected_match_rate_note": "filtered materializer produced 306 rows / 24 months (~13 per month upper bound before production scanner gates), so months of zero forward matches are expected and are not by themselves a tracker bug",
+    "forward_results_are_new_distribution": true,
+    "forward_scheduled_session_times": {
+      "\\OptionsScanPicks": "11:00:00 AM",
+      "\\OptionsScanPicksSafetyNet": "11:30:00 AM"
+    },
+    "forward_source": "production_scan_sessions",
+    "historical_filtered_materializer_months": 24,
+    "historical_filtered_materializer_rows": 306,
+    "historical_materializer": "deterministic_local_pit_candidate_materializer_v1",
+    "historical_materializer_entry_window_et": "10:10-10:25",
+    "not_continuation_of_historical_audit_sample": true,
+    "scan_task_health": {
+      "exists": true,
+      "path": "data/forward-tracking/regular_options_strict_forward_scan_task_health_latest.json",
+      "sha256": "fe513063646629df7c0e5a8f1558dcac768dd65da07625e5276235508e47e799",
+      "status": "loaded"
+    }
+  },
+  "policy_drift_status": "latest_filtered_audit_matches_frozen_contract",
+  "prohibited_actions": [
+    "do_not_submit_broker_order_from_filtered_forward_tracker",
+    "do_not_enable_live_validation_from_filtered_forward_tracker",
+    "do_not_enable_auto_track_from_filtered_forward_tracker",
+    "do_not_mutate_tracked_positions_from_filtered_forward_tracker",
+    "do_not_import_quotes_from_filtered_forward_tracker",
+    "do_not_change_scanner_policy_from_filtered_forward_tracker",
+    "do_not_lower_proof_bars_from_filtered_forward_tracker",
+    "do_not_promote_from_filtered_forward_tracker"
+  ],
+  "protected_holdout_consumed": false,
+  "quotes_imported": false,
+  "read_only": true,
+  "report_id": "regular_options_filtered_forward_paper_shadow_tracker",
+  "scanner_policy_changed": false,
+  "schema_version": 1,
+  "status": "filtered_forward_paper_shadow_tracking_active",
+  "tracking_label": "Historical filtered candidate v1 forward paper-shadow tracker",
+  "tracking_policy_id": "historical_filtered_candidate_v1",
+  "tracking_start_at_utc": "2026-06-30T05:03:45Z",
+  "tracking_start_date": "2026-06-30",
+  "tracking_start_source": "frozen_policy_contract"
+}

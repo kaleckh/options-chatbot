@@ -10,6 +10,8 @@ This report is generated from `scripts/build_regular_options_candidate_outcome_l
 - Fresh candidates: `34`.
 - Paper-shortlist eligible rows: `0`.
 - Profit-capture paper-review candidates: `15`.
+- Filtered forward paper-shadow candidates: `0`.
+- Filtered forward open candidates: `0`.
 - Promotion-ready rows: `0`.
 - Exact realized P&L rows: `0`.
 - Missing realized P&L rows: `1`.
@@ -65,6 +67,7 @@ This report is generated from `scripts/build_regular_options_candidate_outcome_l
 - Fresh evidence bridge statuses: `{"exact_exit_pnl_required": 1, "non_executable_entry_blocked": 20, "not_evidence_bridge_candidate": 5, "paper_probation_exact_entry_required": 8}`.
 - Paper shortlist release gate: `no_paper_shortlist_candidates`.
 - Profit-capture selection readiness: `{"blocked_guardrail_only": 2, "do_not_chase": 173, "paper_review_candidate": 15, "watch_repair_only": 82}`.
+- Filtered forward paper-shadow tracking: `{"appendable_entry_count": 0, "by_scan_date": {}, "by_ticker": {}, "completed_candidate_count": 0, "daily_signal_matched_row_count": 0, "duplicate_daily_signal_identity_count": 0, "entry_rows_appended_count": 0, "evaluated_scan_row_count": 0, "matched_but_unappendable_counts": {}, "matched_but_unappendable_missing_entry_provenance_count": 0, "matched_candidate_count": 0, "matched_rows_log_identity_schema": "policy_ticker_scan_date_direction_v2", "matched_rows_log_identity_schema_current": true, "open_candidate_count": 0, "raw_matched_scan_row_count": 0, "rejected_counts": {"missing_prior_20_trading_day_return_pct": 285, "pre_tracking_start_date": 265}, "same_day_signal_duplicate_matches_suppressed_count": 0, "source_scan_row_count": 550, "tracking_start_at_utc": "2026-06-30T05:03:45Z", "tracking_start_date": "2026-06-30", "tracking_start_source": "frozen_policy_contract"}`.
 - Open-risk governor status: `open_risk_governor_pass`.
 
 ## Boundary

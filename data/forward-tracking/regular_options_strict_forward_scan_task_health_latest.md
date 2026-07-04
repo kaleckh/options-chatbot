@@ -15,8 +15,8 @@ This read-only report verifies the two scheduled scan tasks that feed strict-for
 - Runtime telemetry status: `scan_task_runtime_observed_ok`.
 - Runtime status: `Ready`.
 - Scheduled state: `Enabled`.
-- Next run time: `6/29/2026 11:00:00 AM`.
-- Last run time: `6/26/2026 11:00:00 AM`.
+- Next run time: `7/6/2026 11:00:00 AM`.
+- Last run time: `7/3/2026 11:00:00 AM`.
 - Last result: `0`.
 - Number of missed runs: ``.
 - Task to run: `C:\Users\kalec\options-chatbot\scripts\run_scan_picks.bat`.
@@ -31,8 +31,8 @@ This read-only report verifies the two scheduled scan tasks that feed strict-for
 - Runtime telemetry status: `scan_task_runtime_observed_ok`.
 - Runtime status: `Ready`.
 - Scheduled state: `Enabled`.
-- Next run time: `6/29/2026 11:30:00 AM`.
-- Last run time: `6/26/2026 11:30:00 AM`.
+- Next run time: `7/6/2026 11:30:00 AM`.
+- Last run time: `7/3/2026 11:30:00 AM`.
 - Last result: `0`.
 - Number of missed runs: ``.
 - Task to run: `C:\Users\kalec\options-chatbot\scripts\run_scan_picks_safety_net.bat`.

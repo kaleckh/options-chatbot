@@ -1,0 +1,59 @@
+{
+  "accepted_profitability": false,
+  "approval_authority": false,
+  "auto_track_enabled": false,
+  "bar_id": "regular_options_filtered_forward_evidence_bar_v1",
+  "broker_order_allowed": false,
+  "evidence_stores_mutated": false,
+  "forward_rows_are_profitability_proof": false,
+  "frozen_at_utc": "2026-07-02T03:53:30Z",
+  "historical_rows_are_forward_proof": false,
+  "live_validation_enabled": false,
+  "notes": [
+    "This contract pre-registers the minimum evidence bar for future filtered-policy paper-shadow rows.",
+    "The tracker may report progress against this bar but cannot approve trading, promotion, profitability, or scanner-policy changes."
+  ],
+  "policy_id": "historical_filtered_candidate_policy_v1",
+  "prohibited_actions": [
+    "do_not_change_scanner_policy_from_forward_evidence_bar",
+    "do_not_promote_lanes_from_forward_evidence_bar",
+    "do_not_enable_live_validation_or_auto_track_from_forward_evidence_bar",
+    "do_not_submit_broker_orders_from_forward_evidence_bar",
+    "do_not_import_quotes_from_forward_evidence_bar",
+    "do_not_mutate_evidence_stores_from_forward_evidence_bar",
+    "do_not_lower_proof_bars_from_forward_evidence_bar",
+    "do_not_consume_protected_holdout_from_forward_evidence_bar",
+    "do_not_treat_forward_rows_as_profitability_proof_before_bar_is_met"
+  ],
+  "protected_holdout_consumed": false,
+  "quotes_imported": false,
+  "read_only": true,
+  "report_id": "regular_options_filtered_forward_evidence_bar",
+  "requirements": {
+    "bootstrap_draws": 10000,
+    "evaluation_may_not_occur_before_min_completed_rows": true,
+    "max_fixture_rows": 0,
+    "min_calendar_months_with_rows": 3,
+    "min_completed_forward_paper_shadow_rows": 30,
+    "min_percent_cluster_pf_lb_5pct": 1.0,
+    "min_ticker_week_clusters": 8,
+    "min_total_net_pnl_usd_exclusive": 0.0,
+    "min_usd_cluster_pf_lb_5pct": 1.0,
+    "pnl_basis": {
+      "cluster_key": "ticker:ISO-week from scan_date",
+      "percent": "net_pnl_pct",
+      "usd": "net_pnl_usd"
+    }
+  },
+  "research_only": true,
+  "scanner_policy_changed": false,
+  "schema_version": 1,
+  "source_policy_contract": {
+    "conditions_sha256": "3b10d0306800e1a203480b80e4fafda03d5e1b6443d8d294cbf8ff7f20324967",
+    "filter_id": "train_ranked_top_8_tickers__signal_evidence_prior_20_trading_day_return_pct_gte_10.9906",
+    "path": "data/contracts/regular-options-frozen-filtered-policy-v1.json",
+    "policy_id": "historical_filtered_candidate_policy_v1",
+    "report_id": "regular_options_frozen_filtered_policy",
+    "sha256": "2054eafc577ddc10f4cd4bbd4c4b4133c6e82d3d8bd7be2d6bd1dc547dc42b00"
+  }
+}

@@ -232,6 +232,31 @@ def _first_present(*values: Any) -> Any:
     return None
 
 
+def _prior_20_trading_day_return(pick: dict[str, Any]) -> float | None:
+    signal = _safe_dict(pick.get("signal_evidence"))
+    return _first_float(
+        signal.get("prior_20_trading_day_return_pct"),
+        pick.get("prior_20_trading_day_return_pct"),
+        pick.get("signal_ret20"),
+        pick.get("ret20"),
+    )
+
+
+def _signal_evidence_snapshot(pick: dict[str, Any]) -> dict[str, Any]:
+    signal = _safe_dict(pick.get("signal_evidence"))
+    prior_20 = _prior_20_trading_day_return(pick)
+    if prior_20 is not None:
+        signal["prior_20_trading_day_return_pct"] = prior_20
+        signal.setdefault("prior_20_trading_day_return_source", "scan_pick_signal")
+    if pick.get("signal_ret5") is not None:
+        signal.setdefault("prior_5_trading_day_return_pct", pick.get("signal_ret5"))
+    if pick.get("signal_variant") is not None:
+        signal.setdefault("signal_variant", pick.get("signal_variant"))
+    if pick.get("signal_family") is not None:
+        signal.setdefault("signal_family", pick.get("signal_family"))
+    return signal
+
+
 def _top_counts(value: Any, *, limit: int = 5) -> str:
     counts = _safe_dict(value)
     pairs: list[tuple[str, int]] = []
@@ -660,6 +685,7 @@ def _build_log_record(
 ) -> dict[str, Any]:
     scan_result = scan_result or {}
     playbook = _safe_dict(scan_result.get("playbook"))
+    prior_20_return = _prior_20_trading_day_return(pick)
     return {
         "logged_at": run_at.isoformat(),
         "scan_date": run_at.strftime("%Y-%m-%d"),
@@ -695,6 +721,11 @@ def _build_log_record(
         "ev_pct": pick.get("ev_pct"),
         "rsi14": pick.get("rsi14"),
         "ret5": pick.get("ret5"),
+        "signal_ret5": pick.get("signal_ret5"),
+        "ret20": pick.get("ret20"),
+        "signal_ret20": pick.get("signal_ret20"),
+        "prior_20_trading_day_return_pct": prior_20_return,
+        "signal_evidence": _signal_evidence_snapshot(pick),
         "hv30": pick.get("iv_pct"),
         "market_regime": pick.get("market_regime"),
         "spy_ret5": pick.get("spy_ret5"),

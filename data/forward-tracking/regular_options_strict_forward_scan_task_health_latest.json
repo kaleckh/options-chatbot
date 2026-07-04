@@ -1,10 +1,10 @@
 {
   "artifacts": {
     "docs_report": "docs/regular-options-strict-forward-scan-task-health.md",
-    "json": "data/forward-tracking/regular_options_strict_forward_scan_task_health_20260627T171059Z.json",
+    "json": "data/forward-tracking/regular_options_strict_forward_scan_task_health_20260703T200504Z.json",
     "latest_json": "data/forward-tracking/regular_options_strict_forward_scan_task_health_latest.json",
     "latest_markdown": "data/forward-tracking/regular_options_strict_forward_scan_task_health_latest.md",
-    "markdown": "data/forward-tracking/regular_options_strict_forward_scan_task_health_20260627T171059Z.md"
+    "markdown": "data/forward-tracking/regular_options_strict_forward_scan_task_health_20260703T200504Z.md"
   },
   "blockers": [],
   "config_blockers": [],
@@ -47,7 +47,7 @@
       "FRI"
     ]
   },
-  "generated_at_utc": "2026-06-27T17:10:59Z",
+  "generated_at_utc": "2026-07-03T20:05:04Z",
   "prohibited_actions": [
     "do_not_append_from_scan_task_health",
     "do_not_enable_live_validation_from_scan_task_health",
@@ -94,25 +94,25 @@
         "fields": {
           "configured_expected_start_time": "11:00:00 AM",
           "last_result": "0",
-          "last_run_time": "6/26/2026 11:00:00 AM",
-          "next_run_time": "6/29/2026 11:00:00 AM",
+          "last_run_time": "7/3/2026 11:00:00 AM",
+          "next_run_time": "7/6/2026 11:00:00 AM",
           "number_of_missed_runs": "",
           "start_date": "4/22/2026",
           "start_time": "11:00:00 AM"
         },
-        "generated_at_local": "2026-06-27T11:10:59",
+        "generated_at_local": "2026-07-03T14:05:04",
         "notes": [
           "Scan-task runtime telemetry is evaluated as a daily weekday feeder, not a repeated 30-minute collector.",
           "Runtime blockers do not authorize append, live validation, auto-track, broker orders, quote import, proof-bar changes, or evidence mutation."
         ],
         "parsed": {
-          "expected_scan_start_today_local": "2026-06-27T11:00:00",
+          "expected_scan_start_today_local": "2026-07-03T11:00:00",
           "generated_after_expected_start_grace": true,
-          "generated_local_is_weekday_scan_date": false,
+          "generated_local_is_weekday_scan_date": true,
           "last_result_code": 0,
           "last_run_time_is_never_run_sentinel": false,
-          "last_run_time_local": "2026-06-26T11:00:00",
-          "next_run_time_local": "2026-06-29T11:00:00",
+          "last_run_time_local": "2026-07-03T11:00:00",
+          "next_run_time_local": "2026-07-06T11:00:00",
           "number_of_missed_runs": null,
           "start_run_time_local": "2026-04-22T11:00:00"
         },
@@ -130,10 +130,10 @@
         "HostName": "KAESDEVICE",
         "Idle Time": "Disabled",
         "Last Result": "0",
-        "Last Run Time": "6/26/2026 11:00:00 AM",
+        "Last Run Time": "7/3/2026 11:00:00 AM",
         "Logon Mode": "Interactive only",
         "Months": "Every 1 week(s)",
-        "Next Run Time": "6/29/2026 11:00:00 AM",
+        "Next Run Time": "7/6/2026 11:00:00 AM",
         "Power Management": "Stop On Battery Mode, No Start On Batteries",
         "Repeat: Every": "Disabled",
         "Repeat: Stop If Still Running": "Disabled",
@@ -174,25 +174,25 @@
         "fields": {
           "configured_expected_start_time": "11:30:00 AM",
           "last_result": "0",
-          "last_run_time": "6/26/2026 11:30:00 AM",
-          "next_run_time": "6/29/2026 11:30:00 AM",
+          "last_run_time": "7/3/2026 11:30:00 AM",
+          "next_run_time": "7/6/2026 11:30:00 AM",
           "number_of_missed_runs": "",
           "start_date": "5/5/2026",
           "start_time": "11:30:00 AM"
         },
-        "generated_at_local": "2026-06-27T11:10:59",
+        "generated_at_local": "2026-07-03T14:05:04",
         "notes": [
           "Scan-task runtime telemetry is evaluated as a daily weekday feeder, not a repeated 30-minute collector.",
           "Runtime blockers do not authorize append, live validation, auto-track, broker orders, quote import, proof-bar changes, or evidence mutation."
         ],
         "parsed": {
-          "expected_scan_start_today_local": "2026-06-27T11:30:00",
-          "generated_after_expected_start_grace": false,
-          "generated_local_is_weekday_scan_date": false,
+          "expected_scan_start_today_local": "2026-07-03T11:30:00",
+          "generated_after_expected_start_grace": true,
+          "generated_local_is_weekday_scan_date": true,
           "last_result_code": 0,
           "last_run_time_is_never_run_sentinel": false,
-          "last_run_time_local": "2026-06-26T11:30:00",
-          "next_run_time_local": "2026-06-29T11:30:00",
+          "last_run_time_local": "2026-07-03T11:30:00",
+          "next_run_time_local": "2026-07-06T11:30:00",
           "number_of_missed_runs": null,
           "start_run_time_local": "2026-05-05T11:30:00"
         },
@@ -210,10 +210,10 @@
         "HostName": "KAESDEVICE",
         "Idle Time": "Disabled",
         "Last Result": "0",
-        "Last Run Time": "6/26/2026 11:30:00 AM",
+        "Last Run Time": "7/3/2026 11:30:00 AM",
         "Logon Mode": "Interactive only",
         "Months": "Every 1 week(s)",
-        "Next Run Time": "6/29/2026 11:30:00 AM",
+        "Next Run Time": "7/6/2026 11:30:00 AM",
         "Power Management": "Stop On Battery Mode, No Start On Batteries",
         "Repeat: Every": "Disabled",
         "Repeat: Stop If Still Running": "Disabled",

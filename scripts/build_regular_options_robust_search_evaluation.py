@@ -164,6 +164,7 @@ def _profit_factor(values: Sequence[float]) -> float | None:
 def _normalize_trade(row: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
     entry_date = _date_only(row.get("entry_date") or row.get("date"))
     pnl = _safe_float(row.get("net_pnl_pct", row.get("pnl_pct")))
+    net_pnl_usd = _safe_float(row.get("net_pnl_usd"))
     if entry_date is None:
         return None, "missing_or_invalid_entry_date"
     if pnl is None:
@@ -184,6 +185,7 @@ def _normalize_trade(row: dict[str, Any]) -> tuple[dict[str, Any] | None, str | 
         "lane_family": _norm(row.get("lane_family")) or _norm(row.get("family")) or "unknown",
         "direction": _norm(row.get("direction")) or "unknown",
         "pnl_pct": pnl,
+        "net_pnl_usd": net_pnl_usd,
         "proof_grade": _norm(row.get("proof_grade")),
         "source_result_path": _norm(row.get("source_result_path")),
         "dedupe_key": _norm(row.get("dedupe_key")),

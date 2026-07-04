@@ -55,6 +55,7 @@ class RegularOptionsCandidateOutcomeLedgerTests(unittest.TestCase):
             fresh_path = root / "fresh.json"
             shortlist_path = root / "shortlist.json"
             queue_path = root / "queue.json"
+            filtered_forward_path = root / "filtered-forward.json"
             open_risk_path = root / "open-risk.json"
             suggested_path = root / "suggested.json"
 
@@ -160,6 +161,38 @@ class RegularOptionsCandidateOutcomeLedgerTests(unittest.TestCase):
                 },
             )
             _write_json(
+                filtered_forward_path,
+                {
+                    "generated_at_utc": "2026-06-06T00:02:30Z",
+                    "status": "filtered_forward_paper_shadow_tracking_active",
+                    "forward_tracking": {
+                        "matched_candidate_count": 1,
+                        "open_candidate_count": 1,
+                    },
+                    "candidate_rows": [
+                        {
+                            "candidate_id": "filtered-aapl",
+                            "tracking_policy_id": "historical_filtered_candidate_v1",
+                            "tracking_state": "forward_paper_shadow_open",
+                            "evidence_bucket": "forward_paper_shadow",
+                            "scan_date": "2026-06-06",
+                            "ticker": "AAPL",
+                            "lane_id": "bullish_pullback_observation",
+                            "direction": "call",
+                            "strategy_type": "vertical_spread",
+                            "expiry": "2026-07-17",
+                            "prior_20_trading_day_return_pct": 12.5,
+                            "planned_exit_status": "waiting_policy_exit",
+                            "realized_pnl_status": "open_no_exit_yet",
+                            "prohibited_actions": [
+                                "do_not_enable_auto_track_from_filtered_forward_tracker",
+                                "do_not_mutate_tracked_positions_from_filtered_forward_tracker",
+                            ],
+                        }
+                    ],
+                },
+            )
+            _write_json(
                 open_risk_path,
                 {
                     "generated_at_utc": "2026-06-06T00:03:00Z",
@@ -208,6 +241,7 @@ class RegularOptionsCandidateOutcomeLedgerTests(unittest.TestCase):
                 fresh_evidence_loop_path=fresh_path,
                 paper_shortlist_path=shortlist_path,
                 profit_capture_queue_path=queue_path,
+                filtered_forward_tracker_path=filtered_forward_path,
                 open_risk_path=open_risk_path,
                 suggested_close_risk_path=suggested_path,
                 generated_at_utc="2026-06-06T00:05:00Z",
@@ -216,8 +250,13 @@ class RegularOptionsCandidateOutcomeLedgerTests(unittest.TestCase):
         summary = report["summary"]
         actions = summary["action_counts"]
         self.assertEqual(summary["operating_status"], "ledger_live_entry_blocked_collect_evidence")
-        self.assertEqual(summary["ledger_row_count"], 9)
+        self.assertEqual(summary["ledger_row_count"], 10)
         self.assertFalse(summary["live_policy_change"])
+        self.assertEqual(summary["filtered_forward_paper_shadow_candidate_count"], 1)
+        self.assertEqual(actions["track_filtered_forward_paper_shadow_exit"], 1)
+        filtered_row = next(row for row in report["ledger_rows"] if row["source_report"] == "filtered_forward_paper_shadow_tracker")
+        self.assertIn("do_not_enable_auto_track_from_filtered_forward_tracker", filtered_row["prohibited_actions"])
+        self.assertIn("do_not_mutate_tracked_positions_from_filtered_forward_tracker", filtered_row["prohibited_actions"])
         self.assertEqual(actions["resolve_open_risk_governor"], 1)
         self.assertEqual(actions["collect_exact_exit_evidence"], 1)
         self.assertEqual(actions["capture_paper_only_exact_entry"], 1)
@@ -238,6 +277,7 @@ class RegularOptionsCandidateOutcomeLedgerTests(unittest.TestCase):
                 fresh_evidence_loop_path=root / "missing-fresh.json",
                 paper_shortlist_path=root / "missing-shortlist.json",
                 profit_capture_queue_path=root / "missing-queue.json",
+                filtered_forward_tracker_path=root / "missing-filtered-forward.json",
                 open_risk_path=root / "missing-open-risk.json",
                 suggested_close_risk_path=root / "missing-suggested.json",
                 generated_at_utc="2026-06-06T00:00:00Z",
@@ -247,7 +287,7 @@ class RegularOptionsCandidateOutcomeLedgerTests(unittest.TestCase):
         self.assertEqual(report["summary"]["ledger_row_count"], 0)
         self.assertEqual(report["inputs"]["fresh_evidence_loop"]["status"], "missing")
         self.assertTrue(report["inputs"]["fresh_evidence_loop"]["required"])
-        self.assertEqual(report["summary"]["input_status_counts"], {"missing": 5})
+        self.assertEqual(report["summary"]["input_status_counts"], {"missing": 6})
 
     def test_markdown_and_outputs_render_read_only_boundary(self):
         report = {
@@ -260,6 +300,8 @@ class RegularOptionsCandidateOutcomeLedgerTests(unittest.TestCase):
                 "fresh_candidate_count": 1,
                 "paper_shortlist_eligible_count": 0,
                 "profit_capture_paper_review_candidate_count": 0,
+                "filtered_forward_paper_shadow_candidate_count": 0,
+                "filtered_forward_open_candidate_count": 0,
                 "promotion_discussion_ready_count": 0,
                 "exact_realized_pnl_count": 0,
                 "missing_realized_pnl_count": 1,
@@ -277,6 +319,7 @@ class RegularOptionsCandidateOutcomeLedgerTests(unittest.TestCase):
                 },
                 "paper_shortlist": {"release_gate_status": "no_paper_shortlist_candidates"},
                 "profit_capture_queue": {"selection_readiness_counts": {}},
+                "filtered_forward_paper_shadow_tracker": {},
                 "open_risk_governor": {"status": "open_risk_governor_pass"},
             },
             "next_evidence_queue": [

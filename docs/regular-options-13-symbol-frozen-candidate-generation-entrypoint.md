@@ -5,9 +5,9 @@ This generated artifact exposes a reusable read-only daily candidate/no-pick ent
 ## Summary
 
 - Status: `blocked_frozen_13_symbol_candidate_generation_entrypoint`.
-- Window: `2024-06-01` through `2026-05-31` as of `2026-06-04`.
-- Daily rows: `6916`.
-- Covered months: `0` / `24`.
+- Window: `2024-06-01` through `2026-07-02` as of `2026-07-02`.
+- Daily rows: `7280`.
+- Covered months: `0` / `26`.
 - Selected candidates: `0`.
 - Outside-universe rows: `0`.
 
@@ -15,11 +15,11 @@ This generated artifact exposes a reusable read-only daily candidate/no-pick ent
 
 | Status | Count |
 |---|---:|
-| `blocked_missing_historical_scanner_point_in_time_inputs` | `6916` |
+| `blocked_missing_historical_scanner_point_in_time_inputs` | `7280` |
 
 ## Blockers
 
-- `candidate_generation_months_0_below_requested_24`
+- `candidate_generation_months_0_below_requested_26`
 - `missing_historical_entry_underlying_price_surface`
 - `missing_historical_option_chain_selection_surface`
 - `missing_historical_scanner_point_in_time_inputs`
@@ -27,6 +27,10 @@ This generated artifact exposes a reusable read-only daily candidate/no-pick ent
 - `missing_point_in_time_earnings_calendar_source`
 
 ## Boundary
+
+- Candidate materialization basis: `deterministic_local_pit_candidate_materializer_v1`.
+- Scanner parity: `False`.
+- Production scanner replay: `False`.
 
 Historical rows and broad-source rows are not forward proof and are not converted into picks here.
 

@@ -70,6 +70,35 @@ class RegularOptions59SymbolThetaDataImportRepairTests(unittest.TestCase):
         self.assertIn("approval_token_missing_or_invalid", report["blockers"])
         self.assertFalse(report["import_attempted"])
 
+    def test_provider_recheck_reports_options_entitlement_blocker(self) -> None:
+        with WorkspaceTempDir(prefix="repair59") as tmp_dir:
+            tmp = Path(tmp_dir)
+            db = tmp / "quotes.db"
+            _create_db(db)
+            probe_result = {
+                "request_count": 0,
+                "generated_rows": 0,
+                "errors": [
+                    "QQQ 2026-05-21: option history quote failed: 403 Client Error: Forbidden for url: http://127.0.0.1:25503/v3/option/history/quote"
+                ],
+            }
+            with patch.object(repair, "check_theta_terminal", return_value={"available": True, "status": "available"}), patch.object(
+                repair, "build_thetadata_nbbo_import", return_value=probe_result
+            ):
+                report = repair.build_report(
+                    db_path=db,
+                    output_dir=tmp / "out",
+                    docs_report=tmp / "doc.md",
+                    dry_run=True,
+                    provider_recheck=True,
+                )
+
+        self.assertEqual(report["status"], "blocked_thetadata_options_entitlement")
+        self.assertIn("thetadata_options_entitlement_blocked", report["blockers"])
+        self.assertEqual(report["theta_option_history_probe"]["status"], "blocked_thetadata_options_entitlement")
+        self.assertFalse(report["quotes_imported"])
+        self.assertFalse(report["import_attempted"])
+
     def test_canonical_universe_exactness_is_enforced(self) -> None:
         with WorkspaceTempDir(prefix="repair59") as tmp_dir:
             tmp = Path(tmp_dir)

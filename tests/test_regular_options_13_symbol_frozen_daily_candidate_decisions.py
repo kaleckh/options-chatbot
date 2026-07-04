@@ -139,6 +139,11 @@ class RegularOptions13SymbolFrozenDailyCandidateDecisionsTests(unittest.TestCase
         self.assertEqual(report["selected_candidate_row_count"], 1)
         self.assertEqual(report["blockers"], [])
         self.assertTrue(report["source_integrity"]["source_exact_frozen_daily_decisions"])
+        self.assertFalse(report["scanner_parity"])
+        self.assertFalse(report["production_scanner_replay"])
+        self.assertEqual(report["candidate_materialization_basis"], "deterministic_local_pit_candidate_materializer_v1")
+        self.assertFalse(report["daily_candidate_decisions"][0]["scanner_parity"])
+        self.assertFalse(report["daily_candidate_decisions"][0]["production_scanner_replay"])
 
     def test_accepted_source_rows_require_explicit_proof_safe_true(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -280,6 +285,9 @@ class RegularOptions13SymbolFrozenDailyCandidateDecisionsTests(unittest.TestCase
         self.assertIn("missing_historical_scanner_replay_adapter", report["blockers"])
         self.assertIn("missing_historical_scanner_point_in_time_inputs", report["blockers"])
         self.assertEqual(report["coverage"]["candidate_generation_months_covered_count"], 0)
+        self.assertFalse(report["scanner_parity"])
+        self.assertFalse(report["production_scanner_replay"])
+        self.assertEqual(report["candidate_materialization_basis"], "deterministic_local_pit_candidate_materializer_v1")
 
     def test_write_outputs_creates_new_artifact_directory_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -84,6 +84,11 @@ class RegularOptions13SymbolFrozenCandidateGenerationEntrypointTests(unittest.Te
         self.assertEqual(report["outside_universe_row_count"], 0)
         self.assertFalse(report["accepted_profitability"])
         self.assertFalse(report["quotes_imported"])
+        self.assertFalse(report["scanner_parity"])
+        self.assertFalse(report["production_scanner_replay"])
+        self.assertEqual(report["candidate_materialization_basis"], "deterministic_local_pit_candidate_materializer_v1")
+        self.assertFalse(report["daily_candidate_generation"][0]["scanner_parity"])
+        self.assertFalse(report["daily_candidate_generation"][0]["production_scanner_replay"])
 
     def test_broad_or_missing_daily_source_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -108,6 +113,52 @@ class RegularOptions13SymbolFrozenCandidateGenerationEntrypointTests(unittest.Te
         self.assertIn("missing_daily_candidate_generation_diagnostics", report["blockers"])
         self.assertEqual(report["coverage"]["candidate_generation_months_covered_count"], 0)
         self.assertEqual(report["selected_candidate_row_count"], 0)
+
+    def test_source_level_blockers_do_not_taint_accepted_daily_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source.json"
+            feature = root / "feature.json"
+            cohort = root / "cohort.json"
+            rows = _daily_rows()
+            rows[0].update(
+                {
+                    "exact_priced": True,
+                    "pnl_pct": 12.5,
+                    "net_pnl_pct": 11.9,
+                    "proof_grade": "trusted_intraday_opra_nbbo",
+                    "fill_basis": "imported_spread_mark",
+                }
+            )
+            _write_json(
+                source,
+                {
+                    "allowed_universe": list(entrypoint.ALLOWED_UNIVERSE),
+                    "daily_candidate_generation": rows,
+                    "blockers": ["missing_point_in_time_earnings_calendar_source"],
+                },
+            )
+            _write_json(feature, _feature())
+            _write_json(cohort, _cohort())
+            report = entrypoint.build_report(
+                source_candidate_generation_path=source,
+                feature_store_path=feature,
+                forward_cohort_path=cohort,
+                window_start="2026-02-01",
+                window_end="2026-02-28",
+                generated_at_utc="2026-06-24T00:00:00Z",
+            )
+
+        self.assertEqual(report["status"], "blocked_frozen_13_symbol_candidate_generation_entrypoint")
+        self.assertIn("missing_point_in_time_earnings_calendar_source", report["blockers"])
+        self.assertEqual(report["coverage"]["candidate_generation_months_covered_count"], 1)
+        self.assertEqual(report["selected_candidate_row_count"], 1)
+        selected = report["selected_trades"][0]
+        self.assertEqual(selected["status"], "selected_candidate")
+        self.assertEqual(selected["blockers"], [])
+        self.assertTrue(selected["exact_priced"])
+        self.assertEqual(selected["pnl_pct"], 12.5)
+        self.assertEqual(selected["proof_grade"], "trusted_intraday_opra_nbbo")
 
     def test_write_outputs_creates_jsonl_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

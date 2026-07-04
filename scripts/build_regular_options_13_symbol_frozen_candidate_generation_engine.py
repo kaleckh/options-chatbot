@@ -106,6 +106,19 @@ FORBIDDEN_ACTIONS = [
     "reclassifying_zero_bid_or_untradable_rows_as_missing_provider_data",
     "lowering_90pct_executable_quote_quality_floor",
 ]
+DEFAULT_CANDIDATE_MATERIALIZATION_BASIS = "deterministic_local_pit_candidate_materializer_v1"
+
+
+def _source_non_parity(source: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "candidate_materialization_basis": str(
+            source.get("candidate_materialization_basis") or DEFAULT_CANDIDATE_MATERIALIZATION_BASIS
+        ),
+        "scanner_parity": bool(source.get("scanner_parity")) if "scanner_parity" in source else False,
+        "production_scanner_replay": bool(source.get("production_scanner_replay"))
+        if "production_scanner_replay" in source
+        else False,
+    }
 
 
 def _utc_now_iso() -> str:
@@ -273,6 +286,21 @@ def _coverage(daily_rows: Sequence[dict[str, Any]], requested_months: Sequence[s
         if month in by_month and all(row.get("status") in {"candidate_generated", "selected_candidate", "explicit_no_pick"} for row in by_month[month])
     ]
     blocked_months = [month for month in requested_months if month not in set(covered_months)]
+    coverage_proven = not blocked_months and len(covered_months) == len(requested_months)
+    latest_audit_rows = [
+        row
+        for row in daily_rows
+        if coverage_proven
+        and str(row.get("month")) in set(LATEST_AUDIT_MONTHS)
+        and str(row.get("status")) in {"candidate_generated", "selected_candidate"}
+    ]
+    latest_audit_exact_rows = [
+        row
+        for row in latest_audit_rows
+        if bool(row.get("exact_priced"))
+        and str(row.get("proof_grade") or "") == "trusted_intraday_opra_nbbo"
+        and str(row.get("fill_basis") or "") == "imported_spread_mark"
+    ]
     return {
         "requested_months": list(requested_months),
         "requested_month_count": len(requested_months),
@@ -282,8 +310,39 @@ def _coverage(daily_rows: Sequence[dict[str, Any]], requested_months: Sequence[s
         "audit_months_covered": len([month for month in LATEST_AUDIT_MONTHS if month in set(covered_months)]),
         "blocked_months": blocked_months,
         "missing_daily_diagnostics": len(blocked_months),
-        "latest_audit_exact_trades": 0,
-        "latest_four_strict_new_candidates": 0,
+        "latest_audit_exact_trades": len(latest_audit_exact_rows),
+        "latest_audit_exact_trades_scope": "strict_calendar_coverage_only",
+        "latest_four_strict_new_candidates": len(latest_audit_rows),
+    }
+
+
+def _partial_audit_summary(source_surface: dict[str, Any]) -> dict[str, Any]:
+    rows = [_as_dict(item) for item in _as_list(source_surface.get("selected_trades"))]
+    exact_rows = [
+        row
+        for row in rows
+        if bool(row.get("exact_priced"))
+        and str(row.get("proof_grade") or "") == "trusted_intraday_opra_nbbo"
+        and str(row.get("fill_basis") or "") == "imported_spread_mark"
+    ]
+    months = sorted({str(row.get("entry_date") or row.get("date") or "")[:7] for row in exact_rows if str(row.get("entry_date") or row.get("date") or "")[:7]})
+    partial_rows = [row for row in rows if row.get("partial_audit_candidate")]
+    coverage = _as_dict(source_surface.get("calendar_coverage"))
+    strict_coverage = coverage.get("status") == "calendar_coverage_proven"
+    return {
+        "status": "partial_selected_row_audit_available" if exact_rows else "partial_selected_row_audit_unavailable",
+        "strict_calendar_coverage_proven": strict_coverage,
+        **_source_non_parity(source_surface),
+        "selected_rows_exported": len(rows),
+        "partial_audit_candidate_rows": len(partial_rows),
+        "exact_priced_rows": len(exact_rows),
+        "exact_priced_months": months,
+        "exact_priced_month_count": len(months),
+        "boundary": (
+            "selected-row metrics are backed by strict candidate-generation month coverage"
+            if strict_coverage
+            else "partial selected-row metrics are diagnostic only and do not satisfy strict candidate-generation month coverage"
+        ),
     }
 
 
@@ -376,7 +435,7 @@ def build_report(
     if coverage["audit_months_covered"] < 4:
         blockers.append("blocked_train_or_audit_month_coverage")
     if coverage["latest_audit_exact_trades"] < 30:
-        blockers.append("blocked_latest_audit_rows_below_30")
+        blockers.append(f"strict_latest_audit_exact_trades_{coverage['latest_audit_exact_trades']}_below_30")
     blockers = sorted(dict.fromkeys(blockers))
 
     if not entrypoint.get("available"):
@@ -404,6 +463,7 @@ def build_report(
             "latest_audit_months": list(LATEST_AUDIT_MONTHS),
         },
         "allowed_universe": list(ALLOWED_UNIVERSE),
+        **_source_non_parity(frozen_entrypoint),
         "inputs": {
             "feature_store": feature_meta,
             "no_write_runner": no_write_runner_meta,
@@ -442,6 +502,7 @@ def build_report(
         "lane_symbol_pairs": lane_symbol_pairs,
         "reusable_entrypoint_discovery": entrypoint,
         "coverage": coverage,
+        "partial_selected_row_audit": _partial_audit_summary(source_surface),
         "daily_candidate_generation_row_count": len(daily_rows),
         "daily_status_counts": dict(sorted(status_counts.items())),
         "selected_candidate_row_count": len(selected_candidates),
@@ -455,6 +516,8 @@ def build_report(
             "readback_is": "read-only frozen 13-symbol candidate-generation engine/daily diagnostics materializer",
             "readback_is_not": "profitability proof, fresh forward proof, scanner release, quote import, evidence mutation, live validation, broker permission, proof-bar change, protected-holdout consumption, or promotion",
             "fail_closed_rule": "without complete frozen daily selected_candidate or explicit_no_pick rows, daily diagnostics remain blocked and no picks are invented",
+            "scanner_parity": _source_non_parity(frozen_entrypoint).get("scanner_parity"),
+            "production_scanner_replay": _source_non_parity(frozen_entrypoint).get("production_scanner_replay"),
         },
         "forbidden_actions": FORBIDDEN_ACTIONS,
     }
@@ -465,6 +528,22 @@ def render_markdown(report: dict[str, Any]) -> str:
     window = _as_dict(report.get("requested_window"))
     coverage = _as_dict(report.get("coverage"))
     baseline = _as_dict(report.get("baseline_reproduction"))
+    coverage_proven = (
+        int(coverage.get("candidate_generation_months_covered_count") or 0)
+        == int(coverage.get("requested_month_count") or -1)
+        and not _as_list(report.get("blockers"))
+    )
+    if coverage_proven:
+        boundary = (
+            "This artifact proves the requested frozen candidate-generation calendar coverage for the deterministic "
+            "local PIT materializer, so downstream historical simulated-forward audit metrics may consume the generated "
+            "selected rows. Historical rows remain non-forward proof, and scanner parity remains false."
+        )
+    else:
+        boundary = (
+            "This artifact does not run historical simulated-forward audit metrics because candidate-generation coverage "
+            "is not proven. Historical rows remain non-forward proof."
+        )
     lines = [
         "# Regular Options 13-Symbol Frozen Candidate Generation Engine",
         "",
@@ -480,6 +559,11 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Train months covered: `{coverage.get('train_months_covered')}`.",
         f"- Audit months covered: `{coverage.get('audit_months_covered')}`.",
         f"- Latest audit exact trades: `{coverage.get('latest_audit_exact_trades')}`.",
+        f"- Latest audit exact-trade scope: `{coverage.get('latest_audit_exact_trades_scope')}`.",
+        f"- Partial selected-row exact trades: `{_as_dict(report.get('partial_selected_row_audit')).get('exact_priced_rows')}`.",
+        f"- Candidate materialization basis: `{report.get('candidate_materialization_basis')}`.",
+        f"- Scanner parity: `{report.get('scanner_parity')}`.",
+        f"- Production scanner replay: `{report.get('production_scanner_replay')}`.",
         f"- Prior source-surface months covered: `{baseline.get('prior_frozen_source_surface_months_covered')}`.",
         f"- Prior denominator all rows blocked: `{baseline.get('prior_denominator_v2_all_rows_blocked')}`.",
         f"- Accepted profitability: `{report.get('accepted_profitability')}`.",
@@ -500,7 +584,7 @@ def render_markdown(report: dict[str, Any]) -> str:
             "",
             "## Boundary",
             "",
-            "This artifact does not run historical simulated-forward audit metrics because candidate-generation coverage is not proven. Historical rows remain non-forward proof.",
+            boundary,
             "",
         ]
     )

@@ -22,6 +22,7 @@ def _trade(entry_date: str, pnl_pct: float, *, ticker: str = "SPY") -> dict:
         "lane_family": "test_family",
         "direction": "call",
         "pnl_pct": pnl_pct,
+        "net_pnl_usd": pnl_pct * 10.0,
         "exact_priced": True,
         "proof_grade": "trusted_intraday_opra_nbbo",
         "entry_contract_resolution": "exact_listed_spread_contract",
@@ -66,6 +67,9 @@ class RegularOptionsHistoricalSimulatedForwardAuditTests(unittest.TestCase):
         self.assertEqual(report["split"]["audit_months"], ["2025-12", "2026-01", "2026-02", "2026-03"])
         self.assertIn("selected_trade_months_8_below_required_24", report["blockers"])
         self.assertEqual(report["source_summary"]["feature_store_shared_quote_date_count"], 505)
+        self.assertFalse(report["scanner_parity"])
+        self.assertFalse(report["production_scanner_replay"])
+        self.assertEqual(report["candidate_materialization_basis"], "deterministic_local_pit_candidate_materializer_v1")
 
     def test_unproven_source_calendar_coverage_falls_back_to_selected_row_months(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -200,7 +204,43 @@ class RegularOptionsHistoricalSimulatedForwardAuditTests(unittest.TestCase):
         self.assertEqual(report["metrics"]["train"]["entry_month_count"], 20)
         self.assertEqual(report["metrics"]["simulated_forward_audit"]["entry_month_count"], 4)
         self.assertEqual(report["metrics"]["simulated_forward_audit"]["exact_trade_count"], 40)
+        self.assertEqual(report["selected_trade_history"]["duplicate_rows_removed"], 0)
+        self.assertIn("bootstrap_iid", report["metrics"]["simulated_forward_audit"])
+        self.assertIn("bootstrap_cluster", report["metrics"]["simulated_forward_audit"])
+        self.assertGreater(report["metrics"]["simulated_forward_audit"]["bootstrap_cluster"]["pf_lb_5pct"], 1.0)
         self.assertEqual(report["blockers"], [])
+
+    def test_dedupes_same_date_ticker_direction_before_metrics(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source.json"
+            feature = root / "feature.json"
+            duplicate = _trade("2026-01-15", 10.0, ticker="AAPL")
+            _write_json(
+                source,
+                {
+                    "selected_trades": [
+                        duplicate,
+                        {**duplicate, "lane_id": "zzz_duplicate_lane", "long_contract_symbol": "ZZZ"},
+                    ]
+                },
+            )
+            _write_json(feature, _feature_store())
+
+            report = audit.build_report(
+                source_report_path=source,
+                feature_store_report_path=feature,
+                source_quality_policy_path=None,
+                train_months=1,
+                audit_months=1,
+                bootstrap_draws=20,
+                generated_at_utc="2026-06-21T00:00:00Z",
+            )
+
+        history = report["selected_trade_history"]
+        self.assertEqual(history["accepted_exact_candidate_rows_before_dedupe"], 2)
+        self.assertEqual(history["deduped_row_count"], 1)
+        self.assertEqual(history["duplicate_rows_removed"], 1)
 
 
 if __name__ == "__main__":

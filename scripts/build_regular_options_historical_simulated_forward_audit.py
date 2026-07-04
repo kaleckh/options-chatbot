@@ -5,7 +5,7 @@ import json
 import math
 import sys
 from collections import Counter, defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -21,7 +21,10 @@ from scripts.build_regular_options_robust_search_evaluation import (  # noqa: E4
     apply_source_quality_scope_policy,
     normalize_trades,
 )
-from scripts.evaluate_regular_options_autoresearch import bootstrap_confidence_for_values  # noqa: E402
+from scripts.evaluate_regular_options_autoresearch import (  # noqa: E402
+    block_bootstrap_confidence_for_values,
+    bootstrap_confidence_for_values,
+)
 
 
 REPORT_ID = "regular_options_historical_simulated_forward_audit"
@@ -83,8 +86,58 @@ def _month_key(row: dict[str, Any]) -> str:
     return str(row.get("entry_date") or "")[:7]
 
 
+def _ticker_value(row: dict[str, Any]) -> str:
+    return str(row.get("ticker") or row.get("symbol") or row.get("underlying") or "").strip()
+
+
+def _cluster_key(row: dict[str, Any]) -> str:
+    ticker = _ticker_value(row) or "unknown"
+    raw_date = str(row.get("entry_date") or row.get("candidate_generation_date") or row.get("date") or "")[:10]
+    try:
+        iso = date.fromisoformat(raw_date).isocalendar()
+    except ValueError:
+        return f"{ticker}:unknown-week"
+    return f"{ticker}:{iso.year}-W{iso.week:02d}"
+
+
+def _dedupe_rows(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    selected: dict[tuple[str, str, str], tuple[tuple[str, str, int], dict[str, Any]]] = {}
+    for index, row in enumerate(rows):
+        copied = dict(row)
+        key = (
+            str(copied.get("entry_date") or "")[:10],
+            _ticker_value(copied),
+            str(copied.get("direction") or "").strip(),
+        )
+        sort_key = (
+            str(copied.get("lane_id") or copied.get("lane") or ""),
+            str(copied.get("long_contract_symbol") or ""),
+            index,
+        )
+        current = selected.get(key)
+        if current is None or sort_key < current[0]:
+            selected[key] = (sort_key, copied)
+    return [item[1] for _key, item in sorted(selected.items(), key=lambda pair: pair[0])]
+
+
+def _dedupe_summary(before_count: int, after_count: int) -> dict[str, int]:
+    return {
+        "accepted_exact_candidate_rows_before_dedupe": int(before_count),
+        "deduped_row_count": int(after_count),
+        "duplicate_rows_removed": max(int(before_count) - int(after_count), 0),
+    }
+
+
+def _bootstrap_dict(metrics: dict[str, Any], key: str = "bootstrap_cluster") -> dict[str, Any]:
+    return _as_dict(metrics.get(key) or metrics.get("bootstrap_cluster") or metrics.get("bootstrap_iid") or metrics.get("bootstrap"))
+
+
 def _trade_value(row: dict[str, Any]) -> float | None:
     return _safe_float(row.get("pnl_pct"))
+
+
+def _trade_usd_value(row: dict[str, Any]) -> float | None:
+    return _safe_float(row.get("net_pnl_usd"))
 
 
 def _profit_factor(values: Sequence[float]) -> float | None:
@@ -103,12 +156,29 @@ def _round_optional(value: Any, digits: int = 4) -> float | None:
 
 def _metrics(rows: Sequence[dict[str, Any]], *, branch_id: str, bootstrap_draws: int) -> dict[str, Any]:
     values = [value for row in rows if (value := _trade_value(row)) is not None]
+    clustered_values = [(_cluster_key(row), value) for row in rows if (value := _trade_value(row)) is not None]
+    usd_values = [value for row in rows if (value := _trade_usd_value(row)) is not None]
+    clustered_usd_values = [(_cluster_key(row), value) for row in rows if (value := _trade_usd_value(row)) is not None]
     wins = [value for value in values if value > 0.0]
     losses = [value for value in values if value < 0.0]
-    bootstrap = bootstrap_confidence_for_values(values, branch_id=branch_id, draws=bootstrap_draws)
+    usd_wins = [value for value in usd_values if value > 0.0]
+    usd_losses = [value for value in usd_values if value < 0.0]
+    bootstrap_iid = bootstrap_confidence_for_values(values, branch_id=branch_id, draws=bootstrap_draws)
+    bootstrap_cluster = block_bootstrap_confidence_for_values(
+        clustered_values,
+        branch_id=branch_id,
+        draws=bootstrap_draws,
+    )
+    bootstrap_usd_cluster = block_bootstrap_confidence_for_values(
+        clustered_usd_values,
+        branch_id=f"{branch_id}:usd",
+        draws=bootstrap_draws,
+    )
     return {
         "exact_trade_count": len(values),
+        "net_pnl_usd_trade_count": len(usd_values),
         "entry_month_count": len({_month_key(row) for row in rows if _month_key(row)}),
+        "ticker_week_cluster_count": bootstrap_cluster.get("cluster_count"),
         "first_entry_month": min((_month_key(row) for row in rows if _month_key(row)), default=None),
         "latest_entry_month": max((_month_key(row) for row in rows if _month_key(row)), default=None),
         "win_trade_count": len(wins),
@@ -116,9 +186,15 @@ def _metrics(rows: Sequence[dict[str, Any]], *, branch_id: str, bootstrap_draws:
         "win_rate_pct": round((len(wins) / len(values)) * 100.0, 2) if values else 0.0,
         "avg_pnl_pct": round(sum(values) / len(values), 2) if values else None,
         "profit_factor": _round_optional(_profit_factor(values)),
+        "total_net_pnl_usd": round(sum(usd_values), 2) if usd_values else None,
+        "usd_profit_factor": _round_optional(_profit_factor(usd_values)),
         "gross_win_pct_points": round(sum(wins), 2),
         "gross_loss_pct_points": round(abs(sum(losses)), 2),
-        "bootstrap": bootstrap,
+        "gross_win_usd": round(sum(usd_wins), 2),
+        "gross_loss_usd": round(abs(sum(usd_losses)), 2),
+        "bootstrap_iid": bootstrap_iid,
+        "bootstrap_cluster": bootstrap_cluster,
+        "bootstrap_usd_cluster": bootstrap_usd_cluster,
     }
 
 
@@ -131,6 +207,14 @@ def _source_summary(source_report: dict[str, Any], feature_report: dict[str, Any
     selected = _as_list(source_report.get("selected_trades"))
     return {
         "source_selected_trade_count": len(selected),
+        "candidate_materialization_basis": str(
+            source_report.get("candidate_materialization_basis")
+            or "deterministic_local_pit_candidate_materializer_v1"
+        ),
+        "scanner_parity": bool(source_report.get("scanner_parity")) if "scanner_parity" in source_report else False,
+        "production_scanner_replay": bool(source_report.get("production_scanner_replay"))
+        if "production_scanner_replay" in source_report
+        else False,
         "feature_store_status": feature_report.get("status"),
         "feature_store_shared_quote_date_count": feature_summary.get("shared_quote_date_count"),
         "feature_store_first_shared_quote_date_et": feature_summary.get("first_shared_quote_date_et"),
@@ -197,9 +281,17 @@ def _audit_blockers(
         blockers.append(f"audit_calendar_months_{len(_as_list(split.get('audit_months')))}_below_{DEFAULT_AUDIT_MONTHS}")
     if int(audit_metrics.get("exact_trade_count") or 0) < MIN_AUDIT_EXACT_TRADES:
         blockers.append(f"audit_exact_trades_{audit_metrics.get('exact_trade_count')}_below_{MIN_AUDIT_EXACT_TRADES}")
-    pf_lb = _safe_float(_as_dict(audit_metrics.get("bootstrap")).get("pf_lb_5pct"))
+    if int(audit_metrics.get("net_pnl_usd_trade_count") or 0) != int(audit_metrics.get("exact_trade_count") or 0):
+        blockers.append("audit_net_pnl_usd_missing")
+    pf_lb = _safe_float(_bootstrap_dict(audit_metrics, "bootstrap_cluster").get("pf_lb_5pct"))
     if pf_lb is None or pf_lb <= MIN_AUDIT_PF_LB:
         blockers.append("audit_bootstrap_pf_lb_not_above_1")
+    usd_pf_lb = _safe_float(_bootstrap_dict(audit_metrics, "bootstrap_usd_cluster").get("pf_lb_5pct"))
+    if usd_pf_lb is None or usd_pf_lb <= MIN_AUDIT_PF_LB:
+        blockers.append("audit_usd_bootstrap_pf_lb_not_above_1")
+    total_usd = _safe_float(audit_metrics.get("total_net_pnl_usd"))
+    if total_usd is None or total_usd <= 0:
+        blockers.append("audit_total_net_pnl_usd_not_positive")
     avg = _safe_float(audit_metrics.get("avg_pnl_pct"))
     if avg is None or avg <= 0:
         blockers.append("audit_avg_pnl_not_positive")
@@ -224,11 +316,12 @@ def build_report(
         else ({}, {"status": "missing", "path": None, "exists": False, "error": "policy_not_configured"})
     )
     rows, rejected = normalize_trades(_as_list(source_report.get("selected_trades")))
-    scoped_rows, source_quality_exclusions = apply_source_quality_scope_policy(
+    source_quality_scoped_rows, source_quality_exclusions = apply_source_quality_scope_policy(
         rows,
         policy=policy,
         policy_meta=policy_meta,
     )
+    scoped_rows = _dedupe_rows(source_quality_scoped_rows)
     selected_months = sorted({_month_key(row) for row in scoped_rows if _month_key(row)})
     months, month_coverage_basis = _coverage_months(source_report, selected_months)
     split = _split_months(months, train_months=int(train_months), audit_months=int(audit_months))
@@ -285,9 +378,15 @@ def build_report(
             "meaning": "first train months are calibration only; latest audit months are historical simulated-forward audit only",
         },
         "source_summary": _source_summary(source_report, feature_report),
+        "candidate_materialization_basis": _source_summary(source_report, feature_report).get(
+            "candidate_materialization_basis"
+        ),
+        "scanner_parity": _source_summary(source_report, feature_report).get("scanner_parity"),
+        "production_scanner_replay": _source_summary(source_report, feature_report).get("production_scanner_replay"),
         "selected_trade_history": {
             "accepted_exact_trade_count_before_source_quality_scope": len(rows),
             "accepted_exact_trade_count": len(scoped_rows),
+            **_dedupe_summary(len(source_quality_scoped_rows), len(scoped_rows)),
             "source_quality_excluded_trade_count": len(source_quality_exclusions),
             "rejected_row_counts": dict(sorted(rejected.items())),
             "available_entry_months": selected_months,
@@ -330,9 +429,11 @@ def render_markdown(report: dict[str, Any]) -> str:
     metrics = _as_dict(report.get("metrics"))
     train = _as_dict(metrics.get("train"))
     audit = _as_dict(metrics.get("simulated_forward_audit"))
-    audit_bootstrap = _as_dict(audit.get("bootstrap"))
+    audit_bootstrap_iid = _bootstrap_dict(audit, "bootstrap_iid")
+    audit_bootstrap = _bootstrap_dict(audit, "bootstrap_cluster")
     combined = _as_dict(metrics.get("combined"))
-    combined_bootstrap = _as_dict(combined.get("bootstrap"))
+    combined_bootstrap_iid = _bootstrap_dict(combined, "bootstrap_iid")
+    combined_bootstrap = _bootstrap_dict(combined, "bootstrap_cluster")
     lines = [
         "# Regular Options Historical Simulated Forward Audit",
         "",
@@ -343,39 +444,48 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Status: `{report.get('status')}`.",
         f"- Requested split: `{_as_dict(report.get('requested_split')).get('train_months')}` train months + `{_as_dict(report.get('requested_split')).get('audit_months')}` simulated-forward audit months.",
         f"- Selected exact history: `{selected.get('available_entry_month_count')}` months, `{selected.get('accepted_exact_trade_count')}` accepted exact rows after source-quality scope.",
+        f"- Dedupe: `{selected.get('accepted_exact_candidate_rows_before_dedupe')}` rows before dedupe, `{selected.get('deduped_row_count')}` rows after dedupe, `{selected.get('duplicate_rows_removed')}` duplicates removed.",
         f"- Calendar months available for split: `{selected.get('calendar_months_available_for_split_count')}` via `{selected.get('month_coverage_basis')}`.",
         f"- Available selected months: `{', '.join(str(item) for item in _as_list(selected.get('available_entry_months'))) or 'none'}`.",
         f"- Train months used: `{', '.join(str(item) for item in _as_list(split.get('train_months'))) or 'none'}`.",
         f"- Audit months used: `{', '.join(str(item) for item in _as_list(split.get('audit_months'))) or 'none'}`.",
         f"- Sufficient months for requested split: `{split.get('sufficient_months_for_requested_split')}`.",
         f"- Quote-history shared dates: `{source.get('feature_store_shared_quote_date_count')}` through `{source.get('feature_store_latest_shared_quote_date_et')}`.",
+        f"- Candidate materialization basis: `{source.get('candidate_materialization_basis')}`.",
+        f"- Scanner parity: `{source.get('scanner_parity')}`.",
+        f"- Production scanner replay: `{source.get('production_scanner_replay')}`.",
         "",
         "## Metrics",
         "",
-        "| Window | Months | Rows | Avg % | PF | PF LB 5% | Confidence |",
-        "|---|---:|---:|---:|---:|---:|---|",
-        f"| Combined | {combined.get('entry_month_count')} | {combined.get('exact_trade_count')} | {combined.get('avg_pnl_pct')} | {combined.get('profit_factor')} | {combined_bootstrap.get('pf_lb_5pct')} | `{combined_bootstrap.get('statistical_confidence')}` |",
-        f"| Train | {train.get('entry_month_count')} | {train.get('exact_trade_count')} | {train.get('avg_pnl_pct')} | {train.get('profit_factor')} | {_as_dict(train.get('bootstrap')).get('pf_lb_5pct')} | `{_as_dict(train.get('bootstrap')).get('statistical_confidence')}` |",
-        f"| Simulated forward audit | {audit.get('entry_month_count')} | {audit.get('exact_trade_count')} | {audit.get('avg_pnl_pct')} | {audit.get('profit_factor')} | {audit_bootstrap.get('pf_lb_5pct')} | `{audit_bootstrap.get('statistical_confidence')}` |",
+        "| Window | Months | Rows | Clusters | Avg % | PF | IID PF LB 5% | Cluster PF LB 5% | Net USD | USD PF | USD Cluster PF LB 5% | Cluster Confidence |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+        f"| Combined | {combined.get('entry_month_count')} | {combined.get('exact_trade_count')} | {combined.get('ticker_week_cluster_count')} | {combined.get('avg_pnl_pct')} | {combined.get('profit_factor')} | {combined_bootstrap_iid.get('pf_lb_5pct')} | {combined_bootstrap.get('pf_lb_5pct')} | {combined.get('total_net_pnl_usd')} | {combined.get('usd_profit_factor')} | {_bootstrap_dict(combined, 'bootstrap_usd_cluster').get('pf_lb_5pct')} | `{combined_bootstrap.get('statistical_confidence')}` |",
+        f"| Train | {train.get('entry_month_count')} | {train.get('exact_trade_count')} | {train.get('ticker_week_cluster_count')} | {train.get('avg_pnl_pct')} | {train.get('profit_factor')} | {_bootstrap_dict(train, 'bootstrap_iid').get('pf_lb_5pct')} | {_bootstrap_dict(train, 'bootstrap_cluster').get('pf_lb_5pct')} | {train.get('total_net_pnl_usd')} | {train.get('usd_profit_factor')} | {_bootstrap_dict(train, 'bootstrap_usd_cluster').get('pf_lb_5pct')} | `{_bootstrap_dict(train, 'bootstrap_cluster').get('statistical_confidence')}` |",
+        f"| Simulated forward audit | {audit.get('entry_month_count')} | {audit.get('exact_trade_count')} | {audit.get('ticker_week_cluster_count')} | {audit.get('avg_pnl_pct')} | {audit.get('profit_factor')} | {audit_bootstrap_iid.get('pf_lb_5pct')} | {audit_bootstrap.get('pf_lb_5pct')} | {audit.get('total_net_pnl_usd')} | {audit.get('usd_profit_factor')} | {_bootstrap_dict(audit, 'bootstrap_usd_cluster').get('pf_lb_5pct')} | `{audit_bootstrap.get('statistical_confidence')}` |",
         "",
         "## Audit Months",
         "",
-        "| Month | Rows | Avg % | PF | PF LB 5% |",
-        "|---|---:|---:|---:|---:|",
+        "| Month | Rows | Clusters | Avg % | PF | IID PF LB 5% | Cluster PF LB 5% | Net USD | USD Cluster PF LB 5% |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in _as_list(metrics.get("simulated_forward_audit_by_month")):
         row = _as_dict(row)
         row_metrics = _as_dict(row.get("metrics"))
-        bootstrap = _as_dict(row_metrics.get("bootstrap"))
+        bootstrap_iid = _bootstrap_dict(row_metrics, "bootstrap_iid")
+        bootstrap = _bootstrap_dict(row_metrics, "bootstrap_cluster")
         lines.append(
             "| "
             + " | ".join(
                 [
                     f"`{_cell(row.get('month'))}`",
                     _cell(row_metrics.get("exact_trade_count")),
+                    _cell(row_metrics.get("ticker_week_cluster_count")),
                     _cell(row_metrics.get("avg_pnl_pct")),
                     _cell(row_metrics.get("profit_factor")),
+                    _cell(bootstrap_iid.get("pf_lb_5pct")),
                     _cell(bootstrap.get("pf_lb_5pct")),
+                    _cell(row_metrics.get("total_net_pnl_usd")),
+                    _cell(_bootstrap_dict(row_metrics, "bootstrap_usd_cluster").get("pf_lb_5pct")),
                 ]
             )
             + " |"

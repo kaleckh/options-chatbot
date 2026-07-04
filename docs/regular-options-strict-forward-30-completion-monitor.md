@@ -1,6 +1,6 @@
 # Regular Options Strict Forward 30 Completion Monitor
 
-Status: `completion_monitor_waiting_for_first_cohort_row`.
+Status: `completion_monitor_scheduler_blocked`.
 
 - Strict completed forward rows: `0/30`.
 - Remaining rows: `30`.
@@ -8,9 +8,9 @@ Status: `completion_monitor_waiting_for_first_cohort_row`.
 - Cohort log state: `cohort_log_missing_blocker`.
 - Open rows waiting for policy exit: `0`.
 - Exact completed forward P&L rows: `0`.
-- Scheduler status: `scheduler_ready_for_next_market_window`.
+- Scheduler status: `scheduler_runtime_blocked`.
 - Scan-task health status: `scan_tasks_ready_for_next_market_window`.
-- Candidate review status: `candidate_review_blocked_no_scanner_candidates_for_target_date`.
+- Candidate review status: `candidate_review_waiting_for_scheduler_health`.
 - Collector status: `waiting_for_valid_market_window`.
 - Exit-evidence plan status: `exit_evidence_plan_waiting_for_open_forward_rows`.
 - Exit-completion stager status: `exit_completion_waiting_for_open_forward_rows`.

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from scripts import import_regular_options_direct_vix_source as vix_import
 from scripts import import_regular_options_dispersion_concentration_proxy_source as dispersion_import
+from scripts import import_regular_options_earnings_calendar as earnings_import
 from scripts import import_regular_options_alpaca_underlying_minute_price_surface as minute_import
 from scripts import import_regular_options_flow_extreme_volume_oi as flow_import
 from scripts import import_regular_options_macro_event_calendar as macro_import
@@ -136,6 +137,28 @@ class RegularOptionsSourceImportTests(unittest.TestCase):
         self.assertIn("missing_or_invalid_approval_token", report["blockers"])
         self.assertFalse(report["source_rows_written"])
         self.assertFalse(source_rows.exists())
+
+    def test_alpaca_underlying_minute_import_accepts_frozen_13_symbol_scope(self) -> None:
+        with WorkspaceTempDir(prefix="source-import-alpaca-minute-13") as tmp_dir:
+            tmp = Path(tmp_dir)
+            source_rows = tmp / "source_rows.jsonl"
+            report = minute_import.build_report(
+                target_start_date="2026-01-05",
+                target_end_date="2026-01-05",
+                universe=",".join(minute_import.FROZEN_13_SYMBOL_UNIVERSE),
+                minute_start=9 * 60 + 35,
+                minute_end=10 * 60 + 45,
+                approval_token=minute_import.APPROVAL_TOKEN,
+                no_replay=True,
+                source_rows_path=source_rows,
+                client=_FakeMinuteClient(),
+                generated_at_utc="2026-06-27T00:00:00Z",
+            )
+
+        self.assertEqual(report["status"], "alpaca_underlying_minute_price_surface_source_import_materialized")
+        self.assertEqual(report["source_row_count"], 39)
+        self.assertNotIn("unsupported_universe", report["blockers"])
+        self.assertFalse(report["options_history_db_mutated"])
 
     def test_dispersion_proxy_import_materializes_from_underlying_daily_source_rows(self) -> None:
         with WorkspaceTempDir(prefix="source-import-dispersion") as tmp_dir:
@@ -341,6 +364,76 @@ class RegularOptionsSourceImportTests(unittest.TestCase):
         self.assertEqual(report["source_row_count"], 6)
         self.assertEqual(report["downstream_macro_event_calendar_status"], "macro_event_calendar_ready_for_readiness_recheck")
         self.assertEqual(set(report["covered_categories"]), set(macro_import.source_packet.REQUIRED_CATEGORIES))
+
+    def test_earnings_calendar_import_materializes_source_rows(self) -> None:
+        with WorkspaceTempDir(prefix="source-import-earnings") as tmp_dir:
+            tmp = Path(tmp_dir)
+            lines = [
+                "symbol,earnings_date_et,earnings_time,source_name,source_url_or_file_name,source_published_at_utc,known_at_utc,revision_status,source_calendar_coverage_start_date_et,source_calendar_coverage_end_date_et",
+                "AAPL,2026-01-20,after_market,fixture_earnings,fixture://earnings/AAPL,2025-12-01T00:00:00Z,2025-12-01T00:00:00Z,scheduled,2026-01-01,2026-04-30",
+                "GOOGL,2026-02-10,after_market,fixture_earnings,fixture://earnings/GOOGL,2025-12-01T00:00:00Z,2025-12-01T00:00:00Z,scheduled,2026-01-01,2026-04-30",
+            ]
+            source_file = tmp / "earnings.csv"
+            _write_text(source_file, "\n".join(lines) + "\n")
+            report = earnings_import.build_report(
+                source_file=source_file,
+                target_start_date="2026-01-01",
+                target_end_date="2026-02-28",
+                as_of_date="2026-03-31",
+                required_equity_symbols="AAPL,GOOGL",
+                approval_token=earnings_import.APPROVAL_TOKEN,
+                no_replay=True,
+                source_rows_path=tmp / "source_rows.jsonl",
+                generated_at_utc="2026-06-29T00:00:00Z",
+            )
+
+        self.assertEqual(report["status"], "earnings_calendar_source_import_materialized")
+        self.assertTrue(report["source_rows_written"])
+        self.assertEqual(report["source_row_count"], 2)
+        self.assertEqual(report["downstream_earnings_calendar_status"], "point_in_time_earnings_calendar_ready")
+        self.assertEqual(set(report["covered_equity_symbols"]), {"AAPL", "GOOGL"})
+
+    def test_earnings_calendar_import_allows_future_scheduled_events_known_as_of_snapshot(self) -> None:
+        with WorkspaceTempDir(prefix="source-import-earnings-future-known") as tmp_dir:
+            tmp = Path(tmp_dir)
+            lines = [
+                "symbol,earnings_date_et,earnings_time,source_name,source_url_or_file_name,source_published_at_utc,known_at_utc,revision_status,source_calendar_coverage_start_date_et,source_calendar_coverage_end_date_et",
+                "AAPL,2026-03-20,after_market,fixture_earnings,fixture://earnings/AAPL,2026-02-01T00:00:00Z,2026-02-01T00:00:00Z,scheduled,2026-01-01,2026-04-30",
+            ]
+            source_file = tmp / "earnings.csv"
+            _write_text(source_file, "\n".join(lines) + "\n")
+            report = earnings_import.build_report(
+                source_file=source_file,
+                target_start_date="2026-01-01",
+                target_end_date="2026-02-28",
+                as_of_date="2026-02-15",
+                required_equity_symbols="AAPL",
+                approval_token=earnings_import.APPROVAL_TOKEN,
+                no_replay=True,
+                source_rows_path=tmp / "source_rows.jsonl",
+                generated_at_utc="2026-06-29T00:00:00Z",
+            )
+
+        self.assertEqual(report["status"], "earnings_calendar_source_import_materialized")
+        self.assertEqual(report["source_row_count"], 1)
+        self.assertEqual(report["downstream_earnings_calendar_status"], "point_in_time_earnings_calendar_ready")
+
+    def test_earnings_calendar_import_requires_token_before_writing(self) -> None:
+        with WorkspaceTempDir(prefix="source-import-earnings-token") as tmp_dir:
+            tmp = Path(tmp_dir)
+            source_file = tmp / "earnings.csv"
+            _write_text(source_file, "symbol,earnings_date_et,earnings_time,source_name,source_url_or_file_name,source_published_at_utc,known_at_utc,revision_status,source_calendar_coverage_start_date_et,source_calendar_coverage_end_date_et\n")
+            source_rows = tmp / "source_rows.jsonl"
+            report = earnings_import.build_report(
+                source_file=source_file,
+                approval_token="",
+                no_replay=True,
+                source_rows_path=source_rows,
+            )
+
+        self.assertEqual(report["status"], "blocked_earnings_calendar_source_import")
+        self.assertIn("missing_or_invalid_approval_token", report["blockers"])
+        self.assertFalse(source_rows.exists())
 
     def test_flow_import_materializes_point_in_time_input_rows(self) -> None:
         with WorkspaceTempDir(prefix="source-import-flow") as tmp_dir:

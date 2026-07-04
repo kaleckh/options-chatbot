@@ -381,6 +381,87 @@ def bootstrap_confidence_for_values(
     }
 
 
+def block_bootstrap_confidence_for_values(
+    entries: list[tuple[str, float]],
+    *,
+    branch_id: str,
+    draws: int = BOOTSTRAP_DRAWS,
+) -> dict[str, Any]:
+    """Cluster block bootstrap for correlated regular-options outcomes.
+
+    The regular-options audit chain passes cluster keys as
+    ``f"{ticker}:{iso_year}-W{iso_week:02d}"`` from ``entry_date`` because
+    overlapping multi-week holds and consecutive-day re-entries can make same
+    ticker-week rows materially correlated.
+    """
+    clusters: dict[str, list[float]] = {}
+    for cluster_key, value in entries:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(parsed):
+            continue
+        clusters.setdefault(str(cluster_key), []).append(parsed)
+
+    ordered_keys = sorted(clusters)
+    clean_values = [value for key in ordered_keys for value in clusters[key]]
+    n_trades = len(clean_values)
+    cluster_count = len(ordered_keys)
+    pf_point = _profit_factor_point(clean_values)
+    avg_point = sum(clean_values) / n_trades if n_trades else None
+    pf_draws: list[float] = []
+    avg_draws: list[float] = []
+
+    if cluster_count:
+        payload = json.dumps(
+            {
+                "label": branch_id,
+                "seed": BOOTSTRAP_SEED,
+                "clusters": [[key, [round(value, 6) for value in clusters[key]]] for key in ordered_keys],
+            },
+            sort_keys=True,
+        ).encode("utf8")
+        rng = random.Random(int.from_bytes(hashlib.sha256(payload).digest()[:8], "big"))
+        for _ in range(int(draws)):
+            sample: list[float] = []
+            for _cluster in range(cluster_count):
+                sample.extend(clusters[ordered_keys[rng.randrange(cluster_count)]])
+            sample_pf = _profit_factor_point(sample)
+            if sample_pf is not None:
+                pf_draws.append(sample_pf)
+            avg_draws.append(sum(sample) / len(sample))
+
+    pf_draws.sort()
+    avg_draws.sort()
+    pf_lb = _percentile(pf_draws, 0.05)
+    pf_ub = _percentile(pf_draws, 0.95)
+    avg_lb = _percentile(avg_draws, 0.05)
+
+    if pf_lb is not None and pf_point is not None and pf_lb < 1.0 and pf_point >= 1.2:
+        confidence = "underpowered"
+    elif pf_lb is not None and pf_lb > 1.0:
+        confidence = "confident_positive"
+    else:
+        confidence = "negative_or_flat"
+
+    return {
+        "branch_id": branch_id,
+        "draws": int(draws),
+        "n_trades": n_trades,
+        "cluster_count": cluster_count,
+        "method": "cluster_block_bootstrap",
+        "pf_point": _round_optional(pf_point),
+        "pf_lb_5pct": _round_optional(pf_lb),
+        "pf_ub_95pct": _round_optional(pf_ub),
+        "avg_net_point": _round_optional(avg_point),
+        "avg_net_lb_5pct": _round_optional(avg_lb),
+        "statistical_confidence": confidence,
+        "pf_defined_draws": len(pf_draws),
+        "no_loss_sample": bool(n_trades and pf_point is None and any(value > 0.0 for value in clean_values)),
+    }
+
+
 def _bootstrap_confidence(report: dict[str, Any]) -> dict[str, Any]:
     selected = [
         dict(trade)

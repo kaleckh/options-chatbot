@@ -11,9 +11,116 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 REPORT_ID = "regular_options_daily_ops"
+DEFAULT_OUTPUT_JSON = ROOT / "data" / "forward-tracking" / "regular_options_daily_ops_latest.json"
+DEFAULT_OUTPUT_MD = ROOT / "docs" / "regular-options-daily-ops.md"
 
 
 DAILY_OP_STEPS: tuple[dict[str, Any], ...] = (
+    {
+        "id": "point_in_time_earnings_calendar",
+        "label": "Point-in-time earnings calendar readiness",
+        "stage": "historical_input_surface_tracking",
+        "command": [sys.executable, "scripts/build_regular_options_point_in_time_earnings_calendar.py"],
+        "read_only_safe": True,
+    },
+    {
+        "id": "earnings_calendar_source_repair_packet",
+        "label": "Earnings calendar source-repair packet",
+        "stage": "historical_input_surface_tracking",
+        "command": [sys.executable, "scripts/build_regular_options_earnings_calendar_source_repair_packet.py"],
+        "read_only_safe": True,
+    },
+    {
+        "id": "historical_scanner_input_surface_tracker",
+        "label": "Historical scanner input-surface tracker",
+        "stage": "historical_input_surface_tracking",
+        "command": [sys.executable, "scripts/build_regular_options_historical_scanner_input_surface_tracker.py"],
+        "read_only_safe": True,
+    },
+    {
+        "id": "historical_frozen_scanner_replay_adapter",
+        "label": "Historical frozen scanner replay adapter",
+        "stage": "historical_candidate_generation_audit",
+        "command": [sys.executable, "scripts/build_regular_options_historical_frozen_scanner_replay_adapter.py"],
+        "read_only_safe": True,
+    },
+    {
+        "id": "historical_frozen_adapter_exit_quote_repair_demand",
+        "label": "Historical frozen adapter exit quote repair demand",
+        "stage": "historical_candidate_generation_audit",
+        "command": [sys.executable, "scripts/build_regular_options_historical_frozen_adapter_exit_quote_repair_demand.py"],
+        "read_only_safe": True,
+    },
+    {
+        "id": "frozen_daily_candidate_decisions",
+        "label": "Frozen daily candidate decisions",
+        "stage": "historical_candidate_generation_audit",
+        "command": [sys.executable, "scripts/build_regular_options_13_symbol_frozen_daily_candidate_decisions.py"],
+        "read_only_safe": True,
+    },
+    {
+        "id": "frozen_candidate_generation_entrypoint",
+        "label": "Frozen candidate-generation entrypoint",
+        "stage": "historical_candidate_generation_audit",
+        "command": [sys.executable, "scripts/regular_options_frozen_candidate_generation_entrypoint.py", "--no-write"],
+        "read_only_safe": True,
+    },
+    {
+        "id": "frozen_candidate_generation_source_surface",
+        "label": "Frozen candidate-generation source surface",
+        "stage": "historical_candidate_generation_audit",
+        "command": [sys.executable, "scripts/build_regular_options_13_symbol_frozen_candidate_generation_source_surface.py", "--no-write"],
+        "read_only_safe": True,
+    },
+    {
+        "id": "frozen_candidate_generation_engine",
+        "label": "Frozen candidate-generation engine",
+        "stage": "historical_candidate_generation_audit",
+        "command": [sys.executable, "scripts/build_regular_options_13_symbol_frozen_candidate_generation_engine.py", "--no-write"],
+        "read_only_safe": True,
+    },
+    {
+        "id": "historical_simulated_forward_audit",
+        "label": "Historical simulated-forward audit",
+        "stage": "historical_candidate_generation_audit",
+        "command": [sys.executable, "scripts/build_regular_options_historical_simulated_forward_audit.py"],
+        "read_only_safe": True,
+    },
+    {
+        "id": "historical_profitability_filter_iteration",
+        "label": "Historical profitability filter iteration",
+        "stage": "historical_candidate_generation_audit",
+        "command": [sys.executable, "scripts/build_regular_options_historical_profitability_filter_iteration.py", "--record-consumption"],
+        "read_only_safe": True,
+    },
+    {
+        "id": "historical_filtered_simulated_forward_audit",
+        "label": "Historical filtered simulated-forward audit",
+        "stage": "historical_candidate_generation_audit",
+        "command": [sys.executable, "scripts/build_regular_options_historical_filtered_simulated_forward_audit.py"],
+        "read_only_safe": True,
+    },
+    {
+        "id": "filtered_forward_paper_shadow_tracker",
+        "label": "Filtered forward paper-shadow tracker",
+        "stage": "paper_shadow_collection",
+        "command": [sys.executable, "scripts/build_regular_options_filtered_forward_paper_shadow_tracker.py"],
+        "read_only_safe": True,
+    },
+    {
+        "id": "filtered_forward_exit_evidence_capture",
+        "label": "Filtered forward exit-evidence capture",
+        "stage": "exit_evidence_capture",
+        "command": [sys.executable, "scripts/capture_regular_options_filtered_forward_exit_evidence.py", "--no-write"],
+        "read_only_safe": True,
+    },
+    {
+        "id": "filtered_forward_evidence_bar_evaluation",
+        "label": "Filtered forward evidence-bar evaluation",
+        "stage": "paper_shadow_collection",
+        "command": [sys.executable, "scripts/build_regular_options_filtered_forward_evidence_bar_evaluation.py"],
+        "read_only_safe": True,
+    },
     {
         "id": "open_risk_exit_evidence_plan",
         "label": "Open-risk exit-evidence plan",
@@ -81,6 +188,8 @@ DAILY_OP_STEPS: tuple[dict[str, Any], ...] = (
 )
 
 REQUIRED_STAGE_ORDER: tuple[str, ...] = (
+    "historical_input_surface_tracking",
+    "historical_candidate_generation_audit",
     "exit_evidence_capture",
     "suggested_trade_review_plan_execution",
     "paper_shadow_collection",
@@ -91,6 +200,65 @@ REQUIRED_STAGE_ORDER: tuple[str, ...] = (
 
 def _utc_now_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _rel(path: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(ROOT.resolve())).replace("\\", "/")
+    except ValueError:
+        return str(path).replace("\\", "/")
+
+
+def render_markdown(report: dict[str, Any]) -> str:
+    lines = [
+        "# Regular Options Daily Ops",
+        "",
+        f"- Status: `{report.get('status')}`.",
+        f"- Started: `{report.get('started_at_utc')}`.",
+        f"- Completed: `{report.get('completed_at_utc')}`.",
+        f"- Steps: `{report.get('step_count')}`.",
+        f"- Failed steps: `{report.get('failed_step_count')}`.",
+        "",
+        "## Steps",
+        "",
+        "| Step | Stage | Status | Return Code |",
+        "|---|---|---:|---:|",
+    ]
+    for step in report.get("steps", []):
+        if not isinstance(step, dict):
+            continue
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    f"`{step.get('id')}`",
+                    f"`{step.get('stage')}`",
+                    f"`{step.get('status')}`",
+                    f"`{step.get('returncode')}`",
+                ]
+            )
+            + " |"
+        )
+    lines.extend(["", "## Boundary", "", str(report.get("boundary") or ""), ""])
+    return "\n".join(lines)
+
+
+def write_outputs(
+    report: dict[str, Any],
+    *,
+    output_json: Path = DEFAULT_OUTPUT_JSON,
+    output_md: Path = DEFAULT_OUTPUT_MD,
+) -> dict[str, str]:
+    output_json.parent.mkdir(parents=True, exist_ok=True)
+    output_md.parent.mkdir(parents=True, exist_ok=True)
+    artifacts = {
+        "latest_json": _rel(output_json),
+        "latest_markdown": _rel(output_md),
+    }
+    report["artifacts"] = artifacts
+    output_json.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf8")
+    output_md.write_text(render_markdown(report), encoding="utf8")
+    return artifacts
 
 
 def run_daily_ops(*, stop_on_failure: bool = True) -> dict[str, Any]:
@@ -131,9 +299,14 @@ def run_daily_ops(*, stop_on_failure: bool = True) -> dict[str, Any]:
         "steps": results,
         "boundary": (
             "This runner refreshes read-only operator artifacts and row plans. "
+            "It refreshes point-in-time earnings readiness and source-repair planning before tracking historical scanner input source-surface coverage. "
+            "It refreshes the frozen candidate-generation replay, source-surface, engine, and historical simulated-forward audit every run. "
+            "It also tracks the historical profitability filter iteration and filtered simulated-forward audit every run. "
+            "It tracks prospective matches to the filtered policy as forward paper-shadow dashboard rows. "
+            "It refreshes filtered-forward exit evidence in no-write mode and evaluates the pre-registered forward evidence bar. "
             "It checks scheduled-scan heartbeat health before the gateboard refresh. "
             "It does not submit broker orders, create trades, mutate tracked-position rows, "
-            "change scanner policy, or lower proof bars."
+            "import quotes, change scanner policy, or lower proof bars."
         ),
     }
 
@@ -145,6 +318,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     report = run_daily_ops(stop_on_failure=not args.continue_on_failure)
+    write_outputs(report)
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:

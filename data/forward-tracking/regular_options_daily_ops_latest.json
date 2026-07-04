@@ -1,0 +1,359 @@
+{
+  "artifacts": {
+    "latest_json": "data/forward-tracking/regular_options_daily_ops_latest.json",
+    "latest_markdown": "docs/regular-options-daily-ops.md"
+  },
+  "boundary": "This runner refreshes read-only operator artifacts and row plans. It refreshes point-in-time earnings readiness and source-repair planning before tracking historical scanner input source-surface coverage. It refreshes the frozen candidate-generation replay, source-surface, engine, and historical simulated-forward audit every run. It also tracks the historical profitability filter iteration and filtered simulated-forward audit every run. It tracks prospective matches to the filtered policy as forward paper-shadow dashboard rows. It refreshes filtered-forward exit evidence in no-write mode and evaluates the pre-registered forward evidence bar. It checks scheduled-scan heartbeat health before the gateboard refresh. It does not submit broker orders, create trades, mutate tracked-position rows, import quotes, change scanner policy, or lower proof bars.",
+  "completed_at_utc": "2026-07-03T21:38:40Z",
+  "failed_step_count": 0,
+  "report_id": "regular_options_daily_ops",
+  "required_stage_order": [
+    "historical_input_surface_tracking",
+    "historical_candidate_generation_audit",
+    "exit_evidence_capture",
+    "suggested_trade_review_plan_execution",
+    "paper_shadow_collection",
+    "heartbeat_check",
+    "gateboard_refresh"
+  ],
+  "started_at_utc": "2026-07-03T21:30:01Z",
+  "status": "completed",
+  "step_count": 24,
+  "steps": [
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/build_regular_options_point_in_time_earnings_calendar.py",
+      "continue_after_failure": false,
+      "id": "point_in_time_earnings_calendar",
+      "label": "Point-in-time earnings calendar readiness",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "historical_input_surface_tracking",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": [
+        "| `XOM` | `8` | `2024-06-01` | `2026-07-15` | `true` |",
+        "",
+        "## Boundary",
+        "",
+        "No replay, quote import, evidence mutation, broker action, live validation, auto-track, scanner policy change, proof-bar change, protected-holdout consumption, or promotion is performed."
+      ]
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/build_regular_options_earnings_calendar_source_repair_packet.py",
+      "continue_after_failure": false,
+      "id": "earnings_calendar_source_repair_packet",
+      "label": "Earnings calendar source-repair packet",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "historical_input_surface_tracking",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": [
+        "npm run options:research:point-in-time-earnings-calendar -- --json",
+        "npm run options:research:historical-scanner-input-surface-tracker -- --json",
+        "npm run options:research:historical-frozen-scanner-replay-adapter -- --json",
+        "npm run options:audit:historical-simulated-forward -- --json",
+        "```"
+      ]
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/build_regular_options_historical_scanner_input_surface_tracker.py",
+      "continue_after_failure": false,
+      "id": "historical_scanner_input_surface_tracker",
+      "label": "Historical scanner input-surface tracker",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "historical_input_surface_tracking",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": []
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/build_regular_options_historical_frozen_scanner_replay_adapter.py",
+      "continue_after_failure": false,
+      "id": "historical_frozen_scanner_replay_adapter",
+      "label": "Historical frozen scanner replay adapter",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "historical_candidate_generation_audit",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": []
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/build_regular_options_historical_frozen_adapter_exit_quote_repair_demand.py",
+      "continue_after_failure": false,
+      "id": "historical_frozen_adapter_exit_quote_repair_demand",
+      "label": "Historical frozen adapter exit quote repair demand",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "historical_candidate_generation_audit",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": [
+        "```",
+        "",
+        "## Boundary",
+        "",
+        "Read-only demand artifact only; it does not request ThetaData, import quotes, mutate options_history.db, rerun replay, or make profitability claims."
+      ]
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/build_regular_options_13_symbol_frozen_daily_candidate_decisions.py",
+      "continue_after_failure": false,
+      "id": "frozen_daily_candidate_decisions",
+      "label": "Frozen daily candidate decisions",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "historical_candidate_generation_audit",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": []
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/regular_options_frozen_candidate_generation_entrypoint.py --no-write",
+      "continue_after_failure": false,
+      "id": "frozen_candidate_generation_entrypoint",
+      "label": "Frozen candidate-generation entrypoint",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "historical_candidate_generation_audit",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": []
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/build_regular_options_13_symbol_frozen_candidate_generation_source_surface.py --no-write",
+      "continue_after_failure": false,
+      "id": "frozen_candidate_generation_source_surface",
+      "label": "Frozen candidate-generation source surface",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "historical_candidate_generation_audit",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": []
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/build_regular_options_13_symbol_frozen_candidate_generation_engine.py --no-write",
+      "continue_after_failure": false,
+      "id": "frozen_candidate_generation_engine",
+      "label": "Frozen candidate-generation engine",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "historical_candidate_generation_audit",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": []
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/build_regular_options_historical_simulated_forward_audit.py",
+      "continue_after_failure": false,
+      "id": "historical_simulated_forward_audit",
+      "label": "Historical simulated-forward audit",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "historical_candidate_generation_audit",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": []
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/build_regular_options_historical_profitability_filter_iteration.py --record-consumption",
+      "continue_after_failure": false,
+      "id": "historical_profitability_filter_iteration",
+      "label": "Historical profitability filter iteration",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "historical_candidate_generation_audit",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": []
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/build_regular_options_historical_filtered_simulated_forward_audit.py",
+      "continue_after_failure": false,
+      "id": "historical_filtered_simulated_forward_audit",
+      "label": "Historical filtered simulated-forward audit",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "historical_candidate_generation_audit",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": []
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/build_regular_options_filtered_forward_paper_shadow_tracker.py",
+      "continue_after_failure": false,
+      "id": "filtered_forward_paper_shadow_tracker",
+      "label": "Filtered forward paper-shadow tracker",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "paper_shadow_collection",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": []
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/capture_regular_options_filtered_forward_exit_evidence.py --no-write",
+      "continue_after_failure": false,
+      "id": "filtered_forward_exit_evidence_capture",
+      "label": "Filtered forward exit-evidence capture",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "exit_evidence_capture",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": [
+        "- Completion rows appended: `0`.",
+        "- Latest completed market day: `2026-07-03`.",
+        "- Reject counts: `{}`.",
+        "",
+        "This script appends completion events only to the filtered forward matched-row log. It reads trusted quote stores in read-only mode and never imports quotes, submits orders, creates tracked positions, or changes scanner policy."
+      ]
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/build_regular_options_filtered_forward_evidence_bar_evaluation.py",
+      "continue_after_failure": false,
+      "id": "filtered_forward_evidence_bar_evaluation",
+      "label": "Filtered forward evidence-bar evaluation",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "paper_shadow_collection",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": [
+        "- USD cluster PF LB 5%: `None`.",
+        "- Total net USD: `None`.",
+        "- Approval authority: `false`.",
+        "",
+        "This evaluator is read-only. Passing the bar means pending operator review only, never automatic promotion, scanner-policy change, live validation, auto-track, broker action, quote import, or evidence-store mutation."
+      ]
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/build_regular_options_open_risk_resolution_plan.py",
+      "continue_after_failure": false,
+      "id": "open_risk_exit_evidence_plan",
+      "label": "Open-risk exit-evidence plan",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "exit_evidence_capture",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": []
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/build_regular_options_suggested_trade_review_plan.py",
+      "continue_after_failure": false,
+      "id": "suggested_trade_review_plan",
+      "label": "Suggested-trade review plan",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "suggested_trade_review_plan_execution",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": []
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/build_regular_options_fill_attempt_evidence_capture_plan.py",
+      "continue_after_failure": false,
+      "id": "fill_attempt_evidence_capture_plan",
+      "label": "Fill-attempt evidence capture plan",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "paper_shadow_collection",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": []
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/monitor_current_policy_entry_filter_paper.py",
+      "continue_after_failure": false,
+      "id": "paper_shadow_monitor",
+      "label": "Paper-shadow entry-filter monitor",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "paper_shadow_collection",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": [
+        "current_policy_entry_filter_paper_monitor: status=collecting rows=0 champion_matched=0 failures=insufficient_fresh_rows,insufficient_candidate_blocked_rows,blocked_rows_not_net_negative_or_deep_loss"
+      ]
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/build_regular_options_paper_shortlist.py --strict-gate",
+      "continue_after_failure": false,
+      "id": "paper_shortlist_gate",
+      "label": "Paper-shortlist release gate",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "paper_shadow_collection",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": [
+        "wrote C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-paper-shortlist\\latest.json",
+        "wrote C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-paper-shortlist.md"
+      ]
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/build_regular_options_fresh_evidence_loop.py",
+      "continue_after_failure": false,
+      "id": "fresh_evidence_loop",
+      "label": "Fresh executable evidence loop",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "paper_shadow_collection",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": [
+        "wrote C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fresh_evidence_loop_latest.json",
+        "wrote C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-fresh-evidence-loop.md"
+      ]
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/build_regular_options_candidate_outcome_ledger.py",
+      "continue_after_failure": false,
+      "id": "candidate_outcome_ledger",
+      "label": "Candidate outcome ledger",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "paper_shadow_collection",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": []
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/scan_heartbeat.py --health",
+      "continue_after_failure": true,
+      "id": "scheduled_scan_heartbeat_health",
+      "label": "Scheduled-scan heartbeat health",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "heartbeat_check",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": [
+        "  \"report_id\": \"scheduled_scan_heartbeat_health\",",
+        "  \"stale_market_day_limit\": 2,",
+        "  \"state\": \"pass\",",
+        "  \"status\": \"fresh\"",
+        "}"
+      ]
+    },
+    {
+      "command": "C:\\Users\\kalec\\options-chatbot\\.venv\\Scripts\\python.exe scripts/build_project_operator_gateboard.py",
+      "continue_after_failure": false,
+      "id": "operator_gateboard",
+      "label": "Operator gateboard",
+      "read_only_safe": true,
+      "returncode": 0,
+      "stage": "gateboard_refresh",
+      "status": "pass",
+      "stderr_tail": [],
+      "stdout_tail": [
+        "Wrote data/forward-tracking/project_operator_gateboard_latest.json",
+        "Wrote docs/project-operator-gateboard.md"
+      ]
+    }
+  ]
+}

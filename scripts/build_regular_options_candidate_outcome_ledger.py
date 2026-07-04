@@ -17,6 +17,9 @@ DEFAULT_PAPER_SHORTLIST = ROOT / "data" / "profitability-lab" / "regular-options
 DEFAULT_PROFIT_CAPTURE_QUEUE = (
     ROOT / "data" / "profitability-lab" / "regular-options-profit-capture-queue" / "latest.json"
 )
+DEFAULT_FILTERED_FORWARD_TRACKER = (
+    ROOT / "data" / "forward-tracking" / "regular-options-filtered-forward-paper-shadow" / "latest.json"
+)
 DEFAULT_OPEN_RISK = ROOT / "data" / "forward-tracking" / "regular_open_position_risk_latest.json"
 DEFAULT_SUGGESTED_CLOSE_RISK = ROOT / "data" / "forward-tracking" / "suggested_trade_close_risk_latest.json"
 DEFAULT_OUTPUT_DIR = ROOT / "data" / "forward-tracking"
@@ -75,6 +78,11 @@ ACTION_DETAILS: dict[str, dict[str, Any]] = {
         "priority": 7,
         "label": "Capture missing fill attempt evidence",
         "operator_next_step": "Rerun the market-window validation path only if the candidate is still freshly selected; require durable fill-attempt logging.",
+    },
+    "track_filtered_forward_paper_shadow_exit": {
+        "priority": 7,
+        "label": "Track filtered forward paper-shadow exit",
+        "operator_next_step": "Keep the filtered policy row in paper-shadow tracking until policy exit evidence and realized paper P&L are available.",
     },
     "wait_for_fresh_match_or_archive_candidate": {
         "priority": 8,
@@ -445,6 +453,45 @@ def _profit_capture_row(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _filtered_forward_tracker_row(row: dict[str, Any]) -> dict[str, Any]:
+    action = "track_filtered_forward_paper_shadow_exit"
+    return {
+        "ledger_key": f"filtered_forward:{_norm(row.get('candidate_id'))}",
+        "row_type": "forward_paper_shadow_candidate",
+        "source_report": "filtered_forward_paper_shadow_tracker",
+        "scan_date": row.get("scan_date"),
+        "playbook_id": row.get("lane_id"),
+        "lane_id": row.get("lane_id"),
+        "ticker": row.get("ticker"),
+        "symbol": row.get("ticker"),
+        "direction": row.get("direction"),
+        "expiry": row.get("expiry"),
+        "strategy_type": row.get("strategy_type"),
+        "candidate_id": row.get("candidate_id"),
+        "tracking_policy_id": row.get("tracking_policy_id"),
+        "tracking_state": row.get("tracking_state"),
+        "evidence_bucket": row.get("evidence_bucket"),
+        "prior_20_trading_day_return_pct": row.get("prior_20_trading_day_return_pct"),
+        "entry_quote_source": row.get("entry_quote_source"),
+        "entry_quote_timestamp_utc": row.get("entry_quote_timestamp_utc"),
+        "planned_exit_status": row.get("planned_exit_status"),
+        "realized_pnl_status": row.get("realized_pnl_status"),
+        "next_evidence_action": action,
+        "action_label": _action_label(action),
+        "action_priority": _action_priority(action),
+        "action_reason": "prospective_filtered_policy_candidate_requires_forward_paper_shadow_exit_tracking",
+        "operator_next_step": _operator_next_step(action),
+        "required_next_evidence": [
+            "policy_exit_date_or_condition",
+            "trusted_exact_opra_nbbo_exit_evidence",
+            "realized_paper_shadow_pnl_readback",
+        ],
+        "blocking_reasons": _unique_text([row.get("planned_exit_status"), row.get("realized_pnl_status")]),
+        "prohibited_actions": _unique_text(_as_list(row.get("prohibited_actions")) + list(PROHIBITED_ACTIONS)),
+        "live_policy_change": False,
+    }
+
+
 def _open_risk_governor_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
     governor = _as_dict(report.get("open_risk_governor"))
     rows: list[dict[str, Any]] = []
@@ -658,6 +705,7 @@ def build_report(
     fresh_evidence_loop_path: Path = DEFAULT_FRESH_EVIDENCE_LOOP,
     paper_shortlist_path: Path = DEFAULT_PAPER_SHORTLIST,
     profit_capture_queue_path: Path = DEFAULT_PROFIT_CAPTURE_QUEUE,
+    filtered_forward_tracker_path: Path = DEFAULT_FILTERED_FORWARD_TRACKER,
     open_risk_path: Path = DEFAULT_OPEN_RISK,
     suggested_close_risk_path: Path = DEFAULT_SUGGESTED_CLOSE_RISK,
     generated_at_utc: str | None = None,
@@ -666,12 +714,14 @@ def build_report(
     fresh_evidence, fresh_source = _load_json_artifact(fresh_evidence_loop_path, required=True)
     paper_shortlist, shortlist_source = _load_json_artifact(paper_shortlist_path, required=False)
     profit_capture_queue, queue_source = _load_json_artifact(profit_capture_queue_path, required=False)
+    filtered_forward_tracker, filtered_forward_source = _load_json_artifact(filtered_forward_tracker_path, required=False)
     open_risk, open_source = _load_json_artifact(open_risk_path, required=False)
     suggested_risk, suggested_source = _load_json_artifact(suggested_close_risk_path, required=False)
     inputs = {
         "fresh_evidence_loop": fresh_source,
         "paper_shortlist": shortlist_source,
         "profit_capture_queue": queue_source,
+        "filtered_forward_paper_shadow_tracker": filtered_forward_source,
         "open_position_risk": open_source,
         "suggested_trade_close_risk": suggested_source,
     }
@@ -699,6 +749,11 @@ def build_report(
         )
     ]
     rows.extend(_profit_capture_row(row) for row in active_profit_rows)
+    rows.extend(
+        _filtered_forward_tracker_row(row)
+        for row in _as_list(filtered_forward_tracker.get("candidate_rows"))
+        if isinstance(row, dict)
+    )
     rows.extend(_open_risk_governor_rows(open_risk))
     rows.extend(_suggested_trade_rows(suggested_risk))
     rows = _sort_rows(rows)
@@ -710,8 +765,9 @@ def build_report(
     fresh_summary = _as_dict(fresh_evidence.get("summary"))
     shortlist_summary = _as_dict(paper_shortlist.get("summary"))
     queue_summary = _as_dict(profit_capture_queue.get("summary"))
+    filtered_forward_summary = _as_dict(filtered_forward_tracker.get("forward_tracking"))
     governor = _as_dict(open_risk.get("open_risk_governor"))
-    loaded_reports = [fresh_evidence, paper_shortlist, profit_capture_queue, open_risk, suggested_risk]
+    loaded_reports = [fresh_evidence, paper_shortlist, profit_capture_queue, filtered_forward_tracker, open_risk, suggested_risk]
     live_policy_change = _live_policy_change(inputs, loaded_reports, rows)
 
     summary = {
@@ -730,6 +786,8 @@ def build_report(
         "profit_capture_paper_review_candidate_count": int(
             _as_dict(queue_summary.get("selection_readiness_counts")).get("paper_review_candidate") or 0
         ),
+        "filtered_forward_paper_shadow_candidate_count": int(filtered_forward_summary.get("matched_candidate_count") or 0),
+        "filtered_forward_open_candidate_count": int(filtered_forward_summary.get("open_candidate_count") or 0),
         "promotion_discussion_ready_count": int(fresh_summary.get("promotion_discussion_ready_count") or 0),
         "exact_realized_pnl_count": int(fresh_summary.get("exact_realized_pnl_count") or 0),
         "missing_realized_pnl_count": int(fresh_summary.get("missing_realized_pnl_count") or 0),
@@ -765,6 +823,7 @@ def build_report(
             "fresh_evidence_loop": fresh_summary,
             "paper_shortlist": shortlist_summary,
             "profit_capture_queue": queue_summary,
+            "filtered_forward_paper_shadow_tracker": filtered_forward_summary,
             "open_risk_governor": governor,
             "suggested_trade_close_risk": {
                 "attention_trade_ids": _as_list(suggested_risk.get("attention_trade_ids")),
@@ -796,6 +855,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Fresh candidates: `{summary.get('fresh_candidate_count')}`.",
         f"- Paper-shortlist eligible rows: `{summary.get('paper_shortlist_eligible_count')}`.",
         f"- Profit-capture paper-review candidates: `{summary.get('profit_capture_paper_review_candidate_count')}`.",
+        f"- Filtered forward paper-shadow candidates: `{summary.get('filtered_forward_paper_shadow_candidate_count')}`.",
+        f"- Filtered forward open candidates: `{summary.get('filtered_forward_open_candidate_count')}`.",
         f"- Promotion-ready rows: `{summary.get('promotion_discussion_ready_count')}`.",
         f"- Exact realized P&L rows: `{summary.get('exact_realized_pnl_count')}`.",
         f"- Missing realized P&L rows: `{summary.get('missing_realized_pnl_count')}`.",
@@ -861,6 +922,7 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"- Fresh evidence bridge statuses: `{_json_inline(_as_dict(report.get('source_summaries')).get('fresh_evidence_loop', {}).get('evidence_bridge_status_counts') or {})}`.",
             f"- Paper shortlist release gate: `{_as_dict(_as_dict(report.get('source_summaries')).get('paper_shortlist')).get('release_gate_status')}`.",
             f"- Profit-capture selection readiness: `{_json_inline(_as_dict(_as_dict(report.get('source_summaries')).get('profit_capture_queue')).get('selection_readiness_counts') or {})}`.",
+            f"- Filtered forward paper-shadow tracking: `{_json_inline(_as_dict(report.get('source_summaries')).get('filtered_forward_paper_shadow_tracker') or {})}`.",
             f"- Open-risk governor status: `{_as_dict(_as_dict(report.get('source_summaries')).get('open_risk_governor')).get('status')}`.",
             "",
             "## Boundary",
@@ -907,6 +969,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--fresh-evidence-loop", type=Path, default=DEFAULT_FRESH_EVIDENCE_LOOP)
     parser.add_argument("--paper-shortlist", type=Path, default=DEFAULT_PAPER_SHORTLIST)
     parser.add_argument("--profit-capture-queue", type=Path, default=DEFAULT_PROFIT_CAPTURE_QUEUE)
+    parser.add_argument("--filtered-forward-tracker", type=Path, default=DEFAULT_FILTERED_FORWARD_TRACKER)
     parser.add_argument("--open-risk", type=Path, default=DEFAULT_OPEN_RISK)
     parser.add_argument("--suggested-close-risk", type=Path, default=DEFAULT_SUGGESTED_CLOSE_RISK)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
@@ -922,6 +985,7 @@ def main(argv: list[str] | None = None) -> int:
         fresh_evidence_loop_path=args.fresh_evidence_loop,
         paper_shortlist_path=args.paper_shortlist,
         profit_capture_queue_path=args.profit_capture_queue,
+        filtered_forward_tracker_path=args.filtered_forward_tracker,
         open_risk_path=args.open_risk,
         suggested_close_risk_path=args.suggested_close_risk,
     )

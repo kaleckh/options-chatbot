@@ -1,10 +1,10 @@
 {
   "artifacts": {
     "docs_report": "docs/regular-options-strict-forward-30-scheduler-health.md",
-    "json": "data/forward-tracking/regular_options_strict_forward_30_scheduler_health_20260627T171058Z.json",
+    "json": "data/forward-tracking/regular_options_strict_forward_30_scheduler_health_20260703T200504Z.json",
     "latest_json": "data/forward-tracking/regular_options_strict_forward_30_scheduler_health_latest.json",
     "latest_markdown": "data/forward-tracking/regular_options_strict_forward_30_scheduler_health_latest.md",
-    "markdown": "data/forward-tracking/regular_options_strict_forward_30_scheduler_health_20260627T171058Z.md"
+    "markdown": "data/forward-tracking/regular_options_strict_forward_30_scheduler_health_20260703T200504Z.md"
   },
   "batch_file": {
     "exists": true,
@@ -14,7 +14,9 @@
     "prohibited_tokens_present": [],
     "status": "loaded"
   },
-  "blockers": [],
+  "blockers": [
+    "scheduler_runtime_blocking:scheduler_runtime_failed"
+  ],
   "config_blockers": [],
   "config_status": "scheduler_ready_for_next_market_window",
   "expected": {
@@ -42,7 +44,7 @@
     "task_name": "\\OptionsStrictForward30Collector",
     "task_to_run": "C:\\Users\\kalec\\options-chatbot\\scripts\\run_strict_forward_30_auto_window_collector.bat"
   },
-  "generated_at_utc": "2026-06-27T17:10:58Z",
+  "generated_at_utc": "2026-07-03T20:05:04Z",
   "prohibited_actions": [
     "do_not_append_from_scheduler_health",
     "do_not_enable_live_validation_from_scheduler_health",
@@ -55,33 +57,37 @@
   "query_returncode": 0,
   "query_stderr": [],
   "report_id": "regular_options_strict_forward_30_scheduler_health",
-  "runtime_blockers": [],
-  "runtime_status": "scheduler_runtime_observed_ok",
+  "runtime_blockers": [
+    "scheduler_runtime_last_result_nonzero"
+  ],
+  "runtime_status": "scheduler_runtime_failed",
   "runtime_telemetry": {
-    "blockers": [],
+    "blockers": [
+      "scheduler_runtime_last_result_nonzero"
+    ],
     "fields": {
-      "last_result": "0",
-      "last_run_time": "6/27/2026 11:09:20 AM",
-      "next_run_time": "6/29/2026 7:35:00 AM",
+      "last_result": "267009",
+      "last_run_time": "7/3/2026 2:05:01 PM",
+      "next_run_time": "7/6/2026 7:35:00 AM",
       "number_of_missed_runs": "",
       "start_date": "6/26/2026",
       "start_time": "7:35:00 AM"
     },
-    "generated_at_local": "2026-06-27T11:10:58",
+    "generated_at_local": "2026-07-03T14:05:04",
     "notes": [
       "Runtime telemetry is separate from top-level scheduler configuration readiness.",
       "Runtime blockers do not authorize append, live validation, auto-track, broker orders, quote import, proof-bar changes, or evidence mutation."
     ],
     "parsed": {
-      "last_result_code": 0,
+      "last_result_code": 267009,
       "last_run_time_is_never_run_sentinel": false,
-      "last_run_time_local": "2026-06-27T11:09:20",
-      "next_run_time_local": "2026-06-29T07:35:00",
+      "last_run_time_local": "2026-07-03T14:05:01",
+      "next_run_time_local": "2026-07-06T07:35:00",
       "number_of_missed_runs": null,
       "start_run_time_local": "2026-06-26T07:35:00"
     },
-    "runtime_blocking": false,
-    "status": "scheduler_runtime_observed_ok"
+    "runtime_blocking": true,
+    "status": "scheduler_runtime_failed"
   },
   "safety": {
     "append_allowed": false,
@@ -93,7 +99,7 @@
     "quotes_imported": false
   },
   "schema_version": 2,
-  "status": "scheduler_ready_for_next_market_window",
+  "status": "scheduler_runtime_blocked",
   "task": {
     "Author": "N/A",
     "Comment": "Runs strict-forward 30-row auto-window collector during regular market windows without append/live/autotrack.",
@@ -103,11 +109,11 @@
     "Folder": "\\",
     "HostName": "KAESDEVICE",
     "Idle Time": "Disabled",
-    "Last Result": "0",
-    "Last Run Time": "6/27/2026 11:09:20 AM",
+    "Last Result": "267009",
+    "Last Run Time": "7/3/2026 2:05:01 PM",
     "Logon Mode": "Interactive only",
     "Months": "Every 1 week(s)",
-    "Next Run Time": "6/29/2026 7:35:00 AM",
+    "Next Run Time": "7/6/2026 7:35:00 AM",
     "Power Management": "",
     "Repeat: Every": "0 Hour(s), 30 Minute(s)",
     "Repeat: Stop If Still Running": "Disabled",
@@ -120,7 +126,7 @@
     "Start Date": "6/26/2026",
     "Start In": "N/A",
     "Start Time": "7:35:00 AM",
-    "Status": "Ready",
+    "Status": "Running",
     "Stop Task If Runs X Hours and X Mins": "00:45:00",
     "Task To Run": "C:\\Users\\kalec\\options-chatbot\\scripts\\run_strict_forward_30_auto_window_collector.bat",
     "TaskName": "\\OptionsStrictForward30Collector"
