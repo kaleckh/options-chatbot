@@ -146,12 +146,16 @@ These are the living docs for the current worktree:
   - generated read-only evaluator for the pre-registered filtered-forward evidence bar; status remains `evaluation_not_permitted_yet` until the minimum completed-row count is reached
 - `docs/regular-options-forward-evidence-bar-throughput-projection.md`
   - generated read-only projection for whether the frozen filtered-forward evidence bar can reach the cohort checkpoint and four-month forward audit horizon from current post-freeze throughput; current status is `bar_unreachable_without_state_change`
+- `docs/regular-options-phase2-drop-decomposition.md`
+  - generated read-only decomposition of scheduled Phase 2 production-gate drops by reason, symbol, month, and playbook; current status is `phase2_drop_decomposition_ready`
 - `docs/regular-options-materializer-match-rate-stationarity.md`
   - generated read-only stationarity and frozen-threshold near-miss audit for the historical materializer match rate versus current post-freeze zero-match observations; current status is `post_freeze_zero_within_historical_variation`
 - `docs/regular-options-scanner-materializer-parity-diff.md`
   - generated Track C Phase 13 read-only scanner-vs-materializer parity diff; current default post-freeze window has `182` materializer rows, `0` filter-matched materializer candidates, and one SPY divergence row for read-only investigation
 - `data/profitability-lab/regular-options-materializer-match-rate-stationarity/latest.json`
   - machine-readable materializer match-rate stationarity artifact with policy hash checks, historical source fallback, zero-run stationarity, threshold-distance decomposition, session-window overlap, and hash-invariance proof
+- `data/forward-tracking/regular-options-phase2-drop-decomposition/latest.json`
+  - machine-readable Phase 2 scheduled-drop decomposition artifact with throughput reconciliation, full symbol-level drop rows, reason/symbol/month/playbook crosstabs, and read-only no-authority boundary flags
 - `data/forward-tracking/regular-options-scanner-materializer-parity-diff/latest.json`
   - machine-readable parity-diff artifact with daily table, divergence counts, per-lane/symbol summary, and diagnostic-only no-scanner-change boundary flags
 - `docs/regular-options-fresh-window-thetadata-opra-import.md`
@@ -172,6 +176,8 @@ These are the living docs for the current worktree:
   - read-only filtered-forward evidence-bar evaluator with contract hash checks and no approval authority
 - `scripts/build_regular_options_forward_evidence_bar_throughput_projection.py`
   - read-only forward evidence-bar throughput projection that keeps tracker, materializer, and scheduled-scan denominators separate while reporting cohort-checkpoint and four-month reachability
+- `scripts/build_regular_options_phase2_drop_decomposition.py`
+  - read-only Phase 2 scheduled-drop decomposition that reconciles the throughput audit and reports where production scanner gates drop symbols without changing policy, proof bars, evidence, cohorts, live validation, or broker behavior
 - `scripts/build_regular_options_materializer_match_rate_stationarity.py`
   - read-only stationarity audit that reconciles frozen-filter materializer matches, compares post-freeze zero-match runs to historical windows, and reports frozen-threshold near misses without changing policy or emitting counterfactual economics
 - `scripts/build_regular_options_scanner_materializer_parity_diff.py`
@@ -260,6 +266,8 @@ These are the living docs for the current worktree:
   - generated no-write readiness refresh for the strict-forward queue; consolidates current readbacks, market-window/preflight state, candidate JSONL existence, append permission, safety flags, and the one-screen operator decision table
 - `docs/regular-options-forward-candidate-throughput-audit.md`
   - generated read-only throughput audit for Phase 2 scan picks; distinguishes missing frozen-lane scheduled sessions from true same-day candidate starvation
+- `docs/regular-options-phase2-drop-decomposition.md`
+  - generated read-only scheduled Phase 2 drop decomposition that reconciles the throughput audit and breaks down the current production-gate starvation by reason, symbol, month, and playbook
 - `docs/regular-options-strict-forward-30-goal-loop.md`
   - generated coordinator report for the active `30` strict completed forward-row goal; runs/checks the safe sweep/capture/throughput/readiness sequence while preserving no-fabrication, no-live, no-broker, no-autotrack, no-proof-change, and guarded-append boundaries
 - `docs/regular-options-strict-forward-30-market-window-collector.md`
