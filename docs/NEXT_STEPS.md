@@ -1,6 +1,20 @@
 # Next Steps
 
-Last updated: 2026-07-02
+Last updated: 2026-07-04
+
+## Current Fable Profitability Loop Readback
+
+Current read:
+- The Fable planner loop ran through the local Claude subscription CLI in plan mode and returned a validated `verdict=implement` plan. The normalized plan is under `data/agent-control/fable/validated_plan_latest.json` / `.md`; the raw audit is under `data/agent-control/fable/fable_profitability_four_month_audit_raw.md`.
+- The stale fresh-window blocker is cleared for the latest window. `data/profitability-lab/regular-options-fresh-window-thetadata-opra/latest.json` reports `fresh_window_thetadata_opra_imported`, `21,654` imported trusted rows, store max after import `2026-07-02`, protected-holdout overlap `0`, outside-universe rows `0`, and generated timestamp `2026-07-03T23:30:02Z`.
+- The scanner/materializer parity diff is now current enough to expose a denominator. `data/forward-tracking/regular-options-scanner-materializer-parity-diff/latest.json` reports `scanner_materializer_parity_diff_ready`, `182` in-window materializer rows, `0` filter-matched selected rows, and one SPY `2026-06-16` divergence where the scheduled scanner pick occurred at `13:45:28` ET while the materializer entry window is `10:10-10:25` ET.
+- The filtered forward tracker remains empty: `0` matched rows and `0` completed rows toward the `30` row evidence bar. The forward-candidate throughput audit reports `blocked_no_same_day_phase2_natural_selections` with `2,398` scheduled Phase 2 drops and symbol-level near-miss evidence.
+- `npm run options:audit:forward-evidence-bar-throughput-projection -- --json` now reports `bar_unreachable_without_state_change`. At the observed `0.0` completed rows per market day, the `2026-07-28` checkpoint still needs `30` rows over `17` remaining market days, and the freeze-anchored four-month horizon ending `2026-10-14` still needs `30` rows over `72` remaining market days.
+
+Next safe action:
+- Keep scheduled forward collection and exit capture running as already approved, but do not wait until the four-month audit date to discover an empty denominator.
+- Use the projection as a warning surface only. It does not authorize scanner-policy changes, filter/threshold changes, proof-bar changes, cohort append, quote import, evidence-store mutation, protected-holdout use, live validation, auto-track, broker action, accepted profitability, or promotion.
+- If the operator wants a state change, draft a separate preregistered research contract for refreeze/filter-family options before touching any frozen policy or evidence-bar behavior.
 
 ## Active Historical Robust-Search Track
 

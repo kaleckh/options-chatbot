@@ -32,6 +32,7 @@ class DailyOpsRunnerTests(unittest.TestCase):
                 "filtered_forward_paper_shadow_tracker",
                 "filtered_forward_exit_evidence_capture",
                 "filtered_forward_evidence_bar_evaluation",
+                "forward_evidence_bar_throughput_projection",
                 "open_risk_exit_evidence_plan",
                 "suggested_trade_review_plan",
                 "fill_attempt_evidence_capture_plan",
@@ -65,6 +66,7 @@ class DailyOpsRunnerTests(unittest.TestCase):
                 "historical_candidate_generation_audit",
                 "paper_shadow_collection",
                 "exit_evidence_capture",
+                "paper_shadow_collection",
                 "paper_shadow_collection",
                 "exit_evidence_capture",
                 "suggested_trade_review_plan_execution",
@@ -102,11 +104,13 @@ class DailyOpsRunnerTests(unittest.TestCase):
         self.assertIn([sys.executable, "scripts/build_regular_options_filtered_forward_paper_shadow_tracker.py"], calls)
         self.assertIn([sys.executable, "scripts/capture_regular_options_filtered_forward_exit_evidence.py", "--no-write"], calls)
         self.assertIn([sys.executable, "scripts/build_regular_options_filtered_forward_evidence_bar_evaluation.py"], calls)
+        self.assertIn([sys.executable, "scripts/build_regular_options_forward_evidence_bar_throughput_projection.py"], calls)
         self.assertEqual(report["required_stage_order"], list(run_daily_ops.REQUIRED_STAGE_ORDER))
         self.assertIn("earnings readiness and source-repair planning", report["boundary"])
         self.assertIn("historical simulated-forward audit every run", report["boundary"])
         self.assertIn("heartbeat health before the gateboard", report["boundary"])
         self.assertIn("evaluates the pre-registered forward evidence bar", report["boundary"])
+        self.assertIn("four-month forward audit horizon", report["boundary"])
         self.assertTrue(all(step["read_only_safe"] for step in report["steps"]))
         heartbeat_step = next(step for step in report["steps"] if step["id"] == "scheduled_scan_heartbeat_health")
         self.assertTrue(heartbeat_step["continue_after_failure"])
@@ -168,11 +172,12 @@ class DailyOpsRunnerTests(unittest.TestCase):
                 "filtered_forward_paper_shadow_tracker",
                 "filtered_forward_exit_evidence_capture",
                 "filtered_forward_evidence_bar_evaluation",
+                "forward_evidence_bar_throughput_projection",
                 "open_risk_exit_evidence_plan",
                 "suggested_trade_review_plan",
             ],
         )
-        self.assertEqual(run.call_count, 17)
+        self.assertEqual(run.call_count, 18)
 
     def test_continue_on_failure_keeps_collecting_read_only_statuses(self) -> None:
         def fake_run(command, **kwargs):

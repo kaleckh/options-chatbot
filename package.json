@@ -228,6 +228,7 @@
     "options:plan:strict-forward-operator-queue": "uv run --locked python scripts/build_regular_options_strict_forward_operator_queue.py",
     "options:plan:strict-forward-market-window-readiness-refresh": "uv run --locked python scripts/build_regular_options_strict_forward_market_window_readiness_refresh.py",
     "options:audit:forward-candidate-throughput": "uv run --locked python scripts/build_regular_options_forward_candidate_throughput_audit.py",
+    "options:audit:forward-evidence-bar-throughput-projection": "uv run --locked python scripts/build_regular_options_forward_evidence_bar_throughput_projection.py",
     "options:audit:scanner-materializer-parity-diff": "uv run --locked python scripts/build_regular_options_scanner_materializer_parity_diff.py",
     "options:goal-loop:strict-forward-30": "uv run --locked python scripts/run_regular_options_strict_forward_30_goal_loop.py",
     "options:goal-loop:strict-forward-30-collector": "uv run --locked python scripts/run_regular_options_strict_forward_30_market_window_collector.py",

@@ -1,5 +1,13 @@
 # Decisions
 
+## 2026-07-04: Four-Month Forward Audit Projections Are Warning Surfaces, Not Proof
+
+The four-month forward audit is the best current success indicator for the frozen filtered-forward lane, but the audit can fail silently if it reaches the evaluation date with an empty or tiny denominator. A projection surface is needed to name that risk early without changing the evidence bar or treating historical/materializer rows as forward proof.
+
+Durable decision: `scripts/build_regular_options_forward_evidence_bar_throughput_projection.py`, exposed as `npm run options:audit:forward-evidence-bar-throughput-projection`, owns the read-only reachability projection for the filtered forward evidence bar. It hash-verifies the frozen policy and evidence-bar contracts, loads only existing tracker/parity/throughput/fresh-import artifacts, keeps tracker rows, materializer rows, and scheduled-scan drops in separate denominator sections, and reports both the `2026-07-28` cohort checkpoint and the freeze-anchored `2026-10-14` four-month horizon. Its fixed status vocabulary is `bar_reachable_at_current_rate`, `bar_at_risk_needs_rate_increase`, `bar_unreachable_without_state_change`, `insufficient_post_freeze_observation_window`, and `blocked_missing_or_stale_inputs`.
+
+Current real state after the July 3 fresh-window import: the projection reports `bar_unreachable_without_state_change`, with `0` matched tracker rows, `0` completed rows, `182` in-window materializer rows, `0` filter-matched materializer candidates, and `2,398` scheduled-scan drops. This is an operator warning surface only. It does not authorize scanner-policy changes, filter or threshold changes, proof-bar changes, cohort append, quote import, evidence-store mutation, protected-holdout use, live validation, auto-track, broker action, accepted profitability, or promotion.
+
 ## 2026-07-02: Phase 15 Out-of-Sample Window Is A One-Shot Consumed Evaluation Window
 
 The pre-registered out-of-sample contract covers `2022-01` through `2024-05` for the frozen 13-symbol proof set and frozen filter hash. Once that window is inspected for the frozen filter, it must be consumed even if source coverage blocks a full evaluation. It cannot become a tuning, threshold-selection, or filter-family search surface.

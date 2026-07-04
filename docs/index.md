@@ -144,12 +144,14 @@ These are the living docs for the current worktree:
   - generated filtered-forward exit-completion readback over the append-only matched-row log; reads trusted quote stores in read-only mode and can append completion events only through the dedicated script, without quote import, broker, live, auto-track, scanner-policy, proof-bar, or promotion authority
 - `docs/regular-options-filtered-forward-evidence-bar-evaluation.md`
   - generated read-only evaluator for the pre-registered filtered-forward evidence bar; status remains `evaluation_not_permitted_yet` until the minimum completed-row count is reached
+- `docs/regular-options-forward-evidence-bar-throughput-projection.md`
+  - generated read-only projection for whether the frozen filtered-forward evidence bar can reach the cohort checkpoint and four-month forward audit horizon from current post-freeze throughput; current status is `bar_unreachable_without_state_change`
 - `docs/regular-options-scanner-materializer-parity-diff.md`
-  - generated Track C Phase 13 read-only scanner-vs-materializer parity diff; current default post-freeze window has scheduled scan sessions but no materializer rows, so no top starvation gate is inferred from parity rows
+  - generated Track C Phase 13 read-only scanner-vs-materializer parity diff; current default post-freeze window has `182` materializer rows, `0` filter-matched materializer candidates, and one SPY divergence row for read-only investigation
 - `data/forward-tracking/regular-options-scanner-materializer-parity-diff/latest.json`
   - machine-readable parity-diff artifact with daily table, divergence counts, per-lane/symbol summary, and diagnostic-only no-scanner-change boundary flags
 - `docs/regular-options-fresh-window-thetadata-opra-import.md`
-  - generated Track C Phase 16 token-gated fresh-window ThetaData OPRA/NBBO import readback; current dry-run plans from store max `2026-06-08` through latest completed market day `2026-07-01`, while the real write waits for store coordination
+  - generated Track C Phase 16 token-gated fresh-window ThetaData OPRA/NBBO import readback; the July 3 approved import wrote `21,654` trusted rows through store max `2026-07-02` with protected-holdout overlap `0`
 - `docs/regular-options-fresh-window-import-scheduler-health.md`
   - generated weekday post-close scheduler-health readback for `\OptionsFreshWindowThetaDataOPRAImport`; validates the wrapper has no scan, auto-track, append, broker, proof, or promotion flags
 - `data/contracts/regular-options-frozen-filtered-policy-v1.json`
@@ -164,6 +166,8 @@ These are the living docs for the current worktree:
   - append-only filtered-forward exact-exit completion writer; it reads trusted exit quote evidence and never imports quotes, creates trades, submits orders, or changes scanner policy
 - `scripts/build_regular_options_filtered_forward_evidence_bar_evaluation.py`
   - read-only filtered-forward evidence-bar evaluator with contract hash checks and no approval authority
+- `scripts/build_regular_options_forward_evidence_bar_throughput_projection.py`
+  - read-only forward evidence-bar throughput projection that keeps tracker, materializer, and scheduled-scan denominators separate while reporting cohort-checkpoint and four-month reachability
 - `scripts/build_regular_options_scanner_materializer_parity_diff.py`
   - read-only Track C Phase 13 parity-diff builder; loads materializer JSONL, scan-pick JSONL, and scheduled-scan ledger sessions without running the scanner or mutating evidence stores
 - `scripts/import_regular_options_fresh_window_thetadata_opra.py`
