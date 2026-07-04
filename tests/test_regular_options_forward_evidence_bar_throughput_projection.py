@@ -64,8 +64,10 @@ def _write_artifacts(
     market_days: int = 13,
     matched: int = 0,
     completed: int = 0,
+    tracker_bar_completed: int | None = None,
     materializer_rows: int = 182,
     materializer_filter_matches: int = 0,
+    parity_summary_filter_matches: int | None = None,
     drops: int = 2398,
 ) -> None:
     _write_json(
@@ -78,7 +80,7 @@ def _write_artifacts(
                 "completed_candidate_count": completed,
             },
             "forward_evidence_bar": {
-                "completed_forward_rows": completed,
+                "completed_forward_rows": completed if tracker_bar_completed is None else tracker_bar_completed,
                 "required_completed_forward_rows": 30,
             },
             "parity_disclosure": {
@@ -98,7 +100,11 @@ def _write_artifacts(
                 "filter_matched_selected_rows_in_window": materializer_filter_matches,
                 "latest_materializer_date": "2026-07-02",
             },
-            "summary": {"filtered_materializer_candidate_rows": materializer_filter_matches},
+            "summary": {
+                "filtered_materializer_candidate_rows": materializer_filter_matches
+                if parity_summary_filter_matches is None
+                else parity_summary_filter_matches
+            },
             "scheduled_scan_coverage": {"session_times_et": ["13:45:28"]},
             "boundary": {"materializer_entry_window_et": "10:10-10:25"},
             "divergence_rows": [
@@ -163,6 +169,38 @@ class ForwardEvidenceBarThroughputProjectionTests(unittest.TestCase):
         self.assertEqual(report["spy_2026_06_16_divergence_readback"]["status"], "spy_2026_06_16_divergence_found")
         self.assertFalse(report["accepted_profitability"])
         self.assertFalse(report["evidence_stores_mutated"])
+
+    def test_zero_values_do_not_fall_back_to_nonzero_secondary_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = _fixture_paths(Path(tmp))
+            _write_contracts(paths)
+            _write_artifacts(
+                paths,
+                completed=0,
+                tracker_bar_completed=7,
+                materializer_filter_matches=0,
+                parity_summary_filter_matches=5,
+            )
+            report = _build(paths)
+
+        self.assertEqual(report["denominators"]["tracker_forward_rows"]["observed_completed_rows"], 0)
+        self.assertEqual(report["denominators"]["materializer_in_window_rows"]["materializer_filter_matched_selected_rows"], 0)
+        self.assertEqual(report["status"], "bar_unreachable_without_state_change")
+
+    def test_remaining_market_days_are_anchored_to_projection_reference_date(self) -> None:
+        generated_at = "2026-07-07T16:00:00Z"
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = _fixture_paths(Path(tmp))
+            _write_contracts(paths)
+            _write_artifacts(paths, generated_at=generated_at, market_days=13, completed=2, materializer_filter_matches=2)
+            report = _build(paths, generated_at=generated_at)
+
+        cohort = report["horizon_projections"][0]
+        expected_elapsed = projection._market_day_count(projection.FREEZE_DATE, projection.date(2026, 7, 7))
+        self.assertEqual(cohort["observed_market_days"], 13)
+        self.assertEqual(cohort["elapsed_market_days_as_of_reference"], expected_elapsed)
+        self.assertEqual(cohort["remaining_market_days"], cohort["total_market_days"] - expected_elapsed)
+        self.assertNotEqual(cohort["remaining_market_days"], cohort["total_market_days"] - cohort["observed_market_days"])
 
     def test_reachable_when_current_completed_rate_covers_both_horizons(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,0 +1,814 @@
+{
+  "accepted_profitability": false,
+  "artifacts": {
+    "docs_report": "docs/regular-options-materializer-match-rate-stationarity.md",
+    "json": "data/profitability-lab/regular-options-materializer-match-rate-stationarity/regular_options_materializer_match_rate_stationarity_20260704T170621Z.json",
+    "latest_json": "data/profitability-lab/regular-options-materializer-match-rate-stationarity/latest.json",
+    "latest_markdown": "data/profitability-lab/regular-options-materializer-match-rate-stationarity/latest.md",
+    "markdown": "data/profitability-lab/regular-options-materializer-match-rate-stationarity/regular_options_materializer_match_rate_stationarity_20260704T170621Z.md"
+  },
+  "auto_track_enabled": false,
+  "blockers": [],
+  "broker_order_allowed": false,
+  "cohort_append_performed": false,
+  "evidence_stores_mutated": false,
+  "forward_rows_are_profitability_proof": false,
+  "frozen_filter": {
+    "conditions": [
+      {
+        "field": "ticker",
+        "op": "in",
+        "value": [
+          "NEM",
+          "JNJ",
+          "GOOGL",
+          "AAPL",
+          "IWM",
+          "CVX",
+          "SPY",
+          "QQQ"
+        ]
+      },
+      {
+        "field": "signal_evidence.prior_20_trading_day_return_pct",
+        "op": "gte",
+        "value": 10.990605
+      }
+    ],
+    "conditions_sha256": "3b10d0306800e1a203480b80e4fafda03d5e1b6443d8d294cbf8ff7f20324967",
+    "prior_20_trading_day_return_pct_threshold": 10.990605
+  },
+  "frozen_threshold_distance_summary": {
+    "counterfactual_economics_emitted": false,
+    "counterfactual_match_counts_emitted": false,
+    "distance_basis": "frozen_threshold_minus_prior_20_return_for_historical_accepted_rows_below_threshold",
+    "median_distance": 6.52111,
+    "min_distance": 0.023566,
+    "nearest_rows": [
+      {
+        "date": "2024-07-29",
+        "distance_to_threshold": 0.023566,
+        "lane_id": "bullish_pullback_observation",
+        "month": "2024-07",
+        "prior_20_trading_day_return_pct": 10.967039,
+        "ticker": "IWM"
+      },
+      {
+        "date": "2024-07-29",
+        "distance_to_threshold": 0.023566,
+        "lane_id": "volatility_expansion_observation",
+        "month": "2024-07",
+        "prior_20_trading_day_return_pct": 10.967039,
+        "ticker": "IWM"
+      },
+      {
+        "date": "2026-04-22",
+        "distance_to_threshold": 0.055062,
+        "lane_id": "bullish_pullback_observation",
+        "month": "2026-04",
+        "prior_20_trading_day_return_pct": 10.935543,
+        "ticker": "IWM"
+      },
+      {
+        "date": "2026-04-22",
+        "distance_to_threshold": 0.055062,
+        "lane_id": "volatility_expansion_observation",
+        "month": "2026-04",
+        "prior_20_trading_day_return_pct": 10.935543,
+        "ticker": "IWM"
+      },
+      {
+        "date": "2025-02-25",
+        "distance_to_threshold": 0.074006,
+        "lane_id": "bullish_pullback_observation",
+        "month": "2025-02",
+        "prior_20_trading_day_return_pct": 10.916599,
+        "ticker": "AAPL"
+      },
+      {
+        "date": "2024-07-18",
+        "distance_to_threshold": 0.087411,
+        "lane_id": "bullish_pullback_observation",
+        "month": "2024-07",
+        "prior_20_trading_day_return_pct": 10.903194,
+        "ticker": "IWM"
+      },
+      {
+        "date": "2024-07-18",
+        "distance_to_threshold": 0.087411,
+        "lane_id": "volatility_expansion_observation",
+        "month": "2024-07",
+        "prior_20_trading_day_return_pct": 10.903194,
+        "ticker": "IWM"
+      },
+      {
+        "date": "2024-08-01",
+        "distance_to_threshold": 0.102949,
+        "lane_id": "bullish_pullback_observation",
+        "month": "2024-08",
+        "prior_20_trading_day_return_pct": 10.887656,
+        "ticker": "IWM"
+      },
+      {
+        "date": "2024-08-01",
+        "distance_to_threshold": 0.102949,
+        "lane_id": "volatility_expansion_observation",
+        "month": "2024-08",
+        "prior_20_trading_day_return_pct": 10.887656,
+        "ticker": "IWM"
+      },
+      {
+        "date": "2024-12-26",
+        "distance_to_threshold": 0.113291,
+        "lane_id": "bullish_pullback_observation",
+        "month": "2024-12",
+        "prior_20_trading_day_return_pct": 10.877314,
+        "ticker": "AAPL"
+      },
+      {
+        "date": "2025-04-02",
+        "distance_to_threshold": 0.128763,
+        "lane_id": "bullish_pullback_observation",
+        "month": "2025-04",
+        "prior_20_trading_day_return_pct": 10.861842,
+        "ticker": "CVX"
+      },
+      {
+        "date": "2025-12-03",
+        "distance_to_threshold": 0.135422,
+        "lane_id": "bullish_pullback_observation",
+        "month": "2025-12",
+        "prior_20_trading_day_return_pct": 10.855183,
+        "ticker": "NEM"
+      },
+      {
+        "date": "2025-10-01",
+        "distance_to_threshold": 0.146969,
+        "lane_id": "bullish_pullback_observation",
+        "month": "2025-10",
+        "prior_20_trading_day_return_pct": 10.843636,
+        "ticker": "AAPL"
+      },
+      {
+        "date": "2025-08-15",
+        "distance_to_threshold": 0.153542,
+        "lane_id": "bullish_pullback_observation",
+        "month": "2025-08",
+        "prior_20_trading_day_return_pct": 10.837063,
+        "ticker": "AAPL"
+      },
+      {
+        "date": "2026-02-20",
+        "distance_to_threshold": 0.164719,
+        "lane_id": "bullish_pullback_observation",
+        "month": "2026-02",
+        "prior_20_trading_day_return_pct": 10.825886,
+        "ticker": "CVX"
+      },
+      {
+        "date": "2026-04-24",
+        "distance_to_threshold": 0.170966,
+        "lane_id": "volatility_expansion_observation",
+        "month": "2026-04",
+        "prior_20_trading_day_return_pct": 10.819639,
+        "ticker": "QQQ"
+      },
+      {
+        "date": "2025-01-23",
+        "distance_to_threshold": 0.179411,
+        "lane_id": "bullish_pullback_observation",
+        "month": "2025-01",
+        "prior_20_trading_day_return_pct": 10.811194,
+        "ticker": "CVX"
+      },
+      {
+        "date": "2025-11-14",
+        "distance_to_threshold": 0.209566,
+        "lane_id": "bullish_pullback_observation",
+        "month": "2025-11",
+        "prior_20_trading_day_return_pct": 10.781039,
+        "ticker": "GOOGL"
+      },
+      {
+        "date": "2026-02-10",
+        "distance_to_threshold": 0.218975,
+        "lane_id": "bullish_pullback_observation",
+        "month": "2026-02",
+        "prior_20_trading_day_return_pct": 10.77163,
+        "ticker": "NEM"
+      },
+      {
+        "date": "2026-01-26",
+        "distance_to_threshold": 0.220556,
+        "lane_id": "bullish_pullback_observation",
+        "month": "2026-01",
+        "prior_20_trading_day_return_pct": 10.770049,
+        "ticker": "CVX"
+      }
+    ],
+    "non_threshold_filter_conditions": [
+      {
+        "field": "ticker",
+        "op": "in",
+        "value": [
+          "NEM",
+          "JNJ",
+          "GOOGL",
+          "AAPL",
+          "IWM",
+          "CVX",
+          "SPY",
+          "QQQ"
+        ]
+      }
+    ],
+    "non_threshold_filter_eligible_row_count": 2066,
+    "p25_distance": 4.160818,
+    "p75_distance": 8.41675,
+    "row_count_with_distance": 1760,
+    "threshold": 10.990605
+  },
+  "generated_at_utc": "2026-07-04T17:04:53Z",
+  "hash_invariance": {
+    "all_unchanged": true,
+    "checks": [
+      {
+        "after_sha256": "4994db5793d17de6b7ca88e5fc67bc880ebb53eb0d54103e1e948f23ee7c926b",
+        "before_sha256": "4994db5793d17de6b7ca88e5fc67bc880ebb53eb0d54103e1e948f23ee7c926b",
+        "length": 41101647872,
+        "path": "data/options-validation/options_history.db",
+        "unchanged": true
+      },
+      {
+        "after_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "length": 0,
+        "path": "data/forward-tracking/regular-options-filtered-forward-paper-shadow/matched_rows.jsonl",
+        "unchanged": true
+      },
+      {
+        "after_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "length": 0,
+        "path": "data/forward-tracking/regular-options-filtered-forward-paper-shadow/candidate_rows.jsonl",
+        "unchanged": true
+      }
+    ],
+    "recorded": true
+  },
+  "historical_materializer": {
+    "accepted_exact_rows": 2851,
+    "disclosed_historical_filtered_materializer_months": 24,
+    "disclosed_historical_filtered_materializer_rows": 306,
+    "frozen_filter_match_rows": 306,
+    "monthly_match_counts": {
+      "2024-06": 10,
+      "2024-07": 13,
+      "2024-08": 5,
+      "2024-09": 2,
+      "2024-11": 1,
+      "2024-12": 14,
+      "2025-01": 5,
+      "2025-02": 9,
+      "2025-03": 1,
+      "2025-04": 12,
+      "2025-05": 14,
+      "2025-06": 12,
+      "2025-07": 12,
+      "2025-08": 23,
+      "2025-09": 40,
+      "2025-10": 14,
+      "2025-11": 19,
+      "2025-12": 12,
+      "2026-01": 23,
+      "2026-02": 11,
+      "2026-03": 6,
+      "2026-04": 30,
+      "2026-05": 18
+    },
+    "monthly_table": [
+      {
+        "accepted_materializer_rows": 98,
+        "frozen_filter_match_rows": 10,
+        "match_rate": 0.102041,
+        "month": "2024-06"
+      },
+      {
+        "accepted_materializer_rows": 163,
+        "frozen_filter_match_rows": 13,
+        "match_rate": 0.079755,
+        "month": "2024-07"
+      },
+      {
+        "accepted_materializer_rows": 107,
+        "frozen_filter_match_rows": 5,
+        "match_rate": 0.046729,
+        "month": "2024-08"
+      },
+      {
+        "accepted_materializer_rows": 97,
+        "frozen_filter_match_rows": 2,
+        "match_rate": 0.020619,
+        "month": "2024-09"
+      },
+      {
+        "accepted_materializer_rows": 187,
+        "frozen_filter_match_rows": 0,
+        "match_rate": 0.0,
+        "month": "2024-10"
+      },
+      {
+        "accepted_materializer_rows": 123,
+        "frozen_filter_match_rows": 1,
+        "match_rate": 0.00813,
+        "month": "2024-11"
+      },
+      {
+        "accepted_materializer_rows": 84,
+        "frozen_filter_match_rows": 14,
+        "match_rate": 0.166667,
+        "month": "2024-12"
+      },
+      {
+        "accepted_materializer_rows": 67,
+        "frozen_filter_match_rows": 5,
+        "match_rate": 0.074627,
+        "month": "2025-01"
+      },
+      {
+        "accepted_materializer_rows": 94,
+        "frozen_filter_match_rows": 9,
+        "match_rate": 0.095745,
+        "month": "2025-02"
+      },
+      {
+        "accepted_materializer_rows": 66,
+        "frozen_filter_match_rows": 1,
+        "match_rate": 0.015152,
+        "month": "2025-03"
+      },
+      {
+        "accepted_materializer_rows": 32,
+        "frozen_filter_match_rows": 12,
+        "match_rate": 0.375,
+        "month": "2025-04"
+      },
+      {
+        "accepted_materializer_rows": 71,
+        "frozen_filter_match_rows": 14,
+        "match_rate": 0.197183,
+        "month": "2025-05"
+      },
+      {
+        "accepted_materializer_rows": 148,
+        "frozen_filter_match_rows": 12,
+        "match_rate": 0.081081,
+        "month": "2025-06"
+      },
+      {
+        "accepted_materializer_rows": 238,
+        "frozen_filter_match_rows": 12,
+        "match_rate": 0.05042,
+        "month": "2025-07"
+      },
+      {
+        "accepted_materializer_rows": 158,
+        "frozen_filter_match_rows": 23,
+        "match_rate": 0.14557,
+        "month": "2025-08"
+      },
+      {
+        "accepted_materializer_rows": 211,
+        "frozen_filter_match_rows": 40,
+        "match_rate": 0.189573,
+        "month": "2025-09"
+      },
+      {
+        "accepted_materializer_rows": 186,
+        "frozen_filter_match_rows": 14,
+        "match_rate": 0.075269,
+        "month": "2025-10"
+      },
+      {
+        "accepted_materializer_rows": 100,
+        "frozen_filter_match_rows": 19,
+        "match_rate": 0.19,
+        "month": "2025-11"
+      },
+      {
+        "accepted_materializer_rows": 144,
+        "frozen_filter_match_rows": 12,
+        "match_rate": 0.083333,
+        "month": "2025-12"
+      },
+      {
+        "accepted_materializer_rows": 132,
+        "frozen_filter_match_rows": 23,
+        "match_rate": 0.174242,
+        "month": "2026-01"
+      },
+      {
+        "accepted_materializer_rows": 105,
+        "frozen_filter_match_rows": 11,
+        "match_rate": 0.104762,
+        "month": "2026-02"
+      },
+      {
+        "accepted_materializer_rows": 69,
+        "frozen_filter_match_rows": 6,
+        "match_rate": 0.086957,
+        "month": "2026-03"
+      },
+      {
+        "accepted_materializer_rows": 127,
+        "frozen_filter_match_rows": 30,
+        "match_rate": 0.23622,
+        "month": "2026-04"
+      },
+      {
+        "accepted_materializer_rows": 44,
+        "frozen_filter_match_rows": 18,
+        "match_rate": 0.409091,
+        "month": "2026-05"
+      }
+    ],
+    "selected_candidate_rows": 2972
+  },
+  "historical_rows_are_forward_proof": false,
+  "inputs": {
+    "historical_engine": {
+      "age_days": 1,
+      "exists": true,
+      "generated_at_utc": "2026-07-03T21:36:11Z",
+      "path": "data/profitability-lab/regular-options-13-symbol-frozen-candidate-generation-engine/regular_options_13_symbol_frozen_candidate_generation_engine_20260703T213611Z.json",
+      "sha256": "78f35d24162805dd17465fbe4f75b792dd6927a2e111c83e51ba31f82acd7c70",
+      "source_mode": "latest_ready_historical_engine_snapshot",
+      "status": "loaded"
+    },
+    "inspected_historical_engine_sources": [
+      {
+        "age_days": 1,
+        "embedded_selected_candidates": 0,
+        "generated_at_utc": "2026-07-03T23:45:40Z",
+        "path": "data/profitability-lab/regular-options-13-symbol-frozen-candidate-generation-engine/latest.json",
+        "selected_candidate_row_count": 0,
+        "status": "blocked_frozen_13_symbol_candidate_generation_engine"
+      },
+      {
+        "age_days": 1,
+        "embedded_selected_candidates": 0,
+        "generated_at_utc": "2026-07-03T23:45:40Z",
+        "path": "data/profitability-lab/regular-options-13-symbol-frozen-candidate-generation-engine/regular_options_13_symbol_frozen_candidate_generation_engine_20260703T234540Z.json",
+        "selected_candidate_row_count": 0,
+        "status": "blocked_frozen_13_symbol_candidate_generation_engine"
+      },
+      {
+        "age_days": 1,
+        "embedded_selected_candidates": 2972,
+        "generated_at_utc": "2026-07-03T21:36:11Z",
+        "path": "data/profitability-lab/regular-options-13-symbol-frozen-candidate-generation-engine/regular_options_13_symbol_frozen_candidate_generation_engine_20260703T213611Z.json",
+        "selected_candidate_row_count": 2972,
+        "status": "frozen_13_symbol_candidate_generation_engine_ready"
+      }
+    ],
+    "parity_latest": {
+      "age_days": 1,
+      "exists": true,
+      "path": "data/forward-tracking/regular-options-scanner-materializer-parity-diff/latest.json",
+      "sha256": "342f0f60169c560b3322eae7941245d8b86eb15992628e559eb7f911b4245797",
+      "status": "loaded"
+    },
+    "policy_contract": {
+      "exists": true,
+      "path": "data/contracts/regular-options-frozen-filtered-policy-v1.json",
+      "sha256": "2054eafc577ddc10f4cd4bbd4c4b4133c6e82d3d8bd7be2d6bd1dc547dc42b00",
+      "status": "loaded"
+    },
+    "throughput_latest": {
+      "age_days": 1,
+      "exists": true,
+      "path": "data/forward-tracking/regular_options_forward_candidate_throughput_audit_latest.json",
+      "sha256": "e6cf8064723cbda0ce06b059444c9b927fa67cb55011882b88ca38be73c29a67",
+      "status": "loaded"
+    },
+    "tracker_latest": {
+      "age_days": 1,
+      "exists": true,
+      "path": "data/forward-tracking/regular-options-filtered-forward-paper-shadow/latest.json",
+      "sha256": "741dd3dab2544bebabb10e9898b966242899a561b4829eb5bc143668f2803d5b",
+      "status": "loaded"
+    }
+  },
+  "live_validation_enabled": false,
+  "policy_hash_checks": {
+    "actual_policy_contract_sha256": "2054eafc577ddc10f4cd4bbd4c4b4133c6e82d3d8bd7be2d6bd1dc547dc42b00",
+    "computed_conditions_sha256": "3b10d0306800e1a203480b80e4fafda03d5e1b6443d8d294cbf8ff7f20324967",
+    "expected_conditions_sha256": "3b10d0306800e1a203480b80e4fafda03d5e1b6443d8d294cbf8ff7f20324967",
+    "policy_conditions_hash_match": true,
+    "policy_contract_loaded": true
+  },
+  "post_freeze_observation": {
+    "observed_market_days": 13,
+    "parity_filter_matched_selected_rows_in_window": 0,
+    "parity_materializer_rows_in_window": 182,
+    "parity_status": "scanner_materializer_parity_diff_ready",
+    "tracker_completed_rows": 0,
+    "tracker_matched_rows": 0
+  },
+  "prohibited_actions": [
+    "do_not_change_scanner_policy_from_stationarity_report",
+    "do_not_change_filter_or_threshold_from_stationarity_report",
+    "do_not_emit_counterfactual_threshold_match_counts",
+    "do_not_emit_counterfactual_threshold_economics",
+    "do_not_import_quotes_from_stationarity_report",
+    "do_not_mutate_evidence_stores_from_stationarity_report",
+    "do_not_append_cohort_rows_from_stationarity_report",
+    "do_not_enable_live_validation_from_stationarity_report",
+    "do_not_enable_auto_track_from_stationarity_report",
+    "do_not_submit_broker_orders_from_stationarity_report",
+    "do_not_consume_protected_holdout_from_stationarity_report",
+    "do_not_promote_from_stationarity_report"
+  ],
+  "promotion_ready": false,
+  "proof_bars_changed": false,
+  "proof_boundary": "This report emits descriptive stationarity and distance statistics only. It is not profitability evidence, does not evaluate alternative thresholds, and does not authorize scanner policy, filter, proof-bar, live, auto-track, broker, quote-import, cohort-append, holdout, or promotion actions.",
+  "protected_holdout_consumed": false,
+  "quotes_imported": false,
+  "read_only": true,
+  "report_id": "regular_options_materializer_match_rate_stationarity",
+  "research_only": true,
+  "scanner_policy_changed": false,
+  "scheduled_scan_near_miss_summary": {
+    "distance_available_count": 50,
+    "median_distance_to_pass": 6.22,
+    "min_distance_to_pass": 2.06,
+    "near_miss_status": "symbol_level_near_miss_table_ready",
+    "nearest_rows": [
+      {
+        "distance_to_pass": 2.06,
+        "drop_key": "option_liquidity",
+        "near_miss_rank_basis": "distance_to_pass",
+        "non_promotable": true,
+        "playbook": "bullish_pullback_observation",
+        "reason": "illiquid_quote",
+        "selection_date": "2026-07-02",
+        "symbol": "JPM"
+      },
+      {
+        "distance_to_pass": 2.56,
+        "drop_key": "option_liquidity",
+        "near_miss_rank_basis": "distance_to_pass",
+        "non_promotable": true,
+        "playbook": "bullish_pullback_observation",
+        "reason": "illiquid_quote",
+        "selection_date": "2026-07-02",
+        "symbol": "JPM"
+      },
+      {
+        "distance_to_pass": 2.97,
+        "drop_key": "option_liquidity",
+        "near_miss_rank_basis": "distance_to_pass",
+        "non_promotable": true,
+        "playbook": "bullish_pullback_observation",
+        "reason": "illiquid_quote",
+        "selection_date": "2026-07-02",
+        "symbol": "JPM"
+      },
+      {
+        "distance_to_pass": 3.38,
+        "drop_key": "option_liquidity",
+        "near_miss_rank_basis": "distance_to_pass",
+        "non_promotable": true,
+        "playbook": "bullish_pullback_observation",
+        "reason": "illiquid_quote",
+        "selection_date": "2026-07-02",
+        "symbol": "JPM"
+      },
+      {
+        "distance_to_pass": 3.83,
+        "drop_key": "option_liquidity",
+        "near_miss_rank_basis": "distance_to_pass",
+        "non_promotable": true,
+        "playbook": "volatility_expansion_observation",
+        "reason": "illiquid_quote",
+        "selection_date": "2026-07-02",
+        "symbol": "DIA"
+      },
+      {
+        "distance_to_pass": 4.19,
+        "drop_key": "option_liquidity",
+        "near_miss_rank_basis": "distance_to_pass",
+        "non_promotable": true,
+        "playbook": "bullish_pullback_observation",
+        "reason": "illiquid_quote",
+        "selection_date": "2026-07-02",
+        "symbol": "JPM"
+      },
+      {
+        "distance_to_pass": 4.28,
+        "drop_key": "option_liquidity",
+        "near_miss_rank_basis": "distance_to_pass",
+        "non_promotable": true,
+        "playbook": "bullish_pullback_observation",
+        "reason": "illiquid_quote",
+        "selection_date": "2026-07-02",
+        "symbol": "JPM"
+      },
+      {
+        "distance_to_pass": 4.29,
+        "drop_key": "option_liquidity",
+        "near_miss_rank_basis": "distance_to_pass",
+        "non_promotable": true,
+        "playbook": "bullish_pullback_observation",
+        "reason": "illiquid_quote",
+        "selection_date": "2026-07-02",
+        "symbol": "JPM"
+      },
+      {
+        "distance_to_pass": 4.29,
+        "drop_key": "option_liquidity",
+        "near_miss_rank_basis": "distance_to_pass",
+        "non_promotable": true,
+        "playbook": "bullish_pullback_observation",
+        "reason": "illiquid_quote",
+        "selection_date": "2026-07-02",
+        "symbol": "JPM"
+      },
+      {
+        "distance_to_pass": 4.38,
+        "drop_key": "option_liquidity",
+        "near_miss_rank_basis": "distance_to_pass",
+        "non_promotable": true,
+        "playbook": "bullish_pullback_observation",
+        "reason": "illiquid_quote",
+        "selection_date": "2026-07-02",
+        "symbol": "JPM"
+      },
+      {
+        "distance_to_pass": 4.43,
+        "drop_key": "option_liquidity",
+        "near_miss_rank_basis": "distance_to_pass",
+        "non_promotable": true,
+        "playbook": "volatility_expansion_observation",
+        "reason": "illiquid_quote",
+        "selection_date": "2026-07-02",
+        "symbol": "DIA"
+      },
+      {
+        "distance_to_pass": 4.72,
+        "drop_key": "option_liquidity",
+        "near_miss_rank_basis": "distance_to_pass",
+        "non_promotable": true,
+        "playbook": "volatility_expansion_observation",
+        "reason": "illiquid_quote",
+        "selection_date": "2026-07-02",
+        "symbol": "DIA"
+      },
+      {
+        "distance_to_pass": 4.97,
+        "drop_key": "option_liquidity",
+        "near_miss_rank_basis": "distance_to_pass",
+        "non_promotable": true,
+        "playbook": "bullish_pullback_observation",
+        "reason": "illiquid_quote",
+        "selection_date": "2026-07-02",
+        "symbol": "JPM"
+      },
+      {
+        "distance_to_pass": 5.15,
+        "drop_key": "option_liquidity",
+        "near_miss_rank_basis": "distance_to_pass",
+        "non_promotable": true,
+        "playbook": "volatility_expansion_observation",
+        "reason": "illiquid_quote",
+        "selection_date": "2026-07-02",
+        "symbol": "DIA"
+      },
+      {
+        "distance_to_pass": 5.21,
+        "drop_key": "option_liquidity",
+        "near_miss_rank_basis": "distance_to_pass",
+        "non_promotable": true,
+        "playbook": "volatility_expansion_observation",
+        "reason": "illiquid_quote",
+        "selection_date": "2026-07-02",
+        "symbol": "DIA"
+      },
+      {
+        "distance_to_pass": 5.36,
+        "drop_key": "option_liquidity",
+        "near_miss_rank_basis": "distance_to_pass",
+        "non_promotable": true,
+        "playbook": "volatility_expansion_observation",
+        "reason": "illiquid_quote",
+        "selection_date": "2026-07-02",
+        "symbol": "DIA"
+      },
+      {
+        "distance_to_pass": 5.38,
+        "drop_key": "option_liquidity",
+        "near_miss_rank_basis": "distance_to_pass",
+        "non_promotable": true,
+        "playbook": "bullish_pullback_observation",
+        "reason": "illiquid_quote",
+        "selection_date": "2026-07-02",
+        "symbol": "JPM"
+      },
+      {
+        "distance_to_pass": 5.59,
+        "drop_key": "option_liquidity",
+        "near_miss_rank_basis": "distance_to_pass",
+        "non_promotable": true,
+        "playbook": "bullish_pullback_observation",
+        "reason": "illiquid_quote",
+        "selection_date": "2026-07-02",
+        "symbol": "JPM"
+      },
+      {
+        "distance_to_pass": 5.67,
+        "drop_key": "option_liquidity",
+        "near_miss_rank_basis": "distance_to_pass",
+        "non_promotable": true,
+        "playbook": "bullish_pullback_observation",
+        "reason": "illiquid_quote",
+        "selection_date": "2026-07-02",
+        "symbol": "JPM"
+      },
+      {
+        "distance_to_pass": 5.7,
+        "drop_key": "option_liquidity",
+        "near_miss_rank_basis": "distance_to_pass",
+        "non_promotable": true,
+        "playbook": "volatility_expansion_observation",
+        "reason": "illiquid_quote",
+        "selection_date": "2026-07-02",
+        "symbol": "DIA"
+      }
+    ],
+    "source_status": "blocked_no_same_day_phase2_natural_selections"
+  },
+  "schema_version": 1,
+  "scope": "read_only_materializer_match_rate_stationarity",
+  "session_entry_window_overlap": {
+    "distinct_scheduled_session_time_count": 341,
+    "distinct_session_time_overlap_fraction": 0.041056,
+    "distinct_session_times_inside_entry_window": 14,
+    "materializer_entry_window_et": "10:10-10:25",
+    "session_times_inside_entry_window": [
+      "10:10:28",
+      "10:10:35",
+      "10:14:50",
+      "10:15:03",
+      "10:16:46",
+      "10:17:02",
+      "10:17:55",
+      "10:17:57",
+      "10:20:39",
+      "10:21:04",
+      "10:23:35",
+      "10:23:36",
+      "10:25:29",
+      "10:25:34"
+    ],
+    "spy_2026_06_16_divergence_rows": [
+      {
+        "date": "2026-06-16",
+        "divergence_class": "materializer_no_pick_scanner_pick",
+        "drop_details": null,
+        "drop_reason": null,
+        "lane": "volatility_expansion_observation",
+        "materializer_decision": "not_selected",
+        "materializer_entry_window_et": "10:10-10:25",
+        "scanner_observation": "scanner_pick",
+        "scanner_pick_matched": false,
+        "scheduled_session_count": 1,
+        "scheduled_session_times_et": [
+          "13:45:28"
+        ],
+        "symbol": "SPY"
+      }
+    ]
+  },
+  "sizing_changed": false,
+  "status": "post_freeze_zero_within_historical_variation",
+  "status_vocabulary": [
+    "blocked_missing_or_stale_inputs",
+    "insufficient_history_for_stationarity_verdict",
+    "post_freeze_zero_indicates_regime_break",
+    "post_freeze_zero_within_historical_variation"
+  ],
+  "stops_changed": false,
+  "strategy_logic_changed": false,
+  "zero_run_stationarity": {
+    "historical_market_day_count": 494,
+    "interpretation": "post_freeze_zero_is_not_rare_enough_to_call_regime_break",
+    "max_matches_in_any_window": 13,
+    "min_matches_in_any_window": 0,
+    "observed_window_market_days": 13,
+    "regime_break_fraction_threshold": 0.05,
+    "status": "ready",
+    "window_count": 482,
+    "zero_match_window_count": 52,
+    "zero_match_window_fraction": 0.107884
+  }
+}

@@ -146,8 +146,12 @@ These are the living docs for the current worktree:
   - generated read-only evaluator for the pre-registered filtered-forward evidence bar; status remains `evaluation_not_permitted_yet` until the minimum completed-row count is reached
 - `docs/regular-options-forward-evidence-bar-throughput-projection.md`
   - generated read-only projection for whether the frozen filtered-forward evidence bar can reach the cohort checkpoint and four-month forward audit horizon from current post-freeze throughput; current status is `bar_unreachable_without_state_change`
+- `docs/regular-options-materializer-match-rate-stationarity.md`
+  - generated read-only stationarity and frozen-threshold near-miss audit for the historical materializer match rate versus current post-freeze zero-match observations; current status is `post_freeze_zero_within_historical_variation`
 - `docs/regular-options-scanner-materializer-parity-diff.md`
   - generated Track C Phase 13 read-only scanner-vs-materializer parity diff; current default post-freeze window has `182` materializer rows, `0` filter-matched materializer candidates, and one SPY divergence row for read-only investigation
+- `data/profitability-lab/regular-options-materializer-match-rate-stationarity/latest.json`
+  - machine-readable materializer match-rate stationarity artifact with policy hash checks, historical source fallback, zero-run stationarity, threshold-distance decomposition, session-window overlap, and hash-invariance proof
 - `data/forward-tracking/regular-options-scanner-materializer-parity-diff/latest.json`
   - machine-readable parity-diff artifact with daily table, divergence counts, per-lane/symbol summary, and diagnostic-only no-scanner-change boundary flags
 - `docs/regular-options-fresh-window-thetadata-opra-import.md`
@@ -168,6 +172,8 @@ These are the living docs for the current worktree:
   - read-only filtered-forward evidence-bar evaluator with contract hash checks and no approval authority
 - `scripts/build_regular_options_forward_evidence_bar_throughput_projection.py`
   - read-only forward evidence-bar throughput projection that keeps tracker, materializer, and scheduled-scan denominators separate while reporting cohort-checkpoint and four-month reachability
+- `scripts/build_regular_options_materializer_match_rate_stationarity.py`
+  - read-only stationarity audit that reconciles frozen-filter materializer matches, compares post-freeze zero-match runs to historical windows, and reports frozen-threshold near misses without changing policy or emitting counterfactual economics
 - `scripts/build_regular_options_scanner_materializer_parity_diff.py`
   - read-only Track C Phase 13 parity-diff builder; loads materializer JSONL, scan-pick JSONL, and scheduled-scan ledger sessions without running the scanner or mutating evidence stores
 - `scripts/import_regular_options_fresh_window_thetadata_opra.py`

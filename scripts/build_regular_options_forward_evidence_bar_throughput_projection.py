@@ -105,6 +105,13 @@ def _safe_float(value: Any) -> float:
         return 0.0
 
 
+def _first_present(*values: Any) -> Any:
+    for value in values:
+        if value is not None and value != "":
+            return value
+    return None
+
+
 def _file_hash(path: Path) -> str | None:
     if not path.exists():
         return None
@@ -197,9 +204,12 @@ def _horizon_projection(
     observed_completed_rows: int,
     required_completed_rows: int,
     observation_market_days: int,
+    reference_date: date,
 ) -> dict[str, Any]:
     total_market_days = _market_day_count(FREEZE_DATE, end_date)
-    remaining_market_days = max(total_market_days - observation_market_days, 0)
+    elapsed_end_date = min(max(reference_date, FREEZE_DATE), end_date)
+    elapsed_market_days = _market_day_count(FREEZE_DATE, elapsed_end_date)
+    remaining_market_days = max(total_market_days - elapsed_market_days, 0)
     rows_remaining = max(required_completed_rows - observed_completed_rows, 0)
     current_rate = round(observed_completed_rows / observation_market_days, 6) if observation_market_days > 0 else 0.0
     projected_rows = round(current_rate * total_market_days, 3)
@@ -209,9 +219,12 @@ def _horizon_projection(
         "horizon_id": horizon_id,
         "start_date": FREEZE_DATE.isoformat(),
         "end_date": end_date.isoformat(),
+        "projection_reference_date": reference_date.isoformat(),
         "total_market_days": total_market_days,
         "observed_market_days": observation_market_days,
+        "elapsed_market_days_as_of_reference": elapsed_market_days,
         "remaining_market_days": remaining_market_days,
+        "remaining_market_days_basis": "freeze_date_to_horizon_minus_market_days_elapsed_as_of_projection_reference_date",
         "required_completed_rows": required_completed_rows,
         "observed_completed_rows": observed_completed_rows,
         "rows_remaining": rows_remaining,
@@ -328,10 +341,15 @@ def build_report(
             observation_market_days = _market_day_count(FREEZE_DATE, latest_materializer_date)
 
     observed_matched_rows = _safe_int(tracker_forward.get("matched_candidate_count"))
-    observed_completed_rows = _safe_int(tracker_forward.get("completed_candidate_count") or tracker_bar.get("completed_forward_rows"))
+    projection_reference_date = min(reference.date(), FOUR_MONTH_FORWARD_DATE)
+    observed_completed_rows = _safe_int(
+        _first_present(tracker_forward.get("completed_candidate_count"), tracker_bar.get("completed_forward_rows"))
+    )
     materializer_filter_matches = _safe_int(
-        parity_coverage.get("filter_matched_selected_rows_in_window")
-        or parity_summary.get("filtered_materializer_candidate_rows")
+        _first_present(
+            parity_coverage.get("filter_matched_selected_rows_in_window"),
+            parity_summary.get("filtered_materializer_candidate_rows"),
+        )
     )
     historical_materializer_rows = _safe_int(tracker_disclosure.get("historical_filtered_materializer_rows"))
     historical_materializer_months = _safe_int(tracker_disclosure.get("historical_filtered_materializer_months"))
@@ -348,6 +366,7 @@ def build_report(
             observed_completed_rows=observed_completed_rows,
             required_completed_rows=required_completed_rows,
             observation_market_days=observation_market_days,
+            reference_date=projection_reference_date,
         ),
         _horizon_projection(
             horizon_id="freeze_anchored_four_month_forward_2026_10_14",
@@ -355,6 +374,7 @@ def build_report(
             observed_completed_rows=observed_completed_rows,
             required_completed_rows=required_completed_rows,
             observation_market_days=observation_market_days,
+            reference_date=projection_reference_date,
         ),
     ]
     status = _report_status(
