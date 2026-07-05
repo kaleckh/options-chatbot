@@ -231,6 +231,7 @@
     "options:audit:phase2-drop-decomposition": "uv run --locked python scripts/build_regular_options_phase2_drop_decomposition.py",
     "options:audit:forward-evidence-bar-throughput-projection": "uv run --locked python scripts/build_regular_options_forward_evidence_bar_throughput_projection.py",
     "options:audit:materializer-match-rate-stationarity": "uv run --locked python scripts/build_regular_options_materializer_match_rate_stationarity.py",
+    "options:plan:refreeze-filter-family-research-contract": "uv run --locked python scripts/build_regular_options_refreeze_filter_family_research_contract.py",
     "options:audit:scanner-materializer-parity-diff": "uv run --locked python scripts/build_regular_options_scanner_materializer_parity_diff.py",
     "options:goal-loop:strict-forward-30": "uv run --locked python scripts/run_regular_options_strict_forward_30_goal_loop.py",
     "options:goal-loop:strict-forward-30-collector": "uv run --locked python scripts/run_regular_options_strict_forward_30_market_window_collector.py",

@@ -1,5 +1,13 @@
 # Decisions
 
+## 2026-07-05: Refreeze / Filter-Family Research Requires A Separate Preregistered Contract
+
+The forward evidence denominator remains empty under the frozen filtered-forward lane, but an empty denominator is not permission to tune the frozen policy or lower the evidence bar. Any future refreeze or filter-family research must first be separated from the active frozen policy and from the prospective forward evidence bar.
+
+Durable decision: `scripts/build_regular_options_refreeze_filter_family_research_contract.py`, exposed as `npm run options:plan:refreeze-filter-family-research-contract`, owns the read-only preregistered contract for considering a future refreeze/filter-family research proposal. The contract preserves the current frozen policy hash and current evidence-bar contract, records the consumed `2026-02` through `2026-05` audit window and the consumed `2022-01` through `2024-05` out-of-sample window, imports the current projection/stationarity/drop/parity/tracker context, and defines only design-stage research questions around production-gate drop families, scanner/materializer timing alignment, and a separately approved candidate-family design.
+
+The current contract status is `refreeze_filter_family_research_contract_ready`, but activation is `not_activated_operator_approval_required` and fresh Fable readback is unavailable while Claude CLI auth is disconnected. This contract does not authorize scanner-policy changes, filter or threshold changes, proof-bar changes, cohort append, quote import, evidence-store mutation, protected-holdout use, live validation, auto-track, broker action, accepted profitability, or promotion.
+
 ## 2026-07-04: Zero-Run Trigger Escalations Must Be Preregistered And Read-Only
 
 The materializer stationarity report now owns the preregistered zero-run escalation schedule for the frozen filtered-forward lane. That schedule is useful only if its trigger dates are refreshed unattended and if the trigger semantics are fixed before code observes a future trigger.

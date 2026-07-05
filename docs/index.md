@@ -150,12 +150,16 @@ These are the living docs for the current worktree:
   - generated read-only decomposition of scheduled Phase 2 production-gate drops by reason, symbol, month, and playbook; current status is `phase2_drop_decomposition_ready`
 - `docs/regular-options-materializer-match-rate-stationarity.md`
   - generated read-only stationarity, frozen-threshold near-miss, row-conditioned zero-window, and preregistered zero-run trigger-escalation audit for the historical materializer match rate versus current post-freeze zero-match observations; current status is `post_freeze_zero_within_historical_variation`
+- `docs/regular-options-refreeze-filter-family-research-contract.md`
+  - generated read-only preregistered refreeze/filter-family research contract; current status is `refreeze_filter_family_research_contract_ready` with activation `not_activated_operator_approval_required` and fresh Fable readback unavailable
 - `docs/regular-options-scanner-materializer-parity-diff.md`
   - generated Track C Phase 13 read-only scanner-vs-materializer parity diff; current default post-freeze window has `182` materializer rows, `0` filter-matched materializer candidates, and one SPY divergence row for read-only investigation
 - `data/profitability-lab/regular-options-materializer-match-rate-stationarity/latest.json`
   - machine-readable materializer match-rate stationarity artifact with policy hash checks, historical source fallback, zero-run stationarity, preregistered trigger statuses, row-conditioned zero-window statistics, threshold-distance decomposition, session-window overlap, and hash-invariance proof
 - `data/forward-tracking/regular-options-phase2-drop-decomposition/latest.json`
   - machine-readable Phase 2 scheduled-drop decomposition artifact with throughput reconciliation, full symbol-level drop rows, reason/symbol/month/playbook crosstabs, and read-only no-authority boundary flags
+- `data/contracts/regular-options-refreeze-filter-family-research-contract-v1.json`
+  - machine-readable preregistered contract preserving the current frozen policy, current forward evidence bar, consumed selection windows, and no-authority flags before any future refreeze/filter-family research
 - `data/forward-tracking/regular-options-scanner-materializer-parity-diff/latest.json`
   - machine-readable parity-diff artifact with daily table, divergence counts, per-lane/symbol summary, and diagnostic-only no-scanner-change boundary flags
 - `docs/regular-options-fresh-window-thetadata-opra-import.md`
@@ -180,6 +184,8 @@ These are the living docs for the current worktree:
   - read-only Phase 2 scheduled-drop decomposition that reconciles the throughput audit and reports where production scanner gates drop symbols without changing policy, proof bars, evidence, cohorts, live validation, or broker behavior
 - `scripts/build_regular_options_materializer_match_rate_stationarity.py`
   - read-only stationarity audit that reconciles frozen-filter materializer matches, compares post-freeze zero-match runs to historical windows, reports preregistered trigger-escalation statuses, and reports frozen-threshold near misses without changing policy or emitting counterfactual economics
+- `scripts/build_regular_options_refreeze_filter_family_research_contract.py`
+  - read-only preregistered refreeze/filter-family research contract builder that records the current warning context and consumed windows without activating research execution or changing policy/proof/evidence behavior
 - `scripts/build_regular_options_scanner_materializer_parity_diff.py`
   - read-only Track C Phase 13 parity-diff builder; loads materializer JSONL, scan-pick JSONL, and scheduled-scan ledger sessions without running the scanner or mutating evidence stores
 - `scripts/import_regular_options_fresh_window_thetadata_opra.py`

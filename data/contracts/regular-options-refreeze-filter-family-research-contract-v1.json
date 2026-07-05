@@ -1,0 +1,352 @@
+{
+  "accepted_profitability": false,
+  "activation_status": "not_activated_operator_approval_required",
+  "allowed_research_questions": [
+    {
+      "allowed_output": "design_only_hypothesis_family_packet",
+      "basis": "Use Phase 2 drop decomposition to propose falsifiable families around momentum, option_liquidity, and history_or_liquidity drops.",
+      "current_evidence": {
+        "aggregate_drop_counts": {
+          "history_or_liquidity": 304,
+          "momentum": 1710,
+          "option_liquidity": 384
+        },
+        "drop_share_by_gate_category": [
+          {
+            "gate_category": "signal_or_regime_threshold",
+            "pct_of_symbol_drop_reasons": 0.713094,
+            "symbol_drop_reason_rows": 1710
+          },
+          {
+            "gate_category": "liquidity_or_history",
+            "pct_of_symbol_drop_reasons": 0.286906,
+            "symbol_drop_reason_rows": 688
+          }
+        ],
+        "drop_summary": {
+          "aggregate_drop_counts": {
+            "history_or_liquidity": 304,
+            "momentum": 1710,
+            "option_liquidity": 384
+          },
+          "drop_share_by_gate_category": [
+            {
+              "gate_category": "signal_or_regime_threshold",
+              "pct_of_symbol_drop_reasons": 0.713094,
+              "symbol_drop_reason_rows": 1710
+            },
+            {
+              "gate_category": "liquidity_or_history",
+              "pct_of_symbol_drop_reasons": 0.286906,
+              "symbol_drop_reason_rows": 688
+            }
+          ],
+          "scheduled_phase2_drop_count_total": 2398,
+          "scheduled_phase2_throughput": {
+            "raw_candidates": 0,
+            "returned_pick_rate_over_recorded_drops": 0.0,
+            "returned_picks": 0,
+            "session_count": 77
+          },
+          "top_drop_keys": [
+            {
+              "count": 1710,
+              "key": "momentum",
+              "pct": 0.713094
+            },
+            {
+              "count": 384,
+              "key": "option_liquidity",
+              "pct": 0.160133
+            },
+            {
+              "count": 304,
+              "key": "history_or_liquidity",
+              "pct": 0.126772
+            }
+          ]
+        },
+        "scheduled_phase2_drop_count_total": 2398,
+        "scheduled_phase2_throughput": {
+          "raw_candidates": 0,
+          "returned_pick_rate_over_recorded_drops": 0.0,
+          "returned_picks": 0,
+          "session_count": 77
+        },
+        "top_drop_keys": [
+          {
+            "count": 1710,
+            "key": "momentum",
+            "pct": 0.713094
+          },
+          {
+            "count": 384,
+            "key": "option_liquidity",
+            "pct": 0.160133
+          },
+          {
+            "count": 304,
+            "key": "history_or_liquidity",
+            "pct": 0.126772
+          }
+        ]
+      },
+      "id": "production_gate_drop_key_family_hypotheses"
+    },
+    {
+      "allowed_output": "design_only_timing_alignment_packet",
+      "basis": "Use parity diagnostics, including the SPY 2026-06-16 scheduled-session versus materializer-entry-window divergence, as a research question only.",
+      "current_evidence": {
+        "filter_matched_selected_rows_in_window": 0,
+        "materializer_rows_in_window": 182,
+        "parity_status": "scanner_materializer_parity_diff_ready"
+      },
+      "id": "scanner_materializer_timing_alignment_hypothesis"
+    },
+    {
+      "allowed_output": "separate_approval_required_preregistered_design",
+      "basis": "Only after operator approval, define candidate families and split rules before any code evaluates them.",
+      "id": "filter_family_refreeze_candidate_design"
+    }
+  ],
+  "approval_authority": false,
+  "artifacts": {
+    "docs_report": "docs/regular-options-refreeze-filter-family-research-contract.md",
+    "json": "data/contracts/regular-options-refreeze-filter-family-research-contract-v1.json"
+  },
+  "auto_track_enabled": false,
+  "blocked_or_consumed_selection_windows": [
+    {
+      "consumed_at_utc": "2026-07-02T00:00:00Z",
+      "consumed_by": "regular_options_historical_profitability_filter_iteration",
+      "disposition": null,
+      "filter_iteration_permitted": null,
+      "new_filter_family_permitted": null,
+      "selection_permitted": true,
+      "threshold_change_permitted": null,
+      "window_months": [
+        "2026-02",
+        "2026-03",
+        "2026-04",
+        "2026-05"
+      ]
+    },
+    {
+      "consumed_at_utc": "2026-07-02T16:22:32Z",
+      "consumed_by": "regular_options_out_of_sample_frozen_filter_evaluation",
+      "disposition": "consumed_for_evaluation",
+      "filter_iteration_permitted": false,
+      "new_filter_family_permitted": false,
+      "selection_permitted": false,
+      "threshold_change_permitted": false,
+      "window_months": [
+        "2022-01",
+        "2022-02",
+        "2022-03",
+        "2022-04",
+        "2022-05",
+        "2022-06",
+        "2022-07",
+        "2022-08",
+        "2022-09",
+        "2022-10",
+        "2022-11",
+        "2022-12",
+        "2023-01",
+        "2023-02",
+        "2023-03",
+        "2023-04",
+        "2023-05",
+        "2023-06",
+        "2023-07",
+        "2023-08",
+        "2023-09",
+        "2023-10",
+        "2023-11",
+        "2023-12",
+        "2024-01",
+        "2024-02",
+        "2024-03",
+        "2024-04",
+        "2024-05"
+      ]
+    }
+  ],
+  "blockers": [],
+  "broker_order_allowed": false,
+  "cohort_append_performed": false,
+  "contract_id": "regular_options_refreeze_filter_family_research_contract_v1",
+  "current_evidence_bar_preserved": {
+    "bar_id": "regular_options_filtered_forward_evidence_bar_v1",
+    "path": "data/contracts/regular-options-filtered-forward-evidence-bar-v1.json",
+    "requirements": {
+      "bootstrap_draws": 10000,
+      "evaluation_may_not_occur_before_min_completed_rows": true,
+      "max_fixture_rows": 0,
+      "min_calendar_months_with_rows": 3,
+      "min_completed_forward_paper_shadow_rows": 30,
+      "min_percent_cluster_pf_lb_5pct": 1.0,
+      "min_ticker_week_clusters": 8,
+      "min_total_net_pnl_usd_exclusive": 0.0,
+      "min_usd_cluster_pf_lb_5pct": 1.0,
+      "pnl_basis": {
+        "cluster_key": "ticker:ISO-week from scan_date",
+        "percent": "net_pnl_pct",
+        "usd": "net_pnl_usd"
+      }
+    },
+    "sha256": "69cd8419beb59207f188d6e5e076971df3acf5336bf3cab1502430c2a889b309"
+  },
+  "current_policy_preserved": {
+    "conditions_sha256": "3b10d0306800e1a203480b80e4fafda03d5e1b6443d8d294cbf8ff7f20324967",
+    "filter_id": "train_ranked_top_8_tickers__signal_evidence_prior_20_trading_day_return_pct_gte_10.9906",
+    "path": "data/contracts/regular-options-frozen-filtered-policy-v1.json",
+    "policy_id": "historical_filtered_candidate_policy_v1",
+    "sha256": "2054eafc577ddc10f4cd4bbd4c4b4133c6e82d3d8bd7be2d6bd1dc547dc42b00",
+    "tracking_start_at_utc": "2026-06-30T05:03:45Z"
+  },
+  "evidence_stores_mutated": false,
+  "fable_basis": "derived_from_last_validated_fable_guidance_and_current_repo_artifacts_while_cli_auth_is_unavailable",
+  "failure_criteria": [
+    "proposal_reuses_consumed_2026_02_through_2026_05_audit_window_for_selection",
+    "proposal_reuses_consumed_2022_01_through_2024_05_oos_window_for_selection_or_threshold_choice",
+    "proposal_changes_current_policy_without_separate_approval",
+    "proposal_changes_or_lowers_forward_evidence_bar",
+    "proposal_imports_quotes_or_mutates_evidence",
+    "proposal_consumes_protected_holdout",
+    "proposal_claims_accepted_profitability_without_forward_exact_bar_evaluation"
+  ],
+  "filter_or_threshold_changed": false,
+  "forward_rows_are_profitability_proof": false,
+  "fresh_fable_readback_available": false,
+  "generated_at_utc": "2026-07-05T08:33:24Z",
+  "historical_rows_are_forward_proof": false,
+  "inputs": {
+    "audit_window_consumption_registry": {
+      "exists": true,
+      "generated_at_utc": "2026-07-02T16:22:32Z",
+      "path": "data/contracts/regular-options-audit-window-consumption-registry.json",
+      "report_id": "regular_options_audit_window_consumption_registry",
+      "sha256": "87238c1b52a5b16e8c4b57c1ac54c237525b330999ba8a55ff51c4999f8f8d61",
+      "status": "loaded"
+    },
+    "current_forward_evidence_bar_contract": {
+      "exists": true,
+      "generated_at_utc": "2026-07-02T03:53:30Z",
+      "path": "data/contracts/regular-options-filtered-forward-evidence-bar-v1.json",
+      "report_id": "regular_options_filtered_forward_evidence_bar",
+      "sha256": "69cd8419beb59207f188d6e5e076971df3acf5336bf3cab1502430c2a889b309",
+      "status": "loaded"
+    },
+    "current_frozen_policy_contract": {
+      "exists": true,
+      "generated_at_utc": "2026-07-02T02:22:02Z",
+      "path": "data/contracts/regular-options-frozen-filtered-policy-v1.json",
+      "report_id": "regular_options_frozen_filtered_policy",
+      "sha256": "2054eafc577ddc10f4cd4bbd4c4b4133c6e82d3d8bd7be2d6bd1dc547dc42b00",
+      "status": "loaded"
+    },
+    "filtered_forward_paper_shadow_tracker": {
+      "exists": true,
+      "generated_at_utc": "2026-07-03T21:38:35Z",
+      "path": "data/forward-tracking/regular-options-filtered-forward-paper-shadow/latest.json",
+      "report_id": "regular_options_filtered_forward_paper_shadow_tracker",
+      "sha256": "741dd3dab2544bebabb10e9898b966242899a561b4829eb5bc143668f2803d5b",
+      "status": "loaded"
+    },
+    "forward_evidence_bar_throughput_projection": {
+      "exists": true,
+      "generated_at_utc": "2026-07-04T17:08:57Z",
+      "path": "data/forward-tracking/regular-options-forward-evidence-bar-throughput-projection/latest.json",
+      "report_id": "regular_options_forward_evidence_bar_throughput_projection",
+      "sha256": "fcfa25ea9f374092db401a5dd01a22cafeeb108297cc9982756c01f8d75fb129",
+      "status": "loaded"
+    },
+    "materializer_match_rate_stationarity": {
+      "exists": true,
+      "generated_at_utc": "2026-07-04T19:13:46Z",
+      "path": "data/profitability-lab/regular-options-materializer-match-rate-stationarity/latest.json",
+      "report_id": "regular_options_materializer_match_rate_stationarity",
+      "sha256": "8eca9e4693cf805878c9c7a3b2a4604e9a8f4638df0a8474a1e5b689d6781c7b",
+      "status": "loaded"
+    },
+    "phase2_drop_decomposition": {
+      "exists": true,
+      "generated_at_utc": "2026-07-04T18:22:15Z",
+      "path": "data/forward-tracking/regular-options-phase2-drop-decomposition/latest.json",
+      "report_id": "regular_options_phase2_drop_decomposition",
+      "sha256": "2fd058ad83f2e010edd746843c3e539ee306554696ce0a136415a7c30d22853a",
+      "status": "loaded"
+    },
+    "scanner_materializer_parity_diff": {
+      "exists": true,
+      "generated_at_utc": "2026-07-03T23:45:40Z",
+      "path": "data/forward-tracking/regular-options-scanner-materializer-parity-diff/latest.json",
+      "report_id": "regular_options_scanner_materializer_parity_diff",
+      "sha256": "342f0f60169c560b3322eae7941245d8b86eb15992628e559eb7f911b4245797",
+      "status": "loaded"
+    }
+  },
+  "live_validation_enabled": false,
+  "objective": "Pre-register the only safe path for considering a future frozen-policy refreeze or filter-family research proposal after the forward evidence denominator stayed empty.",
+  "prohibited_actions": [
+    "do_not_change_current_frozen_policy_from_this_contract",
+    "do_not_change_scanner_policy_from_this_contract",
+    "do_not_change_filters_or_thresholds_from_this_contract",
+    "do_not_change_proof_bars_from_this_contract",
+    "do_not_append_cohort_rows_from_this_contract",
+    "do_not_import_quotes_from_this_contract",
+    "do_not_mutate_evidence_stores_from_this_contract",
+    "do_not_consume_protected_holdout_from_this_contract",
+    "do_not_enable_live_validation_from_this_contract",
+    "do_not_enable_auto_track_from_this_contract",
+    "do_not_submit_broker_orders_from_this_contract",
+    "do_not_promote_any_lane_from_this_contract",
+    "do_not_treat_historical_rows_or_diagnostics_as_forward_proof"
+  ],
+  "promotion_ready": false,
+  "proof_bars_changed": false,
+  "protected_holdout_consumed": false,
+  "quotes_imported": false,
+  "read_only": true,
+  "report_id": "regular_options_refreeze_filter_family_research_contract",
+  "required_future_artifacts_before_any_state_change": [
+    "preregistered_family_definitions_json",
+    "window_split_and_consumption_check_json",
+    "no_holdout_no_consumed_window_audit",
+    "read_only_family_evaluation_plan",
+    "operator_approval_packet_for_any_policy_refreeze",
+    "fresh_forward_evidence_collection_plan_preserving_current_bar"
+  ],
+  "research_execution_prerequisites": [
+    "explicit_operator_approval_for_this_contract_or_a_successor_contract",
+    "fresh_Fable_or_operator_review_when_CLI_is_available_again",
+    "all_input_artifacts_loaded_and_hash_recorded",
+    "candidate_family_definitions_written_before_any_family_evaluation",
+    "selection_windows_exclude_consumed_audit_windows_and_protected_holdout",
+    "current_forward_evidence_bar_contract_remains_unchanged",
+    "current_frozen_policy_remains_active_until_a_separate_approved_refreeze",
+    "all outputs label historical rows as research_only_not_forward_proof"
+  ],
+  "research_only": true,
+  "scanner_policy_changed": false,
+  "schema_version": 1,
+  "status": "refreeze_filter_family_research_contract_ready",
+  "strategy_logic_changed": false,
+  "trigger_context": {
+    "completed_forward_rows": 0,
+    "current_forward_denominator_empty": true,
+    "evidence_bar_completed_rows_required": 30,
+    "mandatory_checkpoint_dates": {
+      "freeze_anchored_four_month_audit": "2026-10-14",
+      "phase2_forward_cohort_checkpoint": "2026-07-28",
+      "zero_run_confirmation_if_zero_continues": "2026-08-12",
+      "zero_run_regime_break_trigger_if_zero_continues": "2026-07-20"
+    },
+    "matched_forward_rows": 0,
+    "operator_may_consider_research_contract_now": true,
+    "projection_status": "bar_unreachable_without_state_change",
+    "stationarity_status": "post_freeze_zero_within_historical_variation",
+    "zero_run_trigger_active": false
+  }
+}
