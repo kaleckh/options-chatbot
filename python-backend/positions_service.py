@@ -20,6 +20,7 @@ from market_data_service import (
 from options_execution import (
     commission_total_usd,
     executable_option_price,
+    executable_vertical_spread_entry,
     option_pnl_snapshot,
 )
 from repository_contracts import TradingDeskPositionRepository
@@ -860,25 +861,14 @@ def _resolve_live_comparable_pick(scan_pick: dict[str, Any]) -> Optional[dict[st
         short_bid = _safe_float(short_row["bid"].iloc[0])
         short_ask = _safe_float(short_row["ask"].iloc[0])
         short_last = _safe_float(short_row["lastPrice"].iloc[0])
-        long_exec = executable_option_price(
-            side="exit",
-            bid=long_bid,
-            ask=long_ask,
-            last=long_last,
+        spread_execution = executable_vertical_spread_entry(
+            long_leg={"bid": long_bid, "ask": long_ask, "last": long_last},
+            short_leg={"bid": short_bid, "ask": short_ask, "last": short_last},
             quote_freshness_status="fresh",
         )
-        short_exec = executable_option_price(
-            side="entry",
-            bid=short_bid,
-            ask=short_ask,
-            last=short_last,
-            quote_freshness_status="fresh",
-        )
-        long_display = _safe_float(long_exec.get("display_price"))
-        short_display = _safe_float(short_exec.get("display_price"))
-        if long_display is None or short_display is None:
+        entry_debit = _safe_float(spread_execution.get("execution_price"))
+        if not spread_execution.get("executable") or entry_debit is None or entry_debit <= 0:
             return None
-        entry_debit = round(max(long_display - short_display, 0.0001), 4)
         spread_width = abs(float(fields["short_strike"]) - float(strike))
         return {
             "strategy_type": "vertical_spread",
@@ -890,10 +880,10 @@ def _resolve_live_comparable_pick(scan_pick: dict[str, Any]) -> Optional[dict[st
             "contract_symbol": _normalize_contract_symbol(long_row.get("contractSymbol").iloc[0]),
             "short_contract_symbol": _normalize_contract_symbol(short_row.get("contractSymbol").iloc[0]),
             "entry_execution_price": entry_debit,
-            "entry_execution_basis": "live_comparable_spread_mid",
+            "entry_execution_basis": str(spread_execution.get("execution_basis") or "spread_ask_bid"),
             "entry_underlying_price": _safe_float(scan_pick.get("stock_price") or scan_pick.get("entry_price")),
             "entry_fee_total_usd": commission_total_usd(contracts=1, sides=2),
-            "quote_basis": "mid",
+            "quote_basis": str(spread_execution.get("execution_basis") or "spread_ask_bid"),
             "selection_source": "live_comparable_exact_contract",
             "promotion_class": "comparable_exact_contract",
             "approximation_only": False,

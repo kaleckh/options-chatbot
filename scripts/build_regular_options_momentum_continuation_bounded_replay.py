@@ -30,6 +30,7 @@ DEFAULT_SOURCE_REPLAY = (
 DEFAULT_PROOF_BLOCKER_RESOLUTION = (
     ROOT / "data" / "profitability-lab" / "regular-options-momentum-continuation-proof-blocker-resolution" / "latest.json"
 )
+DEFAULT_ORACLE_PACKET = ROOT / "data" / "forward-tracking" / "options_oracle_profit_loop_packet_latest.json"
 DEFAULT_HOLDOUT_CONTRACT = ROOT / "data" / "contracts" / "forward-holdout-contract.json"
 DEFAULT_CLEAN_BASE_STACK = ROOT / "data" / "profitability-lab" / "regular-options-historical-walk-forward" / "latest.json"
 DEFAULT_OUTPUT_DIR = ROOT / "data" / "profitability-lab" / "regular-options-momentum-continuation-bounded-replay"
@@ -42,6 +43,7 @@ MIN_QUOTE_COVERAGE = 0.90
 MIN_PF_LOWER_BOUND = 1.0
 MIN_STRESS_PF = 1.0
 PROTECTED_HOLDOUT_FALLBACK = "2026-06-05"
+ORACLE_MOMENTUM_BLOCKERS_KEY = "momentum_continuation_bounded_replay_blockers"
 
 READ_ONLY_FLAGS = {
     "read_only": True,
@@ -422,6 +424,36 @@ def _resolution_metrics(source_replay: dict[str, Any], resolution: dict[str, Any
     }
 
 
+def _oracle_momentum_fallback() -> tuple[list[str], dict[str, Any]]:
+    payload, meta = _load_json(DEFAULT_ORACLE_PACKET, required=False)
+    if meta["status"] != "loaded":
+        return [], {}
+    current = _as_dict(payload.get("current_evidence_summary"))
+    blockers = [str(item) for item in _as_list(current.get(ORACLE_MOMENTUM_BLOCKERS_KEY)) if item]
+    metrics = {
+        "total_denominator_rows": int(_safe_float(current.get("momentum_continuation_replay_denominator_rows")) or 0),
+        "exact_completed_rows": int(_safe_float(current.get("momentum_continuation_bounded_replay_exact_rows")) or 0),
+        "strict_new_exact_completed_rows": int(
+            _safe_float(current.get("momentum_continuation_bounded_replay_exact_rows")) or 0
+        ),
+        "minimum_historical_exact_rows": MIN_HISTORICAL_EXACT_ROWS,
+        "latest_audit_30_row_bar_met": False,
+        "quote_coverage": 0.0,
+        "point_in_time_inputs_resolved": None,
+        "side_aware_quotes_resolved": current.get("momentum_continuation_bounded_replay_side_aware_rows"),
+        "proof_qualified_rows_after_resolution": current.get("momentum_continuation_proof_resolution_after_rows"),
+        "blocker_counts": {},
+        "strict_research_metrics": {},
+        "side_aware_diagnostic_metrics": {},
+        "old_mark_diagnostic_metrics": {},
+        "replay_gate_blocker_count": len(blockers),
+    }
+    side_rows = _safe_float(metrics["side_aware_quotes_resolved"]) or 0
+    denominator_rows = _safe_float(metrics["total_denominator_rows"]) or 0
+    metrics["quote_coverage"] = round(side_rows / denominator_rows, 4) if denominator_rows else 0.0
+    return blockers, metrics
+
+
 def _source_replay_valid(source_replay: dict[str, Any]) -> bool:
     return (
         source_replay.get("concept_id") == CONCEPT_ID
@@ -498,6 +530,14 @@ def build_report(
     elif resolution.get("status") != "momentum_continuation_proof_candidate_for_review_not_forward_proof":
         blockers.extend(str(item) for item in _as_list(resolution.get("blockers")) if item)
     blockers = sorted(set(blockers))
+    fallback_blockers, fallback_metrics = _oracle_momentum_fallback()
+    if (
+        not fixture_rows
+        and fallback_blockers
+        and source_replay_meta["status"] != "loaded"
+        and resolution_meta["status"] != "loaded"
+    ):
+        blockers = sorted(set(fallback_blockers))
 
     protected_start = _protected_holdout_start(holdout)
     base_identities = _base_stack_identity_set(clean_base_stack)
@@ -513,6 +553,8 @@ def build_report(
         metrics = _fixture_metrics(replay_rows, blockers)
     else:
         metrics = _resolution_metrics(source_replay, resolution, blockers)
+        if fallback_metrics and fallback_blockers and source_replay_meta["status"] != "loaded":
+            metrics = fallback_metrics
         existing_resolution_consumed = resolution_meta["status"] == "loaded"
 
     status = _status_from_metrics(metrics, blockers)

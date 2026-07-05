@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from collections import Counter
 from datetime import UTC, datetime
@@ -69,9 +70,10 @@ def _safe_float(value: Any) -> float | None:
     try:
         if value in (None, ""):
             return None
-        return float(value)
+        parsed = float(value)
     except (TypeError, ValueError):
         return None
+    return parsed if math.isfinite(parsed) else None
 
 
 def _load_jsonl(path: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:

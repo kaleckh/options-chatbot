@@ -5151,12 +5151,25 @@ def _classify_trade_against_live_policy(trade: dict, scan_policy: dict) -> dict:
 
 def _playbook_trade_window(playbook: str) -> dict[str, int]:
     playbook_id = str(playbook or PLAYBOOK_EXIT_AUDIT_FALLBACK_PLAYBOOK).strip().lower()
+    if playbook_id == "speculative":
+        return {"min_dte": 5, "max_dte": 9}
+    try:
+        from supervised_scan import SCAN_PLAYBOOKS
+
+        target_dte = SCAN_PLAYBOOKS.get(playbook_id, {}).get("target_dte")
+        if target_dte is not None:
+            target = int(target_dte)
+            if target <= 9:
+                return {"min_dte": max(0, target - 2), "max_dte": target + 4}
+            if target <= 21:
+                return {"min_dte": max(0, target - 7), "max_dte": target + 7}
+            return {"min_dte": max(0, target - 22), "max_dte": target + 10}
+    except Exception:
+        pass
     if playbook_id == "swing":
         return {"min_dte": 13, "max_dte": 35}
     if playbook_id in {"bullish_pullback_observation", "tracked_winner_primary", "tracked_winner_observation"}:
         return {"min_dte": 13, "max_dte": 45}
-    if playbook_id == "speculative":
-        return {"min_dte": 5, "max_dte": 9}
     if playbook_id == "bullish_momentum":
         return {"min_dte": 7, "max_dte": 21}
     if playbook_id == "bullish_mean_reversion":

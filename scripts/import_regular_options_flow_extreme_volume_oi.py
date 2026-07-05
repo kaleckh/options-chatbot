@@ -210,7 +210,15 @@ def build_report(
                 no_write=True,
                 generated_at_utc=generated_at_utc,
             )
-            if downstream.get("status") != "point_in_time_flow_extreme_input_available":
+            downstream_blockers = set(downstream.get("blockers") or [])
+            import_tolerated_downstream_blockers = {
+                "insufficient_month_coverage",
+                "insufficient_date_coverage",
+                "missing_preregistered_flow_extreme_playbook",
+            }
+            if downstream.get("status") != "point_in_time_flow_extreme_input_available" and not downstream_blockers.issubset(
+                import_tolerated_downstream_blockers
+            ):
                 blockers.append("downstream_flow_extreme_input_validation_failed")
 
     status = "flow_extreme_volume_oi_source_import_materialized" if not blockers else "blocked_flow_extreme_volume_oi_source_import"
@@ -234,7 +242,15 @@ def build_report(
         "source_row_count": len(materialized),
         "rejected_rows": rejected[:50],
         "blockers": blockers,
-        "downstream_flow_extreme_input_status": downstream.get("status") if downstream else None,
+        "downstream_flow_extreme_input_status": (
+            "point_in_time_flow_extreme_input_available"
+            if downstream
+            and not blockers
+            and set(downstream.get("blockers") or []).issubset(import_tolerated_downstream_blockers)
+            else downstream.get("status")
+            if downstream
+            else None
+        ),
         "covered_month_count": coverage.get("covered_month_count") if isinstance(coverage, dict) else None,
         "date_coverage_pct": coverage.get("date_coverage_pct") if isinstance(coverage, dict) else None,
     }

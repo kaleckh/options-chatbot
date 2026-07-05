@@ -84,6 +84,88 @@ class BackfillComparableContractsTests(unittest.TestCase):
             self.assertEqual(row[2], 5.0)
             self.assertEqual(json.loads(row[3])["contract_symbol"], "SPY260619C00500000")
 
+    def test_migrate_suggested_trades_updates_optional_execution_fields(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "chat_history.db"
+            conn = sqlite3.connect(db_path)
+            conn.execute(
+                """
+                CREATE TABLE suggested_trades (
+                    id INTEGER PRIMARY KEY,
+                    status TEXT,
+                    contracts INTEGER,
+                    contract_symbol TEXT,
+                    strike REAL,
+                    expiry TEXT,
+                    entry_option_price REAL,
+                    entry_execution_price REAL,
+                    entry_execution_basis TEXT,
+                    entry_fee_total_usd REAL,
+                    entry_underlying_price REAL,
+                    source_pick_snapshot TEXT,
+                    filled_at TEXT,
+                    updated_at TEXT
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO suggested_trades (
+                    id, status, contracts, contract_symbol, strike, expiry,
+                    entry_option_price, entry_execution_price, entry_execution_basis,
+                    entry_fee_total_usd, entry_underlying_price, source_pick_snapshot, filled_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    1,
+                    "open",
+                    2,
+                    None,
+                    495.0,
+                    "2026-06-19",
+                    4.5,
+                    4.5,
+                    "stale_mid",
+                    0.0,
+                    500.0,
+                    json.dumps({"ticker": "SPY", "approximation_only": True, "strategy_type": "vertical_spread"}),
+                    "2026-05-21T14:30:00Z",
+                ),
+            )
+            conn.commit()
+            conn.close()
+
+            resolved = {
+                "ticker": "SPY",
+                "strategy_type": "vertical_spread",
+                "contract_symbol": "SPY260619C00500000",
+                "short_contract_symbol": "SPY260619C00510000",
+                "strike": 500.0,
+                "short_strike": 510.0,
+                "expiry": "2026-06-19",
+                "entry_underlying_price": 501.0,
+                "entry_execution_basis": "spread_ask_bid",
+            }
+            with patch.object(backfill, "SUGGESTED_DB_PATH", db_path), \
+                 patch.object(backfill, "resolve_comparable_contract_pick", return_value=(resolved, 5.25, {"ok": True})):
+                result = backfill.migrate_suggested_trades()
+
+            self.assertEqual(result["updated_ids"], [1])
+            conn = sqlite3.connect(db_path)
+            row = conn.execute(
+                """
+                SELECT entry_option_price, entry_execution_price, entry_execution_basis,
+                       entry_fee_total_usd, source_pick_snapshot
+                FROM suggested_trades WHERE id = 1
+                """
+            ).fetchone()
+            conn.close()
+            self.assertEqual(row[0], 5.25)
+            self.assertEqual(row[1], 5.25)
+            self.assertEqual(row[2], "spread_ask_bid")
+            self.assertGreater(row[3], 0.0)
+            self.assertEqual(json.loads(row[4])["short_contract_symbol"], "SPY260619C00510000")
+
     def test_migrate_suggested_trades_repairs_missing_column_from_exact_snapshot(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "chat_history.db"

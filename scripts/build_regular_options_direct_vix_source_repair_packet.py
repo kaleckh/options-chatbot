@@ -251,6 +251,8 @@ def _blocked_branch_implications(artifacts: dict[str, dict[str, Any]]) -> list[d
     implications: list[dict[str, Any]] = []
     for branch, payload in artifacts.items():
         blockers = _as_list(payload.get("replay_gate_blockers")) or _as_list(payload.get("blockers"))
+        if not payload.get("status") and not blockers:
+            blockers = ["missing_point_in_time_vix_bucket"]
         vix_blockers = [item for item in blockers if "vix" in str(item).lower()]
         implications.append(
             {
@@ -326,7 +328,7 @@ def build_report(
         "as_of_date": as_of_date,
         "current_forward_rows": current.get("current_forward_rows", 0),
         "target_forward_rows": current.get("minimum_profitable_strict_completed_rows", 30),
-        "point_in_time_vix_bucket_status": vix_bucket.get("status"),
+        "point_in_time_vix_bucket_status": vix_bucket.get("status") or "blocked_point_in_time_vix_source_missing",
         "point_in_time_vix_bucket_ready": vix_bucket_ready,
         "vix_source_rows_count": vix_bucket.get("source_rows_count"),
         "vix_coverage_pct": vix_bucket.get("coverage_pct"),

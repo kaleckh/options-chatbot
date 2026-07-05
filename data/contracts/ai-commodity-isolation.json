@@ -33,7 +33,6 @@
       "scripts/run_ai_commodity_opra_progress.py",
       "data/ai-commodity-infra",
       "data/ai-commodity-infra/universe.json",
-      "data/ai-commodity-infra/progress/latest.json",
       "tests/test_ai_commodity_opra_progress.py",
       "tests/test_ai_commodity_universe.py"
     ],
@@ -44,31 +43,29 @@
     "status": "separate_non_browser_proof_lane"
   },
   "latest_progress_readback": {
-    "available": true,
-    "completion_claim_allowed": false,
-    "generated_at": "2026-06-03T20:22:59Z",
-    "live_scan_candidate_count": 0,
-    "no_mutation_guard": "production_filters_preserved_until_exact_alpaca_opra_replay_unlock",
+    "available": false,
+    "generated_at": null,
+    "live_scan_candidate_count": null,
     "path": "data/ai-commodity-infra/progress/latest.json",
     "proof_source_isolation": {
-      "blockers": [],
-      "decision": "only_alpaca_opra_daily_snapshot_counts_for_exact_profitability_proof",
+      "blockers": [
+        "latest_progress_readback_missing"
+      ],
+      "decision": "missing_optional_progress_artifact",
       "exact_profitability_proof_source_labels": [
         "alpaca_opra_daily_snapshot"
       ],
-      "research_only_source_labels": [
-        "thetadata_opra_nbbo_1m"
-      ],
-      "status": "isolated_to_alpaca_opra_proof_source",
-      "top_level_shared_dates_match_proof_source": true
+      "research_only_source_labels": [],
+      "status": "latest_progress_readback_missing",
+      "top_level_shared_dates_match_proof_source": null
     },
     "proof_source_label": "alpaca_opra_daily_snapshot",
-    "provider": "alpaca:sip:opra",
+    "provider": null,
     "shared_quote_dates": {
-      "current": 3,
-      "required": 100
+      "current": null,
+      "required": null
     },
-    "verification_status": "not_verified",
+    "verification_status": "latest_progress_readback_missing",
     "verified": false
   },
   "legacy_lane_boundary": {
@@ -137,7 +134,7 @@
     "data/contracts/route-mutation-inventory.json",
     "data/contracts/storage-ownership-map.json",
     "data/contracts/scanner-creation-safety-contract.json",
-    "data/ai-commodity-infra/progress/latest.json",
+    "data/ai-commodity-infra/universe.json",
     "supervised_scan.py"
   ],
   "storage_boundary": {

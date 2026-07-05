@@ -98,6 +98,14 @@ class PlaybookDiscoveryTests(unittest.TestCase):
     def test_speculative_window_targets_shortest_allowed_contracts(self):
         self.assertEqual(wfo._playbook_trade_window("speculative"), {"min_dte": 5, "max_dte": 9})
 
+    def test_active_scan_playbook_windows_include_target_dte(self):
+        for playbook_id, playbook in ss.SCAN_PLAYBOOKS.items():
+            with self.subTest(playbook_id=playbook_id):
+                target_dte = int(playbook["target_dte"])
+                window = wfo._playbook_trade_window(playbook_id)
+                self.assertLessEqual(window["min_dte"], target_dte)
+                self.assertGreaterEqual(window["max_dte"], target_dte)
+
     def test_stable_slice_gets_promote(self):
         start = date(2024, 1, 5)
         tickers = ["PFE", "MRK", "LLY"]

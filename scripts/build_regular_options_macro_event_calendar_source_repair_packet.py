@@ -380,12 +380,16 @@ def _downstream_implications(
             "branch": "macro_event_long_strangle",
             "concept_id": macro_long_playbook.get("concept_id") or macro_long_readiness.get("concept_id"),
             "status": macro_long_readiness.get("status"),
-            "event_calendar_blockers": [item for item in macro_blockers if "macro_event" in str(item) or "event_calendar" in str(item)],
+            "event_calendar_blockers": (
+                [item for item in macro_blockers if "macro_event" in str(item) or "event_calendar" in str(item)]
+                or ([] if macro_long_readiness.get("status") else ["missing_point_in_time_macro_event_calendar"])
+            ),
             "remaining_non_event_blockers": [
                 item for item in macro_blockers if not ("macro_event" in str(item) or "event_calendar" in str(item))
             ],
-            "would_clear_event_calendar_blocker_if_future_source_passes": any(
-                "macro_event" in str(item) or "event_calendar" in str(item) for item in macro_blockers
+            "would_clear_event_calendar_blocker_if_future_source_passes": bool(
+                macro_long_readiness.get("status") is None
+                or any("macro_event" in str(item) or "event_calendar" in str(item) for item in macro_blockers)
             ),
         },
         {
@@ -467,7 +471,7 @@ def build_report(
         "as_of_date": as_of_date,
         "current_forward_rows": current.get("current_forward_rows", 0),
         "target_forward_rows": current.get("minimum_profitable_strict_completed_rows", 30),
-        "macro_event_calendar_status": macro_calendar.get("status"),
+        "macro_event_calendar_status": macro_calendar.get("status") or "blocked_macro_event_calendar_source_missing",
         "event_count": macro_calendar.get("event_count", 0),
         "covered_categories": macro_calendar.get("covered_categories", []),
         "missing_required_categories": sorted(set(REQUIRED_CATEGORIES) - set(_as_list(macro_calendar.get("covered_categories")))),

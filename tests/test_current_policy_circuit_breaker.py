@@ -243,7 +243,7 @@ class CurrentPolicyCircuitBreakerTests(unittest.TestCase):
                             "tracked_rows_with_stored_pnl": 0,
                         },
                         "lane_gates": {
-                            "short_term": {
+                            "bullish_pullback_observation": {
                                 "status": "candidate_flow_allowed_with_self_guardrails",
                                 "auto_track_allowed": True,
                                 "blockers": [],
@@ -256,11 +256,11 @@ class CurrentPolicyCircuitBreakerTests(unittest.TestCase):
             )
             candidate = {
                 "audit_generated_at_utc": "2026-06-04T16:00:00Z",
-                "candidate_key": "2026-06-04|short_term|SPY|call|2026-06-26|||760.0|780.0",
+                "candidate_key": "2026-06-04|bullish_pullback_observation|SPY|call|2026-06-26|||760.0|780.0",
                 "candidate_status": "pending_live_validation",
                 "tracking_approved_lane": True,
                 "position_tracking_mode": "auto_track",
-                "playbook_id": "short_term",
+                "playbook_id": "bullish_pullback_observation",
                 "ticker": "SPY",
                 "direction": "call",
                 "expiry": "2026-06-26",

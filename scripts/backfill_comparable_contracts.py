@@ -64,6 +64,10 @@ def _backup_tracked_positions_snapshot(repository, *, label: str) -> Path:
     return backup_path
 
 
+def _table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
+    return {str(row[1]) for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
+
+
 def _strategy_type(scan_pick: dict[str, Any]) -> str:
     explicit = str(scan_pick.get("strategy_type") or "").strip().lower()
     if explicit:
@@ -167,6 +171,7 @@ def migrate_suggested_trades() -> dict[str, Any]:
     conn = sqlite3.connect(SUGGESTED_DB_PATH)
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
+    suggested_columns = _table_columns(conn, "suggested_trades")
     rows = cur.execute(
         """
         SELECT id, status, contracts, contract_symbol, strike, expiry, entry_option_price, entry_underlying_price,
@@ -199,27 +204,32 @@ def migrate_suggested_trades() -> dict[str, Any]:
         if resolution is None or not str(resolved_pick.get("contract_symbol") or "").strip():
             skipped.append({"id": int(row["id"]), "ticker": source_pick.get("ticker"), "reason": "no_comparable_contract"})
             continue
+        contracts = max(int(row["contracts"] or 1), 1)
+        strategy_type = _strategy_type(resolved_pick)
+        entry_fee = commission_total_usd(contracts=contracts, sides=2 if strategy_type == "vertical_spread" else 1)
+        updates = {
+            "contract_symbol": str(resolved_pick.get("contract_symbol")),
+            "strike": float(resolved_pick.get("strike")),
+            "expiry": str(resolved_pick.get("expiry")),
+            "entry_option_price": float(resolved_fill_price),
+            "entry_underlying_price": resolved_pick.get("entry_underlying_price"),
+            "source_pick_snapshot": json.dumps(resolved_pick),
+        }
+        if "entry_execution_price" in suggested_columns:
+            updates["entry_execution_price"] = float(resolved_fill_price)
+        if "entry_execution_basis" in suggested_columns:
+            updates["entry_execution_basis"] = str(resolved_pick.get("entry_execution_basis") or "comparable_contract_entry")
+        if "entry_fee_total_usd" in suggested_columns:
+            updates["entry_fee_total_usd"] = float(entry_fee)
+        assignments = ",\n                ".join(f"{column} = ?" for column in updates)
         cur.execute(
-            """
+            f"""
             UPDATE suggested_trades
-            SET contract_symbol = ?,
-                strike = ?,
-                expiry = ?,
-                entry_option_price = ?,
-                entry_underlying_price = ?,
-                source_pick_snapshot = ?,
+            SET {assignments},
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
-            (
-                str(resolved_pick.get("contract_symbol")),
-                float(resolved_pick.get("strike")),
-                str(resolved_pick.get("expiry")),
-                float(resolved_fill_price),
-                resolved_pick.get("entry_underlying_price"),
-                json.dumps(resolved_pick),
-                int(row["id"]),
-            ),
+            (*updates.values(), int(row["id"])),
         )
         updated_ids.append(int(row["id"]))
     conn.commit()

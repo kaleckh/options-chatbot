@@ -7,3 +7,11 @@ export async function getSectorSentiments(): Promise<unknown[]> {
     "Failed to fetch sector data"
   );
 }
+
+export async function getCurrentPolicyHistoricalPicks(): Promise<Record<string, unknown>> {
+  return fetchBackendJson<Record<string, unknown>>(
+    "/api/current-policy-historical-picks",
+    undefined,
+    "Failed to fetch current-policy historical picks"
+  );
+}

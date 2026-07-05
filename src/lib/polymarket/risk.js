@@ -58,7 +58,12 @@ class RiskManager {
       return this._reject(order, "daily_loss_limit_reached");
     }
 
-    const orderExposure = order.size * order.price;
+    const normalizedOrder = this._normalizeOrder(order);
+    if (!normalizedOrder.valid) {
+      return this._reject(order, normalizedOrder.reason);
+    }
+
+    const orderExposure = normalizedOrder.size * normalizedOrder.price;
     const additionalExposure = this._additionalExposure(order, orderExposure);
 
     const sellInventoryCheck = this._checkSellInventory(order);
@@ -87,6 +92,22 @@ class RiskManager {
       return orderExposure;
     }
     return 0;
+  }
+
+  _normalizeOrder(order = {}) {
+    const side = String(order.side || "").trim().toLowerCase();
+    if (!["buy", "sell"].includes(side)) {
+      return { valid: false, reason: "invalid_order_side" };
+    }
+    const size = Number(order.size);
+    if (!Number.isFinite(size) || size <= 0) {
+      return { valid: false, reason: "invalid_order_size" };
+    }
+    const price = Number(order.price);
+    if (!Number.isFinite(price) || price <= 0 || price > 1) {
+      return { valid: false, reason: "invalid_order_price" };
+    }
+    return { valid: true, side, size, price };
   }
 
   _orderPositionKeys(order) {
@@ -166,6 +187,10 @@ class RiskManager {
   }
 
   recordOrderPlaced(order = {}) {
+    const normalizedOrder = this._normalizeOrder(order);
+    if (!normalizedOrder.valid) {
+      return { openOrderCount: this.openOrderCount, reservedExposure: 0, rejected: true, reason: normalizedOrder.reason };
+    }
     const rawExposure = Number(order.size || 0) * Number(order.price || 0);
     const exposure = String(order.side || "").toLowerCase() === "sell"
       ? this._additionalExposure(order, rawExposure)

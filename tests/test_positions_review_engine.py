@@ -7,6 +7,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pandas as pd
+
 TESTS_DIR = Path(__file__).resolve().parent
 ROOT = TESTS_DIR.parents[0]
 BACKEND_DIR = ROOT / "python-backend"
@@ -480,6 +482,107 @@ class PositionsReviewEngineTests(unittest.TestCase):
             self.assertEqual(call["snapshot_kind"], svc.DAILY_SNAPSHOT_KIND)
             self.assertEqual(call["earliest_minute_et"], svc.DAILY_QUOTE_MINUTE_ET)
             self.assertEqual(call["window_minutes"], 0)
+
+    def test_live_comparable_spread_uses_executable_ask_bid_entry(self):
+        long_row = pd.DataFrame(
+            [
+                {
+                    "strike": 100.0,
+                    "bid": 4.8,
+                    "ask": 5.0,
+                    "lastPrice": 4.9,
+                    "contractSymbol": "AAA260619C00100000",
+                }
+            ]
+        )
+        chain = SimpleNamespace(
+            calls=pd.DataFrame(
+                [
+                    {
+                        "strike": 100.0,
+                        "bid": 4.8,
+                        "ask": 5.0,
+                        "lastPrice": 4.9,
+                        "contractSymbol": "AAA260619C00100000",
+                    },
+                    {
+                        "strike": 110.0,
+                        "bid": 1.7,
+                        "ask": 1.9,
+                        "lastPrice": 1.8,
+                        "contractSymbol": "AAA260619C00110000",
+                    },
+                ]
+            ),
+            puts=pd.DataFrame(),
+        )
+        scan_pick = {
+            "ticker": "AAA",
+            "direction": "call",
+            "strategy_type": "vertical_spread",
+            "strike": 100.0,
+            "short_strike": 110.0,
+            "expiry": "2026-06-19",
+        }
+
+        with (
+            patch.object(svc, "_resolve_live_contract_row", return_value=("2026-06-19", long_row)),
+            patch.object(svc, "_cached_option_chain", return_value=chain),
+        ):
+            result = svc._resolve_live_comparable_pick(scan_pick)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["entry_execution_price"], 3.3)
+        self.assertEqual(result["entry_execution_basis"], "spread_ask_bid")
+        self.assertEqual(result["quote_basis"], "spread_ask_bid")
+
+    def test_live_comparable_spread_rejects_nonpositive_executable_debit(self):
+        long_row = pd.DataFrame(
+            [
+                {
+                    "strike": 100.0,
+                    "bid": 1.0,
+                    "ask": 1.5,
+                    "lastPrice": 1.2,
+                    "contractSymbol": "AAA260619C00100000",
+                }
+            ]
+        )
+        chain = SimpleNamespace(
+            calls=pd.DataFrame(
+                [
+                    {
+                        "strike": 100.0,
+                        "bid": 1.0,
+                        "ask": 1.5,
+                        "lastPrice": 1.2,
+                        "contractSymbol": "AAA260619C00100000",
+                    },
+                    {
+                        "strike": 110.0,
+                        "bid": 1.7,
+                        "ask": 1.9,
+                        "lastPrice": 1.8,
+                        "contractSymbol": "AAA260619C00110000",
+                    },
+                ]
+            ),
+            puts=pd.DataFrame(),
+        )
+        scan_pick = {
+            "ticker": "AAA",
+            "direction": "call",
+            "strategy_type": "vertical_spread",
+            "strike": 100.0,
+            "short_strike": 110.0,
+            "expiry": "2026-06-19",
+        }
+
+        with (
+            patch.object(svc, "_resolve_live_contract_row", return_value=("2026-06-19", long_row)),
+            patch.object(svc, "_cached_option_chain", return_value=chain),
+        ):
+            self.assertIsNone(svc._resolve_live_comparable_pick(scan_pick))
 
     def test_spread_contract_aliases_count_as_resolved_identity(self):
         scan_pick = {

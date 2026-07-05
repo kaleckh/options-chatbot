@@ -633,9 +633,9 @@
     },
     {
       "from": "ai_commodity_runner",
-      "reason": "AI commodity runner emits latest proof-lane readback.",
-      "to": "ai_commodity_latest",
-      "type": "generates"
+      "reason": "AI commodity runner consumes the checked proof-lane universe.",
+      "to": "ai_commodity_universe",
+      "type": "reads"
     },
     {
       "from": "ai_commodity_isolation_doc",
@@ -1550,12 +1550,12 @@
       "read_when": "Touching AI commodity proof lane."
     },
     {
-      "id": "ai_commodity_latest",
+      "id": "ai_commodity_universe",
       "kind": "generated_artifact",
-      "label": "AI commodity latest progress",
-      "owner_summary": "Generated AI commodity proof-lane progress readback.",
-      "path": "data/ai-commodity-infra/progress/latest.md",
-      "read_when": "Checking latest AI commodity proof state."
+      "label": "AI commodity universe",
+      "owner_summary": "Checked AI commodity proof-lane universe artifact.",
+      "path": "data/ai-commodity-infra/universe.json",
+      "read_when": "Checking AI commodity proof universe membership."
     },
     {
       "id": "ai_commodity_isolation_doc",
@@ -1896,7 +1896,7 @@
         "ai_commodity_isolation_json",
         "next_steps",
         "ai_commodity_runner",
-        "ai_commodity_latest"
+        "ai_commodity_universe"
       ],
       "summary": "Treat AI commodity as a separate non-browser proof-first lane."
     },

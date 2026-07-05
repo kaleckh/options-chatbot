@@ -123,6 +123,25 @@ class BullishPullbackLayer4ForwardCandidateValidatorTests(unittest.TestCase):
         ]:
             self.assertGreaterEqual(rejects.get(reason, 0), 1, reason)
 
+    def test_rejects_non_finite_exact_exit_numerics(self) -> None:
+        rows = [
+            _valid_row(row_id="infinite-entry", long_entry_ask=1e309),
+            _valid_row(row_id="nan-exit", short_exit_bid=float("nan")),
+            _valid_row(row_id="infinite-pnl", net_pnl_usd=float("inf")),
+            _valid_row(row_id="infinite-multiplier", contract_multiplier=float("inf")),
+        ]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "rows.jsonl"
+            _write_jsonl(path, rows)
+            report = validator.validate_rows(path)
+
+        self.assertFalse(report["candidate_rows_would_be_valid_for_future_approval"])
+        rejects = report["reject_counts"]
+        self.assertGreaterEqual(rejects.get("missing_entry_quote", 0), 1)
+        self.assertGreaterEqual(rejects.get("missing_exit_quote", 0), 1)
+        self.assertGreaterEqual(rejects.get("missing_net_pnl_usd", 0), 1)
+        self.assertGreaterEqual(rejects.get("missing_contract_multiplier", 0), 1)
+
     def test_missing_candidate_file_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             report = validator.validate_rows(Path(temp_dir) / "missing.jsonl")

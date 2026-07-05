@@ -130,8 +130,8 @@ class MarketMaker {
     let bidPrice = midPrice - halfSpread - skew;
     let askPrice = midPrice + halfSpread - skew;
 
-    bidPrice = Math.max(0.01, Math.round(bidPrice * 100) / 100);
-    askPrice = Math.min(0.99, Math.round(askPrice * 100) / 100);
+    bidPrice = Math.min(0.99, Math.max(0.01, Math.round(bidPrice * 100) / 100));
+    askPrice = Math.min(0.99, Math.max(0.01, Math.round(askPrice * 100) / 100));
     const orderSize = Math.round(this.config.orderSizeUsd / midPrice);
 
     if (orderSize < 1) return { tokenId, status: "skip", reason: "order_size_too_small" };

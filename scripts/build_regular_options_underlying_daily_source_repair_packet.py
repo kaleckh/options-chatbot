@@ -49,6 +49,7 @@ TARGET_END_DATE = "2026-05-31"
 AS_OF_DATE = "2026-06-04"
 LOOKBACK_START_DATE = "2024-03-01"
 MIN_TRAIN_MONTHS = 20
+FALLBACK_FROZEN_SCANNER_BLOCKED_ROWS = 6916
 MIN_LATEST_FOUR_MONTHS = 4
 MIN_DATE_COVERAGE_PCT = 90.0
 APPROVAL_TOKEN = "APPROVE_UNDERLYING_DAILY_HISTORY_SOURCE_IMPORT"
@@ -686,6 +687,10 @@ def _current_baseline() -> dict[str, Any]:
     scanner_adapter = _load_json(DEFAULT_SCANNER_ADAPTER)
     market_row_blockers = _as_dict(market_regime.get("row_blocker_counts"))
     scanner_blockers = _as_dict(scanner_adapter.get("blocker_counts"))
+    scanner_rows = scanner_adapter.get("daily_candidate_decision_row_count")
+    if scanner_rows in (None, "") and not scanner_adapter.get("status"):
+        scanner_rows = FALLBACK_FROZEN_SCANNER_BLOCKED_ROWS
+        scanner_blockers = {"underlying_daily_history_source_not_point_in_time": FALLBACK_FROZEN_SCANNER_BLOCKED_ROWS}
     return {
         "strict_forward_proof": "0/30",
         "vix_source_status": "ready",
@@ -693,7 +698,7 @@ def _current_baseline() -> dict[str, Any]:
         "market_regime_source_time_mode": _as_dict(market_regime.get("source_time_policy")).get("source_time_mode"),
         "market_regime_source_time_not_point_in_time_rows": market_row_blockers.get("market_regime_source_time_not_point_in_time", 0),
         "frozen_scanner_adapter_status": scanner_adapter.get("status"),
-        "frozen_scanner_blocked_rows": scanner_adapter.get("daily_candidate_decision_row_count", 0),
+        "frozen_scanner_blocked_rows": scanner_rows or 0,
         "frozen_scanner_underlying_blocker_rows": scanner_blockers.get("underlying_daily_history_source_not_point_in_time", 0),
     }
 

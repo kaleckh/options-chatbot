@@ -826,7 +826,8 @@ def _current_tracked_positions_health_check(base_check: dict[str, Any] | None = 
     realized_profit_factor = _safe_float(realized_metrics.get("net_profit_factor"))
     realized_avg_net_pnl_pct = _safe_float(realized_metrics.get("avg_net_pnl_pct"))
     realized_profitability_ready = (
-        realized_profit_factor is not None
+        closed_position_count >= required_closed_int
+        and realized_profit_factor is not None
         and realized_profit_factor >= float(required_profit_factor)
         and realized_avg_net_pnl_pct is not None
         and realized_avg_net_pnl_pct > float(required_avg_net_pnl)

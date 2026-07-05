@@ -294,6 +294,60 @@ test("risk manager reserves open-order exposure and realizes partial sell pnl", 
   assert.equal(risk.positions.get("condition-1").size, 6);
 });
 
+test("risk manager rejects malformed buy orders before exposure math", () => {
+  const risk = new RiskManager({ maxTotalExposureUsd: 100, maxSinglePositionUsd: 100, maxOpenOrders: 5 });
+
+  for (const order of [
+    { tokenId: "a", side: "buy", size: Number.NaN, price: 0.5 },
+    { tokenId: "a", side: "buy", size: 0, price: 0.5 },
+    { tokenId: "a", side: "buy", size: -1, price: 0.5 },
+    { tokenId: "a", side: "buy", size: 1, price: Number.POSITIVE_INFINITY },
+    { tokenId: "a", side: "buy", size: 1, price: -0.1 },
+    { tokenId: "a", side: "buy", size: 1, price: 1.01 },
+    { tokenId: "a", side: "hold", size: 1, price: 0.5 },
+  ]) {
+    const check = risk.checkOrder(order);
+    assert.equal(check.allowed, false, JSON.stringify(order));
+  }
+
+  const reservation = risk.recordOrderPlaced({ orderId: "bad", tokenId: "a", side: "buy", size: Number.NaN, price: 0.5 });
+  assert.equal(reservation.rejected, true);
+  assert.equal(risk.openOrderCount, 0);
+});
+
+test("market maker clamps skewed live bid prices to binary contract bounds", async () => {
+  const risk = new RiskManager({ maxTotalExposureUsd: 1000, maxSinglePositionUsd: 1000, maxOpenOrders: 5 });
+  const maker = new MarketMaker(risk, {
+    dryRun: false,
+    orderSizeUsd: 10,
+    maxInventoryUsd: 10000,
+    inventorySkewFactor: 1,
+  });
+  maker.inventory.set("yes-token", { yesShares: 0, noShares: 1000 });
+
+  const posted = [];
+  const result = await maker._quoteMarket(
+    {
+      createOrder: async (order) => order,
+      postOrder: async (order) => {
+        posted.push(order);
+        return { id: "bid-1" };
+      },
+    },
+    "yes-token",
+    {
+      question: "Skewed market",
+      midPrice: 0.95,
+      spread: 0.02,
+    }
+  );
+
+  assert.equal(result.actions[0].side, "bid");
+  assert.equal(result.actions[0].price, 0.99);
+  assert.equal(posted[0].price, 0.99);
+  assert.equal(risk.openOrders.get("bid-1").exposure, 10.89);
+});
+
 test("risk manager clears canceled order exposure and allows exposure-reducing sells", () => {
   const risk = new RiskManager({ maxTotalExposureUsd: 100, maxSinglePositionUsd: 100, maxOpenOrders: 5 });
   risk.recordOrderPlaced({ orderId: "order-1", tokenId: "a", side: "buy", size: 60, price: 1 });

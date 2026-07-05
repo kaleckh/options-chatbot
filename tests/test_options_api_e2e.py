@@ -144,6 +144,33 @@ class _ProfitStatusSnapshotOnlyRepository:
         raise AssertionError("status overlay should use the narrow profit_status_snapshot")
 
 
+class _ProfitableButUndersizedSnapshotRepository:
+    is_available = True
+    error_message = None
+    database_url = "postgresql://example/test"
+
+    def profit_status_snapshot(self):
+        loss_row = _proof_grade_closed_snapshot_row()
+        loss_row.update(
+            {
+                "entry_execution_price": 2.0,
+                "exit_execution_price": 1.5,
+                "net_pnl_pct": -25.0,
+                "gross_pnl_pct": -25.0,
+                "net_pnl_usd": -50.0,
+                "gross_pnl_usd": -50.0,
+            }
+        )
+        return {
+            "open_position_count": 0,
+            "total_closed_position_count": 2,
+            "closed_positions": [_proof_grade_closed_snapshot_row(), loss_row],
+        }
+
+    def list_positions(self, *args, **kwargs):
+        raise AssertionError("status overlay should use the narrow profit_status_snapshot")
+
+
 class OptionsAlgorithmApiE2ETests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -551,6 +578,23 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertEqual(tracked_check["closed_position_count"], 1)
         self.assertEqual(tracked_check["non_proof_closed_position_count"], 1)
         self.assertEqual(tracked_check["runtime_snapshot_source"], "positions_repository_profit_status_snapshot")
+
+    def test_tracked_positions_health_requires_closed_count_for_realized_profitability_ready(self):
+        with patch.object(self.backend, "POSITIONS_REPOSITORY", _ProfitableButUndersizedSnapshotRepository()):
+            tracked_check = self.backend._current_tracked_positions_health_check(
+                {
+                    "required_closed_position_count": 20,
+                    "required_net_profit_factor": 1.0,
+                    "required_avg_net_pnl_pct_gt": 0.0,
+                }
+            )
+
+        self.assertTrue(tracked_check["available"])
+        self.assertEqual(tracked_check["closed_position_count"], 2)
+        self.assertEqual(tracked_check["required_closed_position_count"], 20)
+        self.assertGreater(tracked_check["net_profit_factor"], 1.0)
+        self.assertGreater(tracked_check["avg_net_pnl_pct"], 0.0)
+        self.assertFalse(tracked_check["realized_profitability_ready"])
 
     def test_tool_endpoint_accepts_empty_body_and_decodes_json_string_results(self):
         with patch.object(

@@ -7,6 +7,10 @@ const ts = require("typescript");
 
 const ROOT = path.join(__dirname, "..", "..");
 
+function readRepoFile(relativePath) {
+  return fs.readFileSync(path.join(ROOT, relativePath), "utf8");
+}
+
 function loadTransportModule(env, fetchImpl) {
   const sourcePath = path.join(ROOT, "src", "lib", "backend", "transport.ts");
   const source = fs.readFileSync(sourcePath, "utf8");
@@ -310,4 +314,14 @@ test("api jsonError preserves deliberate backend 503 messages while sanitizing 5
   assert.equal(unavailable.body.error, "Tracked positions storage unavailable: DATABASE_URL is not configured.");
   assert.equal(internal.status, 500);
   assert.equal(internal.body.error, "Failed to fetch tracked positions");
+});
+
+test("current-policy historical picks route uses backend transport instead of direct artifact reads", () => {
+  const routeSource = readRepoFile("src/app/api/current-policy-historical-picks/route.ts");
+  const supportSource = readRepoFile("src/lib/backend/support.ts");
+
+  assert.match(routeSource, /getCurrentPolicyHistoricalPicks/);
+  assert.doesNotMatch(routeSource, /from "fs"/);
+  assert.doesNotMatch(routeSource, /current_policy_historical_picks_latest\.json/);
+  assert.match(supportSource, /\/api\/current-policy-historical-picks/);
 });
