@@ -5,29 +5,30 @@ This generated artifact tracks whether the paid/local source surfaces needed for
 ## Summary
 
 - Status: `blocked_historical_scanner_input_surfaces`.
-- Window: `2024-06-01` through `2026-07-02` as of `2026-07-02`.
-- Symbol-dates: `6760`.
-- Smallest next blocker: `missing_historical_entry_underlying_price_surface`.
+- Window: `2024-06-01` through `2026-05-31` as of `2026-06-04`.
+- Symbol-dates: `6487`.
+- Smallest next blocker: `missing_daily_candidate_generation_diagnostics`.
 
 ## Surfaces
 
 | Surface | Available | Coverage |
 |---|---:|---:|
+| `known_source_gaps` | `false` |  |
 | `feature_store_denominator` | `true` |  |
 | `market_regime_inputs` | `true` |  |
-| `underlying_daily_feature_source_rows` | `false` | `95.0%` |
+| `underlying_daily_feature_source_rows` | `false` | `98.998%` |
 | `vix_bucket` | `true` |  |
-| `entry_underlying_price_surface` | `false` | `95.9615%` |
-| `option_chain_selection_surface` | `false` | `96.7308%` |
-| `earnings_calendar` | `false` |  |
-| `lane_specific_feature_inputs` | `true` |  |
-| `candidate_decision_replay_execution` | `true` |  |
+| `entry_underlying_price_surface` | `true` | `100.0%` |
+| `option_chain_selection_surface` | `true` | `100.0%` |
+| `earnings_calendar` | `true` |  |
+| `lane_specific_feature_inputs` | `false` |  |
+| `candidate_decision_replay_execution` | `false` |  |
 
 ## Blockers
 
-- `missing_historical_entry_underlying_price_surface`
-- `missing_historical_option_chain_selection_surface`
-- `missing_point_in_time_earnings_calendar_source`
+- `missing_daily_candidate_generation_diagnostics`
+- `missing_historical_candidate_decision_replay_execution`
+- `missing_lane_specific_point_in_time_feature_inputs`
 - `missing_point_in_time_underlying_daily_feature_source_rows`
 
 ## Boundary

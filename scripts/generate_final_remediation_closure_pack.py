@@ -6,6 +6,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+if __package__:
+    from .archive_project_memory import project_memory_corpus_paths
+else:
+    from archive_project_memory import project_memory_corpus_paths
+
 
 ROOT = Path(__file__).resolve().parents[1]
 GENERATOR = "scripts/generate_final_remediation_closure_pack.py"
@@ -56,6 +61,13 @@ def _relative(path: Path) -> str:
 
 def _read(relative_path: str) -> str:
     return (ROOT / relative_path).read_text(encoding="utf-8")
+
+
+def _worklog_corpus_text() -> str:
+    return "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in project_memory_corpus_paths(root=ROOT, logical_path="docs/WORKLOG.md")
+    )
 
 
 def _load_json(relative_path: str) -> dict[str, Any]:
@@ -111,7 +123,7 @@ def _loop_closure(remediation: dict[str, Any], errors: list[str]) -> dict[str, A
     if status_split.get("completed") != 44 or status_split.get("planned") != 0 or status_split.get("in_progress") != 0:
         errors.append("Remediation loop status split must be 44 completed, 0 planned, and 0 in_progress.")
 
-    worklog = _read("docs/WORKLOG.md")
+    worklog = _worklog_corpus_text()
     for point in completed_points:
         owner_paths = [*point.get("owner_docs", []), *point.get("owner_artifacts", [])]
         missing = _missing_paths(owner_paths)
@@ -428,7 +440,7 @@ def render_markdown(closure: dict[str, Any]) -> str:
             "",
             "## Discoverability",
             "",
-            f"- Closure document: `docs/final-remediation-closure-pack.md`",
+            "- Closure document: `docs/final-remediation-closure-pack.md`",
             f"- Missing discovery docs: `{_md_cell(discovery['missing_discovery_docs'])}`",
             "- Future agent path: closure pack -> remediation loop map -> agent memory graph -> owner docs.",
             "",

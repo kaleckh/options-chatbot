@@ -20,6 +20,7 @@ from scripts.build_regular_options_historical_profitability_filter_iteration imp
     DEFAULT_SELECTED_CANDIDATES,
     DEFAULT_TRAIN_MONTHS,
     _accepted_rows,
+    _allocation_policy_audit,
     _as_dict,
     _as_list,
     _bootstrap_dict,
@@ -167,6 +168,7 @@ def build_report(
         computed_conditions_hash = ""
         filter_source_mode = "accepted_filter"
     rows_before_dedupe = _accepted_rows(raw_rows)
+    allocation_policy = _allocation_policy_audit(rows_before_dedupe)
     rows = _dedupe_rows(rows_before_dedupe)
     months = sorted({_month_key(row) for row in rows if _month_key(row)})
     split = _split_months(months, train_months=int(train_months), audit_months=int(audit_months))
@@ -190,6 +192,8 @@ def build_report(
         blockers.append("frozen_contract_filter_hash_mismatch")
     if not split.get("sufficient_months_for_requested_split"):
         blockers.append("insufficient_months_for_requested_split")
+    if allocation_policy.get("collision_group_count"):
+        blockers.append("cross_lane_allocation_policy_missing")
 
     filtered_rows = _filter_rows(rows, selected_filter) if selected_filter else []
     train_filtered = [row for row in filtered_rows if _month_key(row) in train_set]
@@ -274,6 +278,7 @@ def build_report(
             "by_month": dict(sorted(by_month.items())),
             "by_ticker": dict(sorted(by_ticker.items())),
         },
+        "allocation_policy": allocation_policy,
         "regime_concentration": regime_concentration,
         "metrics": {
             "train": train_metrics,
@@ -312,6 +317,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Filter: `{source.get('filter_id')}`.",
         f"- Conditions: {_conditions_text(_as_list(source.get('conditions')))}.",
         f"- Dedupe: `{history.get('accepted_exact_candidate_rows_before_dedupe')}` rows before dedupe, `{history.get('deduped_row_count')}` rows after dedupe, `{history.get('duplicate_rows_removed')}` duplicates removed.",
+        f"- Cross-lane allocation collisions: `{_as_dict(report.get('allocation_policy')).get('collision_group_count')}`; unbiased combined portfolio: `{_as_dict(report.get('allocation_policy')).get('combined_portfolio_unbiased')}`.",
         f"- Audit confidence label: `{confidence.get('audit_cluster_confidence_label')}`.",
         f"- Bootstrap draws: `{_as_dict(report.get('requested_split')).get('bootstrap_draws')}`.",
         "",

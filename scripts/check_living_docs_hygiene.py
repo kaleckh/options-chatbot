@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from scripts.generated_artifact_manifest import GENERATED_ARTIFACTS, GeneratedArtifact
+    from scripts.generated_artifact_manifest import GENERATED_ARTIFACTS
 except ModuleNotFoundError:  # pragma: no cover - direct script execution from scripts/
-    from generated_artifact_manifest import GENERATED_ARTIFACTS, GeneratedArtifact
+    from generated_artifact_manifest import GENERATED_ARTIFACTS
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,6 +35,22 @@ SOURCE_OF_TRUTH_DOCS = (
     "docs/index.md",
     "docs/living-docs-hygiene.md",
 )
+
+LIVING_MEMORY_BYTE_BUDGETS = {
+    "docs/PROJECT_CONTEXT.md": 22 * 1024,
+    "docs/DECISIONS.md": 24 * 1024,
+    "docs/WORKLOG.md": 10 * 1024,
+    "docs/NEXT_STEPS.md": 22 * 1024,
+    "docs/index.md": 16 * 1024,
+}
+LIVING_MEMORY_TOTAL_BYTE_BUDGET = 94 * 1024
+STARTUP_CONTEXT_PATHS = (
+    "AGENTS.md",
+    "README.md",
+    *LIVING_MEMORY_BYTE_BUDGETS,
+    "docs/agent-control-plane.md",
+)
+STARTUP_CONTEXT_TOTAL_BYTE_BUDGET = 150 * 1024
 
 PLACEHOLDER_PATTERN = re.compile(r"\b(TODO|TBD|FIXME)\b", re.IGNORECASE)
 
@@ -100,6 +116,22 @@ def check_living_docs_hygiene() -> list[str]:
         errors.append("docs/WORKLOG.md must contain dated '## YYYY-MM-DD' sections.")
     if "Durable decision:" not in _read("docs/DECISIONS.md"):
         errors.append("docs/DECISIONS.md must contain durable-decision language.")
+
+    memory_total = 0
+    for relative_path, budget in LIVING_MEMORY_BYTE_BUDGETS.items():
+        size = (ROOT / relative_path).stat().st_size
+        memory_total += size
+        if size > budget:
+            errors.append(f"Living memory file exceeds byte budget: {relative_path} is {size}, limit {budget}")
+    if memory_total > LIVING_MEMORY_TOTAL_BYTE_BUDGET:
+        errors.append(
+            f"Living memory corpus exceeds byte budget: {memory_total}, limit {LIVING_MEMORY_TOTAL_BYTE_BUDGET}"
+        )
+    startup_total = sum((ROOT / relative_path).stat().st_size for relative_path in STARTUP_CONTEXT_PATHS)
+    if startup_total > STARTUP_CONTEXT_TOTAL_BYTE_BUDGET:
+        errors.append(
+            f"Startup context exceeds byte budget: {startup_total}, limit {STARTUP_CONTEXT_TOTAL_BYTE_BUDGET}"
+        )
 
     for artifact in GENERATED_ARTIFACTS:
         path = ROOT / artifact.path

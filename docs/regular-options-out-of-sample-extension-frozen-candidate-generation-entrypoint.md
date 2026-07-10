@@ -4,30 +4,19 @@ This generated artifact exposes a reusable read-only daily candidate/no-pick ent
 
 ## Summary
 
-- Status: `blocked_frozen_13_symbol_candidate_generation_entrypoint`.
+- Status: `frozen_13_symbol_candidate_generation_entrypoint_ready`.
 - Window: `2022-01-01` through `2024-05-31` as of `2024-05-31`.
 - Daily rows: `7574`.
-- Covered months: `0` / `29`.
-- Selected candidates: `0`.
+- Covered months: `29` / `29`.
+- Selected candidates: `3474`.
 - Outside-universe rows: `0`.
 
 ## Status Counts
 
 | Status | Count |
 |---|---:|
-| `blocked_missing_historical_scanner_point_in_time_inputs` | `7574` |
-
-## Blockers
-
-- `candidate_generation_months_0_below_requested_29`
-- `missing_historical_entry_underlying_price_surface`
-- `missing_historical_option_chain_selection_surface`
-- `missing_historical_scanner_point_in_time_inputs`
-- `missing_lane_specific_point_in_time_feature_inputs`
-- `missing_point_in_time_earnings_calendar_source`
-- `missing_point_in_time_market_regime_inputs`
-- `missing_point_in_time_vix_source`
-- `underlying_daily_history_source_not_point_in_time`
+| `explicit_no_pick` | `4100` |
+| `selected_candidate` | `3474` |
 
 ## Boundary
 

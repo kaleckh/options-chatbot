@@ -44,7 +44,7 @@ class RemediationLoopMapTests(unittest.TestCase):
         self.assertEqual(self.contract["validation"]["status_split"]["in_progress"], 0)
 
     def test_completed_points_have_evidence_and_existing_owner_paths(self):
-        worklog = (ROOT / "docs" / "WORKLOG.md").read_text(encoding="utf-8")
+        worklog = loop_map._worklog_corpus_text()
 
         for point in self.points[:44]:
             with self.subTest(point=point["point"]):

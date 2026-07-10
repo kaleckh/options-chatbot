@@ -5,10 +5,10 @@
   "append_token_required": "APPROVE_PHASE2_FORWARD_COHORT_APPEND",
   "artifacts": {
     "docs_report": "docs/regular-options-strict-forward-30-candidate-review-packet.md",
-    "json": "data/forward-tracking/regular_options_strict_forward_30_candidate_review_packet_20260703T200504Z.json",
+    "json": "data/forward-tracking/regular_options_strict_forward_30_candidate_review_packet_20260710T171823Z.json",
     "latest_json": "data/forward-tracking/regular_options_strict_forward_30_candidate_review_packet_latest.json",
     "latest_markdown": "data/forward-tracking/regular_options_strict_forward_30_candidate_review_packet_latest.md",
-    "markdown": "data/forward-tracking/regular_options_strict_forward_30_candidate_review_packet_20260703T200504Z.md"
+    "markdown": "data/forward-tracking/regular_options_strict_forward_30_candidate_review_packet_20260710T171823Z.md"
   },
   "auto_track_allowed": false,
   "broker_order_allowed": false,
@@ -36,18 +36,18 @@
   "capture_candidate_rows_staged": 0,
   "capture_freshness": {
     "blockers": [],
-    "capture_latest_generated_at_utc": "2026-07-02T19:35:02Z",
-    "collector_generated_at_utc": "2026-07-03T20:05:03Z",
-    "collector_nested_capture_generated_at_utc": "2026-07-03T20:05:03Z",
-    "effective_capture_source": "collector_nested_capture_report",
+    "capture_latest_generated_at_utc": "2026-07-10T17:05:03Z",
+    "collector_generated_at_utc": "2026-07-10T17:05:03Z",
+    "collector_nested_capture_generated_at_utc": "2026-07-10T17:05:03Z",
+    "effective_capture_source": "capture_latest",
     "fresh": true,
-    "status": "collector_nested_capture_fresh_for_candidate_review"
+    "status": "capture_latest_fresh_for_candidate_review"
   },
-  "capture_status": "market_window_not_confirmed_no_capture_started",
+  "capture_status": "no_phase2_natural_selections_no_append",
   "cohort_append_performed": false,
   "collector_candidate_rows_staged": 0,
-  "collector_status": "waiting_for_valid_market_window",
-  "generated_at_utc": "2026-07-03T20:05:04Z",
+  "collector_status": "collector_attempts_exhausted_waiting_for_more_rows",
+  "generated_at_utc": "2026-07-10T17:18:23Z",
   "guarded_append_observed": false,
   "historical_rows_are_forward_proof": false,
   "live_entry_allowed": false,
@@ -151,23 +151,29 @@
     }
   ],
   "safety_violations": [],
-  "scan_task_health_blockers": [],
+  "scan_task_health_blockers": [
+    "\\OptionsScanPicksSafetyNet:scan_task_runtime_blocking:scan_task_runtime_failed",
+    "\\OptionsScanPicksSafetyNet:scan_task_runtime_last_result_nonzero",
+    "scan_task_health_not_ready:scan_task_runtime_blocked"
+  ],
   "scan_task_health_freshness": {
-    "blockers": [],
-    "collector_generated_at_utc": "2026-07-03T20:05:03Z",
-    "fresh": true,
-    "scan_task_health_generated_at_utc": "2026-07-03T20:05:04Z",
-    "status": "scan_task_health_fresh_for_candidate_review"
+    "blockers": [
+      "scan_task_health_not_ready:scan_task_runtime_blocked"
+    ],
+    "collector_generated_at_utc": "2026-07-10T17:05:03Z",
+    "fresh": false,
+    "scan_task_health_generated_at_utc": "2026-07-10T17:18:23Z",
+    "status": "scan_task_health_not_ready"
   },
-  "scan_task_health_status": "scan_tasks_ready_for_next_market_window",
+  "scan_task_health_status": "scan_task_runtime_blocked",
   "scheduler_blockers": [
     "scheduler_runtime_blocking:scheduler_runtime_failed"
   ],
   "scheduler_health_freshness": {
     "blockers": [],
-    "collector_generated_at_utc": "2026-07-03T20:05:03Z",
+    "collector_generated_at_utc": "2026-07-10T17:05:03Z",
     "fresh": true,
-    "scheduler_generated_at_utc": "2026-07-03T20:05:04Z",
+    "scheduler_generated_at_utc": "2026-07-10T17:18:23Z",
     "status": "scheduler_health_fresh_for_candidate_review"
   },
   "scheduler_status": "scheduler_runtime_blocked",
@@ -180,12 +186,12 @@
     },
     "collector_latest": {
       "path": "data/forward-tracking/regular_options_strict_forward_30_market_window_collector_latest.json",
-      "report_status": "waiting_for_valid_market_window",
+      "report_status": "collector_attempts_exhausted_waiting_for_more_rows",
       "status": "loaded"
     },
     "scan_task_health_latest": {
       "path": "data/forward-tracking/regular_options_strict_forward_scan_task_health_latest.json",
-      "report_status": "scan_tasks_ready_for_next_market_window",
+      "report_status": "scan_task_runtime_blocked",
       "status": "loaded"
     },
     "scheduler_health_latest": {
@@ -223,19 +229,23 @@
       "enable_live_validation_auto_track_or_broker_orders",
       "mutate_evidence_stores"
     ],
-    "drop_count_total": 2398,
+    "drop_count_total": 1008,
     "drop_stage_ranking": [
       {
-        "count": 1710,
+        "count": 752,
         "stage": "momentum"
       },
       {
-        "count": 384,
+        "count": 128,
+        "stage": "history_or_liquidity"
+      },
+      {
+        "count": 112,
         "stage": "option_liquidity"
       },
       {
-        "count": 304,
-        "stage": "history_or_liquidity"
+        "count": 16,
+        "stage": "guardrails"
       }
     ],
     "missing_scheduled_sessions": [],
@@ -256,12 +266,12 @@
     },
     "scheduled_scan_picks_count": 0,
     "scheduled_session_error": null,
-    "scheduled_sessions_reviewed": 77,
+    "scheduled_sessions_reviewed": 32,
     "status": "zero_candidate_diagnosis_ready_symbol_drop_reasons_recorded",
-    "symbol_drop_reason_count_total": 2398,
+    "symbol_drop_reason_count_total": 992,
     "symbol_drop_reason_status": "symbol_drop_reasons_recorded",
     "target_date_only": true,
-    "target_selection_date": "2026-07-02"
+    "target_selection_date": "2026-07-10"
   },
   "zero_candidate_diagnostics_status": "zero_candidate_diagnosis_ready_symbol_drop_reasons_recorded",
   "zero_candidate_throughput_evidence": {
@@ -270,16 +280,20 @@
     ],
     "drop_stage_ranking": [
       {
-        "count": 1710,
+        "count": 752,
         "stage": "momentum"
       },
       {
-        "count": 384,
+        "count": 128,
+        "stage": "history_or_liquidity"
+      },
+      {
+        "count": 112,
         "stage": "option_liquidity"
       },
       {
-        "count": 304,
-        "stage": "history_or_liquidity"
+        "count": 16,
+        "stage": "guardrails"
       }
     ],
     "safe_next_read_only_actions": [

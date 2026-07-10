@@ -1,14 +1,14 @@
 # Regular Options Historical Frozen Adapter Exit Quote Repair Demand
 
-- Status: `exit_quote_repair_demand_empty`.
-- Repairable selected rows: `0`.
-- Target contracts: `0`.
-- Target quote dates: `0`.
+- Status: `exit_quote_repair_demand_ready`.
+- Repairable selected rows: `18`.
+- Target contracts: `35`.
+- Target quote dates: `5`.
 - Quotes imported: `false`.
 
 ## Excluded Unpriced Statuses
 
-- `missing_market_day_for_policy_exit`: `121`
+- `missing_market_day_for_policy_exit`: `114`
 
 ## Commands
 

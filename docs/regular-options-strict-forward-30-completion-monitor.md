@@ -1,6 +1,6 @@
 # Regular Options Strict Forward 30 Completion Monitor
 
-Status: `completion_monitor_scheduler_blocked`.
+Status: `completion_monitor_dependency_freshness_blocked`.
 
 - Strict completed forward rows: `0/30`.
 - Remaining rows: `30`.
@@ -9,12 +9,12 @@ Status: `completion_monitor_scheduler_blocked`.
 - Open rows waiting for policy exit: `0`.
 - Exact completed forward P&L rows: `0`.
 - Scheduler status: `scheduler_runtime_blocked`.
-- Scan-task health status: `scan_tasks_ready_for_next_market_window`.
+- Scan-task health status: `scan_task_runtime_blocked`.
 - Candidate review status: `candidate_review_waiting_for_scheduler_health`.
-- Collector status: `waiting_for_valid_market_window`.
+- Collector status: `collector_attempts_exhausted_waiting_for_more_rows`.
 - Exit-evidence plan status: `exit_evidence_plan_waiting_for_open_forward_rows`.
 - Exit-completion stager status: `exit_completion_waiting_for_open_forward_rows`.
 - Lifecycle audit status: `lifecycle_waiting_for_first_entry_row`.
-- Dependency freshness: `completion_monitor_dependencies_fresh`.
+- Dependency freshness: `completion_monitor_dependencies_stale_or_missing`.
 
 This monitor is read-only. It recomputes the strict-forward 30 completion count from the Phase 2 cohort report and does not append rows, enable live validation, enable auto-track, submit broker orders, import quotes, lower proof bars, or count historical rows as forward proof.

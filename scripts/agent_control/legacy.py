@@ -10,6 +10,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import uuid
 from collections import deque
@@ -17,6 +18,11 @@ from contextlib import closing, contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+
+try:
+    from scripts.archive_project_memory import verify_archive_manifest as _verify_project_memory_archive_manifest
+except ModuleNotFoundError:  # pragma: no cover - direct script execution from scripts/
+    from archive_project_memory import verify_archive_manifest as _verify_project_memory_archive_manifest
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -32,7 +38,10 @@ DEFAULT_LOCK_PATH = ROOT / "data" / "agent-control" / "agent_control.lock"
 DEFAULT_LOCK_STALE_SECONDS = 15 * 60
 DEFAULT_TENANT_ID = "options-chatbot"
 AGENT_RUN_LEDGER_VERSION = "agent_run_ledger_v1"
-CONTROL_SCHEMA_VERSION = "agent_control_schema_v3"
+CONTROL_SCHEMA_VERSION = "agent_control_schema_v5"
+BACKUP_MANIFEST_VERSION = "agent_memory_backup_v2"
+EVENT_OUTBOX_HASH_VERSION_V1 = "event_outbox_hash_v1"
+EVENT_OUTBOX_HASH_VERSION_V2 = "event_outbox_hash_v2"
 DEFAULT_REPO_INDEX_MAX_FILES = 2000
 DEFAULT_REPO_INDEX_MAX_FILE_BYTES = 256_000
 DEFAULT_REPO_INDEX_BODY_CHARS = 12_000
@@ -41,6 +50,10 @@ DEFAULT_CONTEXT_PACK_LIMIT = 6
 DEFAULT_MEMORY_GOLDEN_QUERIES_PATH = ROOT / "data" / "contracts" / "memory-golden-queries.json"
 LIVING_HISTORY_INGEST_VERSION = "living_history_ingest_v1"
 LIVING_HISTORY_SOURCE_TYPE = "living_history_ingest"
+LIVING_HISTORY_REQUIRED_SOURCE_PATHS = ("docs/WORKLOG.md", "docs/DECISIONS.md")
+LIVING_HISTORY_EXPECTATION_PREFIX = f"required:{LIVING_HISTORY_SOURCE_TYPE}:"
+LIVING_HISTORY_ACTIVATION_EVENT_TYPE = "memory.living_history.sources_activated"
+PROJECT_MEMORY_ARCHIVE_RELATIVE_ROOT = "docs/archive/project-memory"
 
 PATHWAYS = {
     "data",
@@ -67,6 +80,16 @@ HIGH_RISK_PERMISSION_MODES = {
     "broker_paper_discussion",
     "live_capital_discussion",
 }
+TRADING_FAIL_CLOSED_PERMISSION_MODES = {"context_only", "read_only_workers", "code_docs"}
+PROOF_GATE_STATUSES = {
+    "not_applicable",
+    "not_applicable_observe_only",
+    "observe_only",
+    "pass",
+    "passed",
+    "blocked",
+    "failed",
+}
 GRAPH_NODE_KINDS = {
     "memory",
     "knowledge",
@@ -78,6 +101,16 @@ GRAPH_NODE_KINDS = {
     "decision",
     "worker_run",
 }
+DREAM_OBSERVED_EVIDENCE_NODE_KINDS = {"evidence_artifact", "episode"}
+DREAM_OBSERVED_EVIDENCE_SOURCE_TYPES = {
+    "session_transcript",
+    "operating_memory",
+    "gateboard_source_artifact",
+    "profit_learning_sync",
+    "research_provenance",
+}
+TRUSTED_EVIDENCE_ATTESTATION_KEY = "trusted_writer_attestation"
+TRUSTED_EVIDENCE_ATTESTATION_VERSION = "trusted_evidence_writer_v1"
 OPERATING_MEMORY_TYPES = {
     "objective",
     "constraint",
@@ -196,6 +229,19 @@ RETRIEVAL_SOURCE_TYPE_TIERS = {
 }
 RETRIEVAL_TIER_1_NODE_KINDS = {"memory", "decision", "episode", "blocker"}
 RETRIEVAL_REPO_INDEX_TIER = 3
+REQUIRED_FRESH_RETRIEVAL_SOURCE_TYPES = {
+    "living_doc",
+    "control_plane_doc",
+    "startup_doc",
+    "package_manifest",
+    "gateboard_blocker",
+    "gateboard_doc",
+    "gateboard_latest",
+    "gateboard_latest_json",
+    "gateboard_pathway",
+    "gateboard_source_artifact",
+    LIVING_HISTORY_SOURCE_TYPE,
+}
 PROVENANCE_KINDS = {
     "strategy_hypothesis",
     "experiment_run",
@@ -331,6 +377,28 @@ SAFE_NEGATED_AUTHORITY_RE = re.compile(
     r"(?:\s+actions?|\s+authority|\s+access|\s+execution)?",
     re.IGNORECASE,
 )
+MEMORY_SECRET_SHAPED_RE = tuple(
+    re.compile(pattern, re.IGNORECASE | re.DOTALL)
+    for pattern in (
+        r"\bsk-(?:ant-)?[A-Za-z0-9_-]{20,}\b",
+        r"\bgithub_pat_[A-Za-z0-9_]{20,}\b",
+        r"\bgh[opsru]_[A-Za-z0-9_]{20,}\b",
+        r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b",
+        r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b",
+        r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----",
+        r"\beyJ[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\b",
+        r"\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|password|secret)\s*[:=]\s*"
+        r"(?!\[?redacted\]?|<|\$\{|your[_-])[A-Za-z0-9_./+=-]{12,}",
+    )
+)
+MEMORY_ACTION_IMPERATIVE_RE = tuple(
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        r"\b(?:buy|sell)\s+\d+\s+[A-Z]{1,6}\s+(?:calls?|puts?)\b(?:\s+now\b)?",
+        r"\b(?:send|submit|place|open|close|cancel|create)\s+(?:an?\s+)?order\s+for\s+\d+\s+"
+        r"[A-Z]{1,6}\s+(?:calls?|puts?)\b",
+    )
+)
 OPERATING_MEMORY_KIND_BY_TYPE = {
     "artifact": "evidence_artifact",
     "blocker": "blocker",
@@ -344,6 +412,21 @@ GATEBOARD_CURRENT_SOURCE_TYPES = {
     "gateboard_blocker",
     "gateboard_source_artifact",
 }
+GATEBOARD_SOURCE_ARTIFACT_HASH_ROOTS = {
+    "data/ai-commodity-infra",
+    "data/contracts",
+    "data/forward-tracking",
+    "data/profitability-lab",
+    "docs",
+}
+GATEBOARD_SOURCE_ARTIFACT_HASH_SUFFIXES = {".csv", ".json", ".jsonl", ".md", ".txt"}
+GATEBOARD_SOURCE_ARTIFACT_DENIED_NAMES = {
+    ".env",
+    ".env.local",
+    "auth.json",
+    "credentials.json",
+    "secrets.json",
+}
 REPO_FILE_SOURCE_TYPES = {"repo_file_index"}
 FILE_FRESHNESS_SOURCE_TYPES = {
     "repo_file_index",
@@ -351,7 +434,7 @@ FILE_FRESHNESS_SOURCE_TYPES = {
     "control_plane_doc",
     "startup_doc",
     LIVING_HISTORY_SOURCE_TYPE,
-}
+} | REQUIRED_FRESH_RETRIEVAL_SOURCE_TYPES
 PROFIT_LEARNING_SYNC_TOKEN = "APPROVE_PROFIT_LEARNING_MEMORY_SYNC"
 PROFIT_LEARNING_EXTRACTOR_VERSION = "profit_learning_sync_v1"
 
@@ -534,6 +617,7 @@ REPO_INDEX_SKIP_PARTS = {
     "__pycache__",
     "data/agent-control",
     "data/backups",
+    PROJECT_MEMORY_ARCHIVE_RELATIVE_ROOT,
     "node_modules",
 }
 
@@ -652,10 +736,27 @@ def _assert_memory_safe_source_path(relative_path: str) -> None:
         "auth.json",
         "secrets.toml",
         "config.yaml",
+        "config.yml",
+        ".npmrc",
+        ".netrc",
+        "_netrc",
+        ".pypirc",
+        "cookies",
+        "cookies-journal",
+        "login data",
+        "login data-journal",
+        "web data",
+        "local state",
+        "id_rsa",
+        "id_dsa",
+        "id_ecdsa",
+        "id_ed25519",
     }
-    secret_suffixes = (".key", ".pem", ".p12", ".pfx", ".sqlite", ".db")
+    secret_suffixes = (".key", ".pem", ".p12", ".pfx", ".ppk", ".sqlite", ".db")
     if name in secret_names or name.startswith(".env.") or name.endswith(secret_suffixes):
         raise AgentControlError(f"memory capture refuses secret or database path: {relative_path}")
+    if name.startswith("id_") and "." not in name:
+        raise AgentControlError(f"memory capture refuses private-key path: {relative_path}")
     denied_prefixes = (
         ".git/",
         ".next/",
@@ -667,6 +768,13 @@ def _assert_memory_safe_source_path(relative_path: str) -> None:
         "data/alpaca-options-strategy-lab/",
         "data/polymarket/",
         "data/profitability-lab/",
+        ".aws/",
+        ".ssh/",
+        "appdata/local/google/chrome/user data/",
+        "appdata/local/microsoft/edge/user data/",
+        "appdata/local/bravesoftware/brave-browser/user data/",
+        "appdata/roaming/mozilla/firefox/profiles/",
+        "browser-profiles/",
     )
     if any(safe_path == prefix.rstrip("/") or safe_path.startswith(prefix) for prefix in denied_prefixes):
         raise AgentControlError(f"memory capture refuses high-risk/generated path: {relative_path}")
@@ -938,6 +1046,14 @@ def _validate_memory_policy_text(
     }
     haystack = "\n".join([title, body, canonical_json(metadata_for_scan)])
     haystack = SAFE_NEGATED_AUTHORITY_RE.sub("", haystack)
+    for pattern in MEMORY_SECRET_SHAPED_RE:
+        if pattern.search(haystack):
+            errors.append(f"{field_name} contains secret-shaped content")
+            break
+    for pattern in MEMORY_ACTION_IMPERATIVE_RE:
+        if pattern.search(haystack):
+            errors.append(f"{field_name} contains a targeted options-order imperative")
+            break
     for pattern in MEMORY_PROHIBITED_AUTHORITY_RE:
         if pattern.search(haystack):
             errors.append(f"{field_name} contains prohibited authority wording: {pattern.pattern}")
@@ -957,43 +1073,82 @@ def _assert_memory_policy_valid(
         raise AgentControlError("; ".join(errors))
 
 
+def _quarantine_retrieval_metadata(value: Any, *, path: str = "metadata") -> tuple[Any, list[str]]:
+    quarantined: list[str] = []
+    if isinstance(value, dict):
+        result: dict[str, Any] = {}
+        for key, child in value.items():
+            child_path = f"{path}.{key}"
+            if key in PROHIBITED_TRUE_FLAG_KEYS:
+                quarantined.append(child_path)
+                continue
+            if key in AUTHORITY_METADATA_KEYS:
+                continue
+            sanitized_child, child_quarantine = _quarantine_retrieval_metadata(child, path=child_path)
+            result[key] = sanitized_child
+            quarantined.extend(child_quarantine)
+        return result, quarantined
+    if isinstance(value, list):
+        result_list: list[Any] = []
+        for index, child in enumerate(value):
+            sanitized_child, child_quarantine = _quarantine_retrieval_metadata(
+                child,
+                path=f"{path}[{index}]",
+            )
+            result_list.append(sanitized_child)
+            quarantined.extend(child_quarantine)
+        return result_list, quarantined
+    return value, quarantined
+
+
+def _prohibited_metadata_paths(value: Any, *, path: str = "metadata") -> list[str]:
+    paths: list[str] = []
+    if isinstance(value, dict):
+        for key, child in value.items():
+            child_path = f"{path}.{key}"
+            truthy = child is True or (
+                isinstance(child, (int, float)) and not isinstance(child, bool) and child == 1
+            ) or (
+                isinstance(child, str)
+                and child.strip().lower() in {"true", "1", "yes", "y", "on", "enabled", "ready", "approved"}
+            )
+            if key in PROHIBITED_TRUE_FLAG_KEYS and truthy:
+                paths.append(child_path)
+            paths.extend(_prohibited_metadata_paths(child, path=child_path))
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            paths.extend(_prohibited_metadata_paths(child, path=f"{path}[{index}]"))
+    return paths
+
+
 def _metadata_for_retrieval(metadata: dict[str, Any]) -> dict[str, Any]:
     source_type = metadata.get("source_type")
-    if _is_operating_memory(metadata):
-        return metadata
-    sanitized = {
-        key: value
-        for key, value in metadata.items()
-        if key not in AUTHORITY_METADATA_KEYS
-    }
+    sanitized_value, quarantined = _quarantine_retrieval_metadata(metadata)
+    sanitized = dict(sanitized_value) if isinstance(sanitized_value, dict) else {}
     if source_type == "dream_proposal":
         sanitized.pop("entries", None)
         sanitized["entries_omitted_from_retrieval"] = True
-    if any(key in metadata for key in AUTHORITY_METADATA_KEYS):
-        sanitized["authority_metadata_ignored_for_retrieval"] = True
-    sanitized["authority_scope"] = OPERATING_AUTHORITY_SCOPE
+    if quarantined:
+        sanitized["quarantined_metadata_count"] = len(set(quarantined))
+    sanitized.update(OPERATING_AUTHORITY_METADATA)
     sanitized["capability_label"] = "coordination_only"
+    sanitized["memory_policy_version"] = MEMORY_POLICY_VERSION
+    sanitized["non_authoritative"] = True
+    sanitized["non_authorization_notice"] = MEMORY_NON_AUTHORIZATION_BANNER
     return sanitized
 
 
 def _metadata_for_prompt(node: dict[str, Any]) -> dict[str, Any]:
     metadata = node.get("metadata") or {}
-    if _is_operating_memory(metadata):
-        return metadata
     return _metadata_for_retrieval(metadata)
 
 
 def _non_operating_policy_errors(title: str, body: str, metadata: dict[str, Any]) -> list[str]:
-    if _is_operating_memory(metadata):
-        return []
     return _validate_memory_policy_text(
         title=title,
         body=body,
-        metadata=_with_memory_policy_metadata(
-            _metadata_for_retrieval(metadata),
-            source_type=str(metadata.get("source_type") or "graph_node"),
-        ),
-        field_name="non-operating graph context",
+        metadata=metadata,
+        field_name="graph retrieval context",
     )
 
 
@@ -1009,14 +1164,19 @@ def _node_retrieval_title_body(node: dict[str, Any], metadata: dict[str, Any]) -
 
 def _node_for_query_result(node: dict[str, Any]) -> dict[str, Any]:
     metadata = node.get("metadata") or {}
-    if _is_operating_memory(metadata):
-        return node
     title, body = _node_retrieval_title_body(node, metadata)
     return {
         **node,
         "title": title,
         "body": body,
         "metadata": _metadata_for_retrieval(metadata),
+    }
+
+
+def _edge_for_query_result(edge: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **edge,
+        "metadata": _metadata_for_retrieval(edge.get("metadata") or {}),
     }
 
 
@@ -1309,6 +1469,10 @@ def _format_memory_audit(result: dict[str, Any]) -> str:
         ("authority_inconsistencies", "Authority metadata inconsistencies"),
         ("stale_or_expired", "Stale or expired active memories"),
         ("supersession_inconsistencies", "Supersession inconsistencies"),
+        ("retrieval_parity_issues", "Graph/retrieval parity issues"),
+        ("required_freshness_issues", "Required living/startup/gateboard freshness issues"),
+        ("tier3_repo_mirror_gaps_nonfatal", "Tier-3 repo mirror gaps (nonfatal)"),
+        ("quarantined_metadata", "Prohibited legacy action metadata"),
         ("open_questions", "Open questions"),
         ("open_blockers", "Open blockers"),
     ]:
@@ -1405,6 +1569,51 @@ def _ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
+def _effective_events_path(*, db_path: Path, events_path: Path) -> Path:
+    resolved_db = db_path.resolve()
+    if events_path.resolve() == DEFAULT_EVENTS_PATH.resolve() and resolved_db != DEFAULT_DB_PATH.resolve():
+        return resolved_db.parent / "events.jsonl"
+    return events_path
+
+
+def _effective_sessions_path(*, db_path: Path, sessions_path: Path) -> Path:
+    resolved_db = db_path.resolve()
+    if sessions_path.resolve() == DEFAULT_SESSIONS_PATH.resolve() and resolved_db != DEFAULT_DB_PATH.resolve():
+        return resolved_db.parent / "sessions.jsonl"
+    return sessions_path
+
+
+def _effective_anchors_path(*, db_path: Path, anchors_path: Path) -> Path:
+    resolved_db = db_path.resolve()
+    if anchors_path.resolve() == DEFAULT_ANCHORS_PATH.resolve() and resolved_db != DEFAULT_DB_PATH.resolve():
+        return resolved_db.parent / "anchors.jsonl"
+    return anchors_path
+
+
+def _connection_db_path(conn: sqlite3.Connection) -> Path | None:
+    row = conn.execute("PRAGMA database_list").fetchone()
+    if row is None or not row[2]:
+        return None
+    return Path(str(row[2])).resolve()
+
+
+def _effective_events_path_for_connection(conn: sqlite3.Connection, events_path: Path) -> Path:
+    db_path = _connection_db_path(conn)
+    if db_path is None:
+        if events_path.resolve() == DEFAULT_EVENTS_PATH.resolve():
+            return Path(tempfile.gettempdir()) / f"agent-control-memory-{os.getpid()}-events.jsonl"
+        return events_path
+    return _effective_events_path(db_path=db_path, events_path=events_path)
+
+
+def _lock_path_for_db(db_path: Path) -> Path:
+    if str(db_path) == ":memory:":
+        return Path(tempfile.gettempdir()) / f"agent-control-{os.getpid()}-memory.lock"
+    if db_path.resolve() == DEFAULT_DB_PATH.resolve():
+        return DEFAULT_LOCK_PATH
+    return db_path.resolve().parent / f"{db_path.stem}.lock"
+
+
 def _process_exists(pid: int) -> bool:
     if pid <= 0:
         return False
@@ -1437,6 +1646,17 @@ def _process_exists(pid: int) -> bool:
     return True
 
 
+_CONTROL_THREAD_LOCKS_GUARD = threading.Lock()
+_CONTROL_THREAD_LOCKS: dict[str, threading.RLock] = {}
+_CONTROL_LOCK_LOCAL = threading.local()
+
+
+def _thread_lock_for_control_path(lock_path: Path) -> threading.RLock:
+    key = str(lock_path.resolve())
+    with _CONTROL_THREAD_LOCKS_GUARD:
+        return _CONTROL_THREAD_LOCKS.setdefault(key, threading.RLock())
+
+
 @contextmanager
 def _control_file_lock(
     lock_path: Path = DEFAULT_LOCK_PATH,
@@ -1447,49 +1667,86 @@ def _control_file_lock(
 ):
     _ensure_parent(lock_path)
     deadline = time.monotonic() + timeout_seconds
-    handle: int | None = None
-    while handle is None:
+    lock_key = str(lock_path.resolve())
+    thread_lock = _thread_lock_for_control_path(lock_path)
+    if not thread_lock.acquire(timeout=max(timeout_seconds, 0.0)):
+        raise AgentControlError(f"agent control lock is held in this process: {lock_path}")
+    depths = getattr(_CONTROL_LOCK_LOCAL, "depths", None)
+    if depths is None:
+        depths = {}
+        _CONTROL_LOCK_LOCAL.depths = depths
+    if depths.get(lock_key, 0):
+        depths[lock_key] += 1
         try:
-            handle = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            os.write(handle, f"{os.getpid()} {utc_now()}\n".encode("utf-8"))
-        except FileExistsError:
-            stale = False
+            yield
+        finally:
+            depths[lock_key] -= 1
+            thread_lock.release()
+        return
+    depths[lock_key] = 1
+    handle: int | None = None
+    owner_token = uuid.uuid4().hex
+    try:
+        while handle is None:
             try:
-                lock_age = time.time() - lock_path.stat().st_mtime
-                lock_text = lock_path.read_text(encoding="utf-8", errors="ignore").strip()
-                pid_text = lock_text.split(maxsplit=1)[0] if lock_text else ""
-                if lock_age > stale_seconds:
-                    stale = True
-                elif pid_text.isdigit():
-                    if not _process_exists(int(pid_text)):
-                        stale = True
-            except OSError:
-                stale = True
-            if stale:
+                handle = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.write(handle, f"{os.getpid()} {utc_now()} {owner_token}\n".encode("utf-8"))
+            except FileExistsError:
+                stale = False
+                lock_text = ""
+                inspection_error: OSError | None = None
                 try:
-                    lock_path.unlink()
-                    continue
+                    lock_text = lock_path.read_text(encoding="utf-8", errors="ignore").strip()
+                    pid_text = lock_text.split(maxsplit=1)[0] if lock_text else ""
+                    if pid_text.isdigit():
+                        stale = not _process_exists(int(pid_text))
+                    else:
+                        stale = time.time() - lock_path.stat().st_mtime > stale_seconds
+                except PermissionError as exc:
+                    inspection_error = exc
                 except FileNotFoundError:
                     continue
-            if time.monotonic() >= deadline:
-                raise AgentControlError(f"agent control lock is held: {lock_path}")
-            time.sleep(poll_seconds)
-    try:
+                except OSError as exc:
+                    inspection_error = exc
+                if stale:
+                    try:
+                        if lock_path.read_text(encoding="utf-8", errors="ignore").strip() == lock_text:
+                            lock_path.unlink()
+                            continue
+                    except FileNotFoundError:
+                        continue
+                    except PermissionError as exc:
+                        inspection_error = exc
+                if time.monotonic() >= deadline:
+                    if inspection_error is not None:
+                        raise AgentControlError(
+                            f"agent control lock cannot be inspected or removed: {lock_path}: {inspection_error}"
+                        ) from inspection_error
+                    raise AgentControlError(f"agent control lock is held: {lock_path}")
+                time.sleep(poll_seconds)
         yield
     finally:
-        if handle is not None:
-            os.close(handle)
-            handle = None
-        for attempt in range(5):
-            try:
-                lock_path.unlink()
-                break
-            except FileNotFoundError:
-                break
-            except PermissionError:
-                if attempt == 4:
-                    raise
-                time.sleep(0.05)
+        try:
+            if handle is not None:
+                os.close(handle)
+                handle = None
+                for attempt in range(5):
+                    try:
+                        lock_text = lock_path.read_text(encoding="utf-8", errors="ignore").strip()
+                        parts = lock_text.split(maxsplit=2)
+                        if len(parts) != 3 or parts[2] != owner_token:
+                            break
+                        lock_path.unlink()
+                        break
+                    except FileNotFoundError:
+                        break
+                    except PermissionError as exc:
+                        if attempt == 4:
+                            raise AgentControlError(f"agent control lock could not be released: {lock_path}: {exc}") from exc
+                        time.sleep(0.05)
+        finally:
+            depths.pop(lock_key, None)
+            thread_lock.release()
 
 
 def _schema_is_current(conn: sqlite3.Connection) -> bool:
@@ -1498,31 +1755,127 @@ def _schema_is_current(conn: sqlite3.Connection) -> bool:
     ).fetchone()
     if table_exists is None:
         return False
-    return (
-        conn.execute("SELECT 1 FROM schema_migrations WHERE version = ?", (CONTROL_SCHEMA_VERSION,)).fetchone()
-        is not None
-    )
+    if conn.execute(
+        "SELECT 1 FROM schema_migrations WHERE version = ?",
+        (CONTROL_SCHEMA_VERSION,),
+    ).fetchone() is None:
+        return False
+    required_tenant_tables = {
+        "tasks",
+        "task_claims",
+        "task_reports",
+        "evidence_artifacts",
+        "decisions",
+        "worker_runs",
+    }
+    for table_name in required_tenant_tables:
+        columns = {
+            str(row["name"])
+            for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+        }
+        if "tenant_id" not in columns:
+            return False
+    required_tables = {"session_sidecar_outbox", "retrieval_source_expectations"}
+    present_tables = {
+        str(row["name"])
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ({})".format(
+                ", ".join("?" for _ in required_tables)
+            ),
+            tuple(sorted(required_tables)),
+        ).fetchall()
+    }
+    if present_tables != required_tables:
+        return False
+    outbox_columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info(event_outbox)").fetchall()}
+    if not {"tenant_id", "hash_version"}.issubset(outbox_columns):
+        return False
+    required_indexes = {
+        "idx_tasks_tenant_status",
+        "idx_task_claims_tenant_task",
+        "idx_task_reports_tenant_task",
+        "idx_worker_runs_tenant_task",
+        "idx_task_claims_one_active",
+        "idx_event_outbox_tenant_id",
+        "idx_retrieval_expectations_tenant",
+    }
+    present_indexes = {
+        str(row["name"])
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ({})".format(
+                ", ".join("?" for _ in required_indexes)
+            ),
+            tuple(sorted(required_indexes)),
+        ).fetchall()
+    }
+    return present_indexes == required_indexes
+
+
+def _set_wal_journal_mode_with_retry(
+    conn: sqlite3.Connection,
+    *,
+    timeout_seconds: float = 30.0,
+    poll_seconds: float = 0.05,
+) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    conn.execute("PRAGMA busy_timeout=250")
+    try:
+        while True:
+            try:
+                row = conn.execute("PRAGMA journal_mode=WAL").fetchone()
+                mode = str(row[0] if row is not None else "").lower()
+                if mode not in {"wal", "memory"}:
+                    raise AgentControlError(f"failed to enable WAL journal mode: {mode or 'unknown'}")
+                return
+            except sqlite3.OperationalError as exc:
+                message = str(exc).lower()
+                if "locked" not in message and "busy" not in message:
+                    raise
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise AgentControlError("timed out enabling WAL journal mode while database was busy") from exc
+                time.sleep(min(poll_seconds, remaining))
+    finally:
+        conn.execute("PRAGMA busy_timeout=30000")
 
 
 def connect(db_path: Path = DEFAULT_DB_PATH, *, maintenance: bool = False) -> sqlite3.Connection:
     _ensure_parent(db_path)
     conn = sqlite3.connect(db_path, timeout=30.0)
-    conn.row_factory = sqlite3.Row
-    conn.create_function("agent_control_maintenance", 0, lambda: 1 if maintenance else 0)
-    conn.execute("PRAGMA busy_timeout=30000")
-    conn.execute("PRAGMA foreign_keys=ON")
-    conn.execute("PRAGMA journal_mode=WAL")
-    if not _schema_is_current(conn):
-        init_schema(conn)
-    return conn
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.create_function("agent_control_maintenance", 0, lambda: 1 if maintenance else 0)
+        conn.execute("PRAGMA busy_timeout=30000")
+        conn.execute("PRAGMA foreign_keys=ON")
+        with _control_file_lock(_lock_path_for_db(db_path), timeout_seconds=30.0):
+            _set_wal_journal_mode_with_retry(conn)
+            if not _schema_is_current(conn):
+                init_schema(conn)
+        return conn
+    except Exception:
+        conn.close()
+        raise
 
 
 def init_schema(conn: sqlite3.Connection) -> None:
-    conn.execute("DROP TRIGGER IF EXISTS trg_agent_run_events_append_only_delete")
+    if conn.in_transaction:
+        conn.commit()
+    try:
+        _init_schema_exclusive(conn)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+
+
+def _init_schema_exclusive(conn: sqlite3.Connection) -> None:
     conn.executescript(
         """
+        BEGIN EXCLUSIVE;
+        DROP TRIGGER IF EXISTS trg_agent_run_events_append_only_delete;
         CREATE TABLE IF NOT EXISTS tasks (
             id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL DEFAULT 'options-chatbot',
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             title TEXT NOT NULL,
@@ -1539,6 +1892,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
             worker_id TEXT NOT NULL,
+            tenant_id TEXT NOT NULL DEFAULT 'options-chatbot',
             claimed_at TEXT NOT NULL,
             status TEXT NOT NULL,
             metadata_json TEXT NOT NULL DEFAULT '{}'
@@ -1548,6 +1902,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
             worker_id TEXT NOT NULL,
+            tenant_id TEXT NOT NULL DEFAULT 'options-chatbot',
             reported_at TEXT NOT NULL,
             report_json TEXT NOT NULL,
             status TEXT NOT NULL
@@ -1581,6 +1936,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
             graph_node_id TEXT REFERENCES graph_nodes(id) ON DELETE SET NULL,
+            tenant_id TEXT NOT NULL DEFAULT 'options-chatbot',
             path TEXT NOT NULL,
             evidence_class TEXT NOT NULL,
             created_at TEXT NOT NULL,
@@ -1591,6 +1947,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
             graph_node_id TEXT REFERENCES graph_nodes(id) ON DELETE SET NULL,
+            tenant_id TEXT NOT NULL DEFAULT 'options-chatbot',
             summary TEXT NOT NULL,
             created_at TEXT NOT NULL,
             metadata_json TEXT NOT NULL DEFAULT '{}'
@@ -1600,6 +1957,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
             graph_node_id TEXT REFERENCES graph_nodes(id) ON DELETE SET NULL,
+            tenant_id TEXT NOT NULL DEFAULT 'options-chatbot',
             worker_id TEXT NOT NULL,
             status TEXT NOT NULL,
             started_at TEXT NOT NULL,
@@ -1616,12 +1974,33 @@ def init_schema(conn: sqlite3.Connection) -> None:
 
         CREATE TABLE IF NOT EXISTS event_outbox (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id TEXT NOT NULL DEFAULT 'options-chatbot',
             created_at TEXT NOT NULL,
             event_type TEXT NOT NULL,
             payload_json TEXT NOT NULL,
             prev_hash TEXT NOT NULL DEFAULT '',
             event_hash TEXT NOT NULL,
+            hash_version TEXT NOT NULL DEFAULT 'event_outbox_hash_v2',
             delivered_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS session_sidecar_outbox (
+            session_id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL DEFAULT 'options-chatbot',
+            payload_json TEXT NOT NULL,
+            payload_sha256 TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            delivered_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS retrieval_source_expectations (
+            tenant_id TEXT NOT NULL,
+            node_id TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            source_path TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY(tenant_id, node_id)
         );
 
         CREATE TABLE IF NOT EXISTS agent_run_events (
@@ -1803,6 +2182,148 @@ def init_schema(conn: sqlite3.Connection) -> None:
         conn.execute(
             "ALTER TABLE experiment_runs ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'options-chatbot'"
         )
+    outbox_columns = {row["name"] for row in conn.execute("PRAGMA table_info(event_outbox)").fetchall()}
+    if "tenant_id" not in outbox_columns:
+        conn.execute("ALTER TABLE event_outbox ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'options-chatbot'")
+    if "hash_version" not in outbox_columns:
+        conn.execute(
+            "ALTER TABLE event_outbox ADD COLUMN hash_version TEXT NOT NULL DEFAULT 'event_outbox_hash_v1'"
+        )
+    conn.execute(
+        """
+        UPDATE event_outbox
+        SET tenant_id = COALESCE(
+            CASE WHEN json_valid(payload_json) THEN NULLIF(json_extract(payload_json, '$.tenant_id'), '') END,
+            CASE WHEN json_valid(payload_json) THEN NULLIF(json_extract(payload_json, '$.payload.tenant_id'), '') END,
+            tenant_id,
+            ?
+        )
+        """,
+        (DEFAULT_TENANT_ID,),
+    )
+    conn.execute(
+        "UPDATE event_outbox SET hash_version = ? WHERE hash_version IS NULL OR hash_version = ''",
+        (EVENT_OUTBOX_HASH_VERSION_V1,),
+    )
+    task_columns = {row["name"] for row in conn.execute("PRAGMA table_info(tasks)").fetchall()}
+    if "tenant_id" not in task_columns:
+        conn.execute("ALTER TABLE tasks ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'options-chatbot'")
+    for table_name in ("task_claims", "task_reports", "evidence_artifacts", "decisions", "worker_runs"):
+        columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
+        if "tenant_id" not in columns:
+            conn.execute(f"ALTER TABLE {table_name} ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'options-chatbot'")
+    conn.execute(
+        """
+        UPDATE tasks
+        SET tenant_id = (
+            SELECT graph_nodes.tenant_id FROM graph_nodes WHERE graph_nodes.id = 'task:' || tasks.id
+        )
+        WHERE EXISTS (SELECT 1 FROM graph_nodes WHERE graph_nodes.id = 'task:' || tasks.id)
+        """
+    )
+    for table_name in ("task_claims", "task_reports", "evidence_artifacts", "decisions", "worker_runs"):
+        conn.execute(
+            f"""
+            UPDATE {table_name}
+            SET tenant_id = COALESCE(
+                (SELECT tasks.tenant_id FROM tasks WHERE tasks.id = {table_name}.task_id),
+                tenant_id
+            )
+            """
+        )
+    conn.execute(
+        """
+        UPDATE graph_nodes
+        SET tenant_id = (
+            SELECT tasks.tenant_id
+            FROM tasks
+            WHERE tasks.id = json_extract(graph_nodes.metadata_json, '$.task_id')
+        )
+        WHERE json_extract(metadata_json, '$.task_id') IS NOT NULL
+          AND EXISTS (
+              SELECT 1 FROM tasks
+              WHERE tasks.id = json_extract(graph_nodes.metadata_json, '$.task_id')
+          )
+        """
+    )
+    conn.execute(
+        """
+        UPDATE task_claims
+        SET status = COALESCE((SELECT tasks.status FROM tasks WHERE tasks.id = task_claims.task_id), 'closed')
+        WHERE status = 'active'
+          AND COALESCE((SELECT tasks.status FROM tasks WHERE tasks.id = task_claims.task_id), 'closed') <> 'claimed'
+        """
+    )
+    conn.execute(
+        """
+        UPDATE task_claims
+        SET status = 'superseded'
+        WHERE status = 'active'
+          AND id NOT IN (SELECT max(id) FROM task_claims WHERE status = 'active' GROUP BY task_id)
+        """
+    )
+    conn.execute(
+        """
+        UPDATE worker_runs
+        SET status = COALESCE((SELECT tasks.status FROM tasks WHERE tasks.id = worker_runs.task_id), 'closed'),
+            finished_at = COALESCE(
+                finished_at,
+                (SELECT tasks.updated_at FROM tasks WHERE tasks.id = worker_runs.task_id),
+                ?
+            )
+        WHERE finished_at IS NULL
+          AND COALESCE((SELECT tasks.status FROM tasks WHERE tasks.id = worker_runs.task_id), 'closed') <> 'claimed'
+        """,
+        (utc_now(),),
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_tenant_status ON tasks(tenant_id, status, priority)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_task_claims_tenant_task ON task_claims(tenant_id, task_id, status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_task_reports_tenant_task ON task_reports(tenant_id, task_id, id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_worker_runs_tenant_task ON worker_runs(tenant_id, task_id, status)")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_task_claims_one_active ON task_claims(task_id) WHERE status = 'active'")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_event_outbox_tenant_id ON event_outbox(tenant_id, id)")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_retrieval_expectations_tenant "
+        "ON retrieval_source_expectations(tenant_id, source_type, node_id)"
+    )
+    conn.execute(
+        "DELETE FROM retrieval_source_expectations WHERE source_type = ? AND node_id NOT LIKE ?",
+        (LIVING_HISTORY_SOURCE_TYPE, f"{LIVING_HISTORY_EXPECTATION_PREFIX}%"),
+    )
+    now = utc_now()
+    living_history_sources = conn.execute(
+        """
+        SELECT DISTINCT tenant_id, lower(json_extract(metadata_json, '$.source_path')) AS source_path
+        FROM graph_nodes
+        WHERE json_extract(metadata_json, '$.source_type') = ?
+        """,
+        (LIVING_HISTORY_SOURCE_TYPE,),
+    ).fetchall()
+    for source in living_history_sources:
+        source_path = _safe_node_path(str(source["source_path"] or ""))
+        if source_path not in {_safe_node_path(path) for path in LIVING_HISTORY_REQUIRED_SOURCE_PATHS}:
+            continue
+        conn.execute(
+            """
+            INSERT INTO retrieval_source_expectations(
+                tenant_id, node_id, source_type, source_path, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(tenant_id, node_id) DO UPDATE SET updated_at = excluded.updated_at
+            """,
+            (
+                str(source["tenant_id"]),
+                f"{LIVING_HISTORY_EXPECTATION_PREFIX}{source_path}",
+                LIVING_HISTORY_SOURCE_TYPE,
+                source_path,
+                now,
+                now,
+            ),
+        )
+    for row in conn.execute("SELECT * FROM graph_nodes").fetchall():
+        node = _row_dict(row)
+        if node is not None:
+            _upsert_retrieval_document(conn, node)
+            _upsert_retrieval_source_expectation(conn, node)
     conn.execute(
         """
         INSERT OR IGNORE INTO schema_migrations(version, applied_at, description)
@@ -1811,10 +2332,17 @@ def init_schema(conn: sqlite3.Connection) -> None:
         (
             CONTROL_SCHEMA_VERSION,
             utc_now(),
-            "agent-control schema with retrieval freshness and pruned dead auxiliary tables",
+            "versioned outbox integrity, serialized migration, strict backup/session parity, and retrieval provenance",
         ),
     )
-    conn.commit()
+
+
+@contextmanager
+def _locked_db_transaction(db_path: Path, *, maintenance: bool = False):
+    with _control_file_lock(_lock_path_for_db(db_path), timeout_seconds=30.0):
+        with closing(connect(db_path, maintenance=maintenance)) as conn:
+            with conn:
+                yield conn
 
 
 def _row_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
@@ -1831,6 +2359,64 @@ def _append_jsonl(events_path: Path, event: dict[str, Any]) -> None:
     _ensure_parent(events_path)
     with events_path.open("a", encoding="utf-8") as handle:
         handle.write(canonical_json(event) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def _event_outbox_hash_v2(
+    *,
+    prev_hash: str,
+    event_id: int,
+    tenant_id: str,
+    event_type: str,
+    created_at: str,
+    payload: dict[str, Any],
+) -> str:
+    bound_event = {
+        "id": event_id,
+        "tenant_id": tenant_id,
+        "event_type": event_type,
+        "created_at": created_at,
+        "payload": payload,
+    }
+    return _text_sha256(
+        f"{EVENT_OUTBOX_HASH_VERSION_V2}\n{prev_hash}\n{canonical_json(bound_event)}"
+    )
+
+
+def _event_outbox_rows(
+    conn: sqlite3.Connection,
+    *,
+    include_prev_hash: bool,
+) -> tuple[list[sqlite3.Row], bool, bool]:
+    columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info(event_outbox)").fetchall()}
+    if not columns:
+        return [], False, False
+    has_tenant = "tenant_id" in columns
+    has_hash_version = "hash_version" in columns
+    tenant_expression = "tenant_id" if has_tenant else f"'{DEFAULT_TENANT_ID}' AS tenant_id"
+    version_expression = (
+        "hash_version"
+        if has_hash_version
+        else f"'{EVENT_OUTBOX_HASH_VERSION_V1}' AS hash_version"
+    )
+    prev_expression = ", prev_hash" if include_prev_hash else ""
+    rows = conn.execute(
+        "SELECT id, {tenant}, created_at, event_type, payload_json, event_hash, {version}{prev} "
+        "FROM event_outbox ORDER BY id ASC".format(
+            tenant=tenant_expression,
+            version=version_expression,
+            prev=prev_expression,
+        )
+    ).fetchall()
+    return rows, has_tenant, has_hash_version
+
+
+def _lock_path_for_connection(conn: sqlite3.Connection) -> Path:
+    db_path = _connection_db_path(conn)
+    if db_path is None:
+        return Path(tempfile.gettempdir()) / f"agent-control-{os.getpid()}-connection.lock"
+    return _lock_path_for_db(db_path)
 
 
 def _record_event(
@@ -1839,61 +2425,310 @@ def _record_event(
     events_path: Path,
     event_type: str,
     payload: dict[str, Any],
+    tenant_id: str | None = None,
 ) -> dict[str, Any]:
-    event = {"event_type": event_type, "created_at": utc_now(), "payload": payload}
-    cursor = conn.execute(
-        "INSERT INTO event_log(created_at, event_type, payload_json) VALUES (?, ?, ?)",
-        (event["created_at"], event_type, canonical_json(payload)),
-    )
-    previous = conn.execute(
-        "SELECT event_hash FROM event_outbox ORDER BY id DESC LIMIT 1"
-    ).fetchone()
-    prev_hash = previous["event_hash"] if previous is not None else ""
-    outbox_payload = {
-        "event_log_id": cursor.lastrowid,
-        "event_type": event_type,
-        "created_at": event["created_at"],
-        "payload": payload,
-    }
-    hash_input = f"{prev_hash}\n{canonical_json(outbox_payload)}"
-    event_hash = _text_sha256(hash_input)
-    outbox_cursor = conn.execute(
-        """
-        INSERT INTO event_outbox(created_at, event_type, payload_json, prev_hash, event_hash)
-        VALUES (?, ?, ?, ?, ?)
-        """,
-        (event["created_at"], event_type, canonical_json(outbox_payload), prev_hash, event_hash),
-    )
-    event["outbox_event_id"] = outbox_cursor.lastrowid
-    event["outbox_hash"] = event_hash
-    _append_jsonl(events_path, event)
-    return event
+    events_path = _effective_events_path_for_connection(conn, events_path)
+    resolved_tenant = str(tenant_id or payload.get("tenant_id") or DEFAULT_TENANT_ID)
+    with _control_file_lock(_lock_path_for_connection(conn), timeout_seconds=30.0):
+        created_at = utc_now()
+        cursor = conn.execute(
+            "INSERT INTO event_log(created_at, event_type, payload_json) VALUES (?, ?, ?)",
+            (created_at, event_type, canonical_json(payload)),
+        )
+        previous = conn.execute(
+            "SELECT event_hash FROM event_outbox ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        prev_hash = previous["event_hash"] if previous is not None else ""
+        outbox_cursor = conn.execute(
+            """
+            INSERT INTO event_outbox(
+                tenant_id, created_at, event_type, payload_json, prev_hash, event_hash, hash_version
+            )
+            VALUES (?, ?, ?, '{}', ?, '', ?)
+            """,
+            (resolved_tenant, created_at, event_type, prev_hash, EVENT_OUTBOX_HASH_VERSION_V2),
+        )
+        event_id = int(outbox_cursor.lastrowid)
+        outbox_payload = {
+            "outbox_event_id": event_id,
+            "event_log_id": int(cursor.lastrowid),
+            "tenant_id": resolved_tenant,
+            "event_type": event_type,
+            "created_at": created_at,
+            "payload": payload,
+        }
+        event_hash = _event_outbox_hash_v2(
+            prev_hash=prev_hash,
+            event_id=event_id,
+            tenant_id=resolved_tenant,
+            event_type=event_type,
+            created_at=created_at,
+            payload=payload,
+        )
+        conn.execute(
+            "UPDATE event_outbox SET payload_json = ?, event_hash = ? WHERE id = ?",
+            (canonical_json(outbox_payload), event_hash, event_id),
+        )
+        row = conn.execute(
+            "SELECT id, tenant_id, created_at, event_type, payload_json, event_hash, hash_version "
+            "FROM event_outbox WHERE id = ?",
+            (event_id,),
+        ).fetchone()
+        event = _event_mirror_row(row)
+        _append_jsonl(events_path, event)
+        return event
 
 
 def validate_event_outbox(conn: sqlite3.Connection) -> dict[str, Any]:
-    rows = conn.execute(
-        "SELECT id, created_at, event_type, payload_json, prev_hash, event_hash FROM event_outbox ORDER BY id ASC"
-    ).fetchall()
+    if conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'event_outbox'"
+    ).fetchone() is None:
+        return {
+            "status": "issues",
+            "count": 0,
+            "hash_version_counts": {},
+            "issues": [{"issue": "event_outbox table is missing"}],
+        }
+    rows, has_tenant_column, _has_hash_version_column = _event_outbox_rows(
+        conn,
+        include_prev_hash=True,
+    )
     issues: list[dict[str, Any]] = []
     previous_hash = ""
+    version_counts: dict[str, int] = {}
     for row in rows:
         payload_json = row["payload_json"] or "{}"
         try:
-            payload = json.loads(payload_json)
+            wrapper = json.loads(payload_json)
         except json.JSONDecodeError:
             issues.append({"id": row["id"], "issue": "payload_json is not valid JSON"})
-            payload = {}
+            wrapper = {}
+        if not isinstance(wrapper, dict):
+            issues.append({"id": row["id"], "issue": "payload_json must be a JSON object"})
+            wrapper = {}
         if row["prev_hash"] != previous_hash:
             issues.append({"id": row["id"], "issue": "prev_hash does not match previous event_hash"})
-        expected_hash = _text_sha256(f"{row['prev_hash']}\n{canonical_json(payload)}")
+        version = str(row["hash_version"] or EVENT_OUTBOX_HASH_VERSION_V1)
+        version_counts[version] = version_counts.get(version, 0) + 1
+        for key in ("created_at", "event_type"):
+            if wrapper.get(key) != row[key]:
+                issues.append({"id": row["id"], "issue": f"SQL {key} differs from payload duplicate"})
+        domain_payload = wrapper.get("payload")
+        if not isinstance(domain_payload, dict):
+            issues.append({"id": row["id"], "issue": "payload wrapper must contain an object payload"})
+            domain_payload = {}
+        if version == EVENT_OUTBOX_HASH_VERSION_V2:
+            if wrapper.get("outbox_event_id") != row["id"]:
+                issues.append({"id": row["id"], "issue": "SQL id differs from payload duplicate"})
+            if wrapper.get("tenant_id") != row["tenant_id"]:
+                issues.append({"id": row["id"], "issue": "SQL tenant_id differs from payload duplicate"})
+            expected_hash = _event_outbox_hash_v2(
+                prev_hash=str(row["prev_hash"] or ""),
+                event_id=int(row["id"]),
+                tenant_id=str(row["tenant_id"]),
+                event_type=str(row["event_type"]),
+                created_at=str(row["created_at"]),
+                payload=domain_payload,
+            )
+        elif version == EVENT_OUTBOX_HASH_VERSION_V1:
+            payload_tenant = domain_payload.get("tenant_id")
+            if (
+                has_tenant_column
+                and payload_tenant is not None
+                and str(payload_tenant) != str(row["tenant_id"])
+            ):
+                issues.append({"id": row["id"], "issue": "SQL tenant_id differs from legacy payload tenant"})
+            expected_hash = _text_sha256(f"{row['prev_hash']}\n{canonical_json(wrapper)}")
+        else:
+            issues.append({"id": row["id"], "issue": f"unsupported outbox hash_version: {version}"})
+            expected_hash = ""
         if row["event_hash"] != expected_hash:
-            issues.append({"id": row["id"], "issue": "event_hash does not match payload"})
+            issues.append({"id": row["id"], "issue": "event_hash does not match bound event payload"})
+        event_log_id = wrapper.get("event_log_id")
+        if not isinstance(event_log_id, int):
+            issues.append({"id": row["id"], "issue": "event_log_id duplicate is missing or invalid"})
+        else:
+            event_log = conn.execute(
+                "SELECT created_at, event_type, payload_json FROM event_log WHERE id = ?",
+                (event_log_id,),
+            ).fetchone()
+            if event_log is None:
+                issues.append({"id": row["id"], "issue": "event_log_id is absent from event_log"})
+            else:
+                if event_log["created_at"] != row["created_at"] or event_log["event_type"] != row["event_type"]:
+                    issues.append({"id": row["id"], "issue": "event_log columns differ from outbox columns"})
+                try:
+                    event_log_payload = json.loads(event_log["payload_json"] or "{}")
+                except json.JSONDecodeError:
+                    event_log_payload = None
+                if event_log_payload != domain_payload:
+                    issues.append({"id": row["id"], "issue": "event_log payload differs from outbox payload"})
         previous_hash = row["event_hash"] or ""
     return {
         "status": "pass" if not issues else "issues",
         "count": len(rows),
+        "hash_version_counts": version_counts,
         "issues": issues,
     }
+
+
+def _event_mirror_row(row: sqlite3.Row) -> dict[str, Any]:
+    try:
+        payload = json.loads(row["payload_json"] or "{}")
+    except json.JSONDecodeError:
+        payload = {}
+    version = str(row["hash_version"] or EVENT_OUTBOX_HASH_VERSION_V1)
+    base = {
+        "event_type": row["event_type"],
+        "created_at": row["created_at"],
+        "payload": payload.get("payload") or {},
+        "outbox_event_id": row["id"],
+        "outbox_hash": row["event_hash"],
+    }
+    if version == EVENT_OUTBOX_HASH_VERSION_V1:
+        return base
+    return {
+        "outbox_event_id": row["id"],
+        "outbox_hash_version": version,
+        "outbox_hash": row["event_hash"],
+        "tenant_id": row["tenant_id"],
+        "event_type": row["event_type"],
+        "created_at": row["created_at"],
+        "payload": payload.get("payload") or {},
+    }
+
+
+def validate_event_mirror(conn: sqlite3.Connection, *, events_path: Path) -> dict[str, Any]:
+    db_rows, _has_tenant_column, _has_hash_version_column = _event_outbox_rows(
+        conn,
+        include_prev_hash=False,
+    )
+    expected = {int(row["id"]): _event_mirror_row(row) for row in db_rows}
+    issues: list[dict[str, Any]] = []
+    legacy_count = 0
+    seen: dict[int, list[tuple[int, str]]] = {}
+    if events_path.exists():
+        try:
+            mirror_rows = _read_jsonl(events_path)
+        except AgentControlError as exc:
+            mirror_rows = []
+            issues.append({"issue": str(exc)})
+    else:
+        mirror_rows = []
+        if expected:
+            issues.append({"issue": "events.jsonl mirror is missing"})
+    for line_number, row in enumerate(mirror_rows, start=1):
+        raw_id = row.get("outbox_event_id")
+        if raw_id is None:
+            legacy_count += 1
+            issues.append({"line": line_number, "issue": "legacy mirror row is non-canonical and requires repair"})
+            continue
+        try:
+            event_id = int(raw_id)
+        except (TypeError, ValueError):
+            issues.append({"line": line_number, "issue": "outbox_event_id is not an integer"})
+            continue
+        event_hash = str(row.get("outbox_hash") or "")
+        seen.setdefault(event_id, []).append((line_number, event_hash))
+        if event_id not in expected:
+            issues.append({"line": line_number, "id": event_id, "issue": "mirror id is absent from DB outbox"})
+        else:
+            expected_row = expected[event_id]
+            if event_hash != expected_row["outbox_hash"]:
+                issues.append({"line": line_number, "id": event_id, "issue": "mirror hash differs from DB outbox"})
+            actual_row = {**row, "outbox_event_id": event_id}
+            if canonical_json(actual_row) != canonical_json(expected_row):
+                issues.append({"line": line_number, "id": event_id, "issue": "mirror event fields differ from DB outbox"})
+    mirror_order = [event_id for event_id, occurrences in seen.items() for _ in occurrences]
+    expected_order = list(expected)
+    if mirror_order != expected_order:
+        issues.append(
+            {
+                "issue": "mirror rows are not in canonical DB outbox order",
+                "expected_order": expected_order,
+                "actual_order": mirror_order,
+            }
+        )
+    for event_id in expected:
+        occurrences = seen.get(event_id, [])
+        if not occurrences:
+            issues.append({"id": event_id, "issue": "DB outbox id is missing from mirror"})
+        elif len(occurrences) > 1:
+            issues.append(
+                {
+                    "id": event_id,
+                    "issue": "mirror contains duplicate outbox id",
+                    "occurrences": len(occurrences),
+                    "conflicting_hashes": sorted({event_hash for _, event_hash in occurrences}),
+                }
+            )
+    return {
+        "status": "pass" if not issues else "issues",
+        "db_count": len(expected),
+        "active_mirror_count": sum(len(values) for values in seen.values()),
+        "legacy_row_count": legacy_count,
+        "quarantined_legacy_row_count": legacy_count,
+        "events_path": str(events_path),
+        "issues": issues,
+    }
+
+
+def repair_event_mirror(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    events_path: Path = DEFAULT_EVENTS_PATH,
+    archive_dir: Path | None = None,
+    apply: bool = False,
+) -> dict[str, Any]:
+    events_path = _effective_events_path(db_path=db_path, events_path=events_path)
+    archive_dir = archive_dir or (events_path.parent / "archive")
+    with _control_file_lock(_lock_path_for_db(db_path)):
+        with closing(connect(db_path)) as conn:
+            outbox = validate_event_outbox(conn)
+            current = validate_event_mirror(conn, events_path=events_path)
+            if outbox["status"] != "pass":
+                raise AgentControlError("event mirror repair refuses an invalid DB outbox chain")
+            rows = conn.execute(
+                "SELECT id, tenant_id, created_at, event_type, payload_json, event_hash, hash_version "
+                "FROM event_outbox ORDER BY id ASC"
+            ).fetchall()
+            expected_rows = [_event_mirror_row(row) for row in rows]
+        if not apply:
+            return {
+                "status": "pass" if current["status"] == "pass" else "would_repair",
+                "applied": False,
+                "events_path": str(events_path),
+                "expected_count": len(expected_rows),
+                "current": current,
+                "archive_dir": str(archive_dir),
+            }
+        archive_path: Path | None = None
+        if events_path.exists():
+            archive_dir.mkdir(parents=True, exist_ok=True)
+            archive_path = archive_dir / (
+                f"events-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-"
+                f"{_file_sha256(events_path)[:12]}-{uuid.uuid4().hex[:8]}.jsonl"
+            )
+            shutil.copy2(events_path, archive_path)
+        _ensure_parent(events_path)
+        temp_path = events_path.with_name(f".{events_path.name}.{uuid.uuid4().hex}.tmp")
+        temp_path.write_text("".join(canonical_json(row) + "\n" for row in expected_rows), encoding="utf-8")
+        os.replace(temp_path, events_path)
+        with closing(connect(db_path)) as conn:
+            repaired = validate_event_mirror(conn, events_path=events_path)
+        if repaired["status"] != "pass":
+            if archive_path is not None:
+                shutil.copy2(archive_path, events_path)
+            raise AgentControlError("event mirror repair verification failed; archived original was restored")
+        return {
+            "status": "pass",
+            "applied": True,
+            "events_path": str(events_path),
+            "archive_path": str(archive_path) if archive_path is not None else "",
+            "expected_count": len(expected_rows),
+            "before": current,
+            "after": repaired,
+        }
 
 
 def _redact_agent_run_payload(value: Any) -> Any:
@@ -2059,7 +2894,8 @@ def record_agent_run_event(
     safe_summary = _redact_agent_run_text(summary)
     payload_sha256 = _text_sha256(canonical_json(safe_payload))
     run_id = run_id or f"RUN-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid.uuid4().hex[:8]}"
-    with _control_file_lock():
+    events_path = _effective_events_path(db_path=db_path, events_path=events_path)
+    with _control_file_lock(_lock_path_for_db(db_path)):
         with closing(connect(db_path)) as conn:
             with conn:
                 previous = conn.execute(
@@ -2125,7 +2961,9 @@ def record_agent_run_event(
                         "ledger_version": AGENT_RUN_LEDGER_VERSION,
                         "non_authoritative": True,
                         "does_not_authorize_trading_or_evidence_mutation": True,
+                        "tenant_id": tenant_id,
                     },
+                    tenant_id=tenant_id,
                 )
     return {
         "id": event_id,
@@ -2369,7 +3207,9 @@ def record_agent_run_ledger_anchor(
     tenant_id: str = DEFAULT_TENANT_ID,
     anchor_type: str = "manual",
 ) -> dict[str, Any]:
-    with _control_file_lock():
+    events_path = _effective_events_path(db_path=db_path, events_path=events_path)
+    anchors_path = _effective_anchors_path(db_path=db_path, anchors_path=anchors_path)
+    with _control_file_lock(_lock_path_for_db(db_path)):
         return _record_agent_run_ledger_anchor_unlocked(
             db_path=db_path,
             events_path=events_path,
@@ -2584,12 +3424,13 @@ def _format_agent_run_anchor_report(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _copy_if_exists(source: Path, target: Path) -> dict[str, Any]:
-    if not source.exists():
-        return {"source": str(source), "path": str(target), "exists": False, "sha256": ""}
+def _copy_required_sidecar(source: Path, target: Path, *, member: str) -> dict[str, Any]:
     _ensure_parent(target)
-    shutil.copy2(source, target)
-    return {"source": str(source), "path": str(target), "exists": True, "sha256": _file_sha256(target)}
+    if source.exists():
+        shutil.copy2(source, target)
+    else:
+        target.write_text("", encoding="utf-8")
+    return {"source": str(source), "member": member, "exists": True, "sha256": _file_sha256(target)}
 
 
 def create_memory_backup(
@@ -2602,10 +3443,13 @@ def create_memory_backup(
     tenant_id: str = DEFAULT_TENANT_ID,
     write_anchor: bool = True,
 ) -> dict[str, Any]:
+    events_path = _effective_events_path(db_path=db_path, events_path=events_path)
+    anchors_path = _effective_anchors_path(db_path=db_path, anchors_path=anchors_path)
+    sessions_path = _effective_sessions_path(db_path=db_path, sessions_path=sessions_path)
     backup_id = f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:8]}"
     backup_dir = backup_root / backup_id
     backup_dir.mkdir(parents=True, exist_ok=False)
-    with _control_file_lock():
+    with _control_file_lock(_lock_path_for_db(db_path)):
         anchor = None
         if write_anchor:
             anchor = _record_agent_run_ledger_anchor_unlocked(
@@ -2619,13 +3463,14 @@ def create_memory_backup(
         with closing(connect(db_path)) as source, closing(sqlite3.connect(backup_db)) as target:
             source.backup(target)
         files = {
-            "db": {"source": str(db_path), "path": str(backup_db), "exists": True, "sha256": _file_sha256(backup_db)},
-            "events": _copy_if_exists(events_path, backup_dir / "events.jsonl"),
-            "anchors": _copy_if_exists(anchors_path, backup_dir / "anchors.jsonl"),
-            "sessions": _copy_if_exists(sessions_path, backup_dir / "sessions.jsonl"),
+            "db": {"source": str(db_path), "member": "agent_control.db", "exists": True, "sha256": _file_sha256(backup_db)},
+            "events": _copy_required_sidecar(events_path, backup_dir / "events.jsonl", member="events.jsonl"),
+            "anchors": _copy_required_sidecar(anchors_path, backup_dir / "anchors.jsonl", member="anchors.jsonl"),
+            "sessions": _copy_required_sidecar(sessions_path, backup_dir / "sessions.jsonl", member="sessions.jsonl"),
         }
     manifest_payload = {
         "backup_id": backup_id,
+        "manifest_version": BACKUP_MANIFEST_VERSION,
         "created_at": utc_now(),
         "tenant_id": tenant_id,
         "schema_version": CONTROL_SCHEMA_VERSION,
@@ -2667,35 +3512,96 @@ def _validate_backup_jsonl_sidecars(
         """,
         (tenant_id,),
     ).fetchall()
+    try:
+        anchor_sidecar_rows = _read_jsonl(anchors_path)
+    except AgentControlError as exc:
+        issues.append(str(exc))
+        anchor_sidecar_rows = []
+    db_anchor_hashes = [row["anchor_hash"] for row in anchor_rows]
+    sidecar_hashes = [
+        str(row.get("anchor_hash") or "")
+        for row in anchor_sidecar_rows
+        if str(row.get("tenant_id") or DEFAULT_TENANT_ID) == tenant_id
+    ]
+    if sidecar_hashes != db_anchor_hashes:
+        issues.append("anchors.jsonl does not match database anchor history")
     if anchor_rows:
-        if not anchors_path.exists():
-            issues.append("anchors.jsonl sidecar is missing")
-        else:
-            try:
-                anchor_sidecar_rows = _read_jsonl(anchors_path)
-            except AgentControlError as exc:
-                issues.append(str(exc))
-                anchor_sidecar_rows = []
-            db_anchor_hashes = [row["anchor_hash"] for row in anchor_rows]
-            sidecar_hashes = [str(row.get("anchor_hash") or "") for row in anchor_sidecar_rows]
-            if sidecar_hashes != db_anchor_hashes:
-                issues.append("anchors.jsonl does not match database anchor history")
         latest_anchor = anchor_rows[-1]
         if latest_anchor["events_jsonl_sha256"]:
             if not events_path.exists():
                 issues.append("events.jsonl sidecar is missing")
             elif latest_anchor["events_jsonl_sha256"] != _file_sha256(events_path):
                 issues.append("events.jsonl sha256 does not match latest ledger anchor")
-    if sessions_path.exists():
+    try:
+        session_rows = _read_jsonl(sessions_path)
+    except AgentControlError as exc:
+        issues.append(str(exc))
+        session_rows = []
+    required_keys = {"session_id", "logged_at", "path", "source_sha256"}
+    sidecar_by_id: dict[str, dict[str, Any]] = {}
+    for index, row in enumerate(session_rows, start=1):
+        if not required_keys.issubset(row):
+            issues.append(f"sessions.jsonl line {index} missing required session fields")
+            continue
+        session_id = str(row["session_id"])
+        if session_id in sidecar_by_id:
+            issues.append(f"sessions.jsonl contains duplicate session_id: {session_id}")
+            continue
+        row_tenant = str(row.get("tenant_id") or DEFAULT_TENANT_ID)
+        if row_tenant == tenant_id:
+            sidecar_by_id[session_id] = row
+    db_session_rows = conn.execute(
+        """
+        SELECT id, title, source_ref, metadata_json
+        FROM graph_nodes
+        WHERE tenant_id = ? AND json_extract(metadata_json, '$.source_type') = 'session_transcript'
+        ORDER BY id
+        """,
+        (tenant_id,),
+    ).fetchall()
+    db_sessions: dict[str, dict[str, Any]] = {}
+    for row in db_session_rows:
+        metadata = json.loads(row["metadata_json"] or "{}")
+        session_id = str(metadata.get("session_id") or str(row["id"]).removeprefix("session:"))
+        if session_id in db_sessions:
+            issues.append(f"database contains duplicate session_id metadata: {session_id}")
+        db_sessions[session_id] = {
+            "path": str(metadata.get("path") or row["source_ref"] or ""),
+            "source_sha256": str(metadata.get("source_sha256") or ""),
+            "logged_at": str(metadata.get("logged_at") or ""),
+        }
+    if set(sidecar_by_id) != set(db_sessions):
+        issues.append("sessions.jsonl session ids do not match database session nodes")
+    for session_id in sorted(set(sidecar_by_id) & set(db_sessions)):
+        sidecar = sidecar_by_id[session_id]
+        expected = db_sessions[session_id]
+        for key in ("path", "source_sha256", "logged_at"):
+            if str(sidecar.get(key) or "") != expected[key]:
+                issues.append(f"sessions.jsonl {session_id} {key} does not match database session node")
+    session_outbox_exists = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'session_sidecar_outbox'"
+    ).fetchone()
+    outbox_rows = (
+        conn.execute(
+            "SELECT session_id, payload_json, payload_sha256, delivered_at "
+            "FROM session_sidecar_outbox WHERE tenant_id = ? ORDER BY session_id",
+            (tenant_id,),
+        ).fetchall()
+        if session_outbox_exists is not None
+        else []
+    )
+    for row in outbox_rows:
         try:
-            session_rows = _read_jsonl(sessions_path)
-        except AgentControlError as exc:
-            issues.append(str(exc))
-            session_rows = []
-        required_keys = {"session_id", "logged_at", "path", "source_sha256"}
-        for index, row in enumerate(session_rows, start=1):
-            if not required_keys.issubset(row):
-                issues.append(f"sessions.jsonl line {index} missing required session fields")
+            payload = json.loads(row["payload_json"] or "{}")
+        except json.JSONDecodeError:
+            issues.append(f"session sidecar outbox payload is invalid JSON: {row['session_id']}")
+            continue
+        if _text_sha256(canonical_json(payload)) != row["payload_sha256"]:
+            issues.append(f"session sidecar outbox payload hash mismatch: {row['session_id']}")
+        if payload.get("session_id") != row["session_id"]:
+            issues.append(f"session sidecar outbox payload session id mismatch: {row['session_id']}")
+        if row["session_id"] not in sidecar_by_id or row["delivered_at"] is None:
+            issues.append(f"session sidecar outbox is not durably delivered: {row['session_id']}")
     return issues
 
 
@@ -2704,6 +3610,7 @@ def restore_check_memory_backup(
     backup_dir: Path,
     tenant_id: str = DEFAULT_TENANT_ID,
 ) -> dict[str, Any]:
+    backup_dir = backup_dir.resolve()
     manifest_path = backup_dir / "manifest.json"
     issues: list[str] = []
     if not manifest_path.exists():
@@ -2722,26 +3629,73 @@ def restore_check_memory_backup(
             "issues": [f"manifest.json is invalid JSON: {exc}"],
             "policy_banner": MEMORY_NON_AUTHORIZATION_BANNER,
         }
+    if not isinstance(manifest, dict):
+        return {
+            "status": "fail",
+            "backup_dir": str(backup_dir),
+            "issues": ["manifest.json must be a JSON object"],
+            "policy_banner": MEMORY_NON_AUTHORIZATION_BANNER,
+        }
     expected_manifest_hash = manifest.get("manifest_sha256")
     manifest_without_hash = {key: value for key, value in manifest.items() if key != "manifest_sha256"}
     actual_manifest_hash = _text_sha256(canonical_json(manifest_without_hash))
     if expected_manifest_hash != actual_manifest_hash:
         issues.append("manifest_sha256 mismatch")
+    manifest_tenant = manifest.get("tenant_id")
+    if manifest_tenant != tenant_id:
+        issues.append(f"manifest tenant_id must exactly match requested tenant: {tenant_id}")
     files = manifest.get("files") or {}
-    for label, info in files.items():
-        if not isinstance(info, dict) or not info.get("exists"):
+    if not isinstance(files, dict):
+        issues.append("manifest files must be a JSON object")
+        files = {}
+    manifest_version = str(manifest.get("manifest_version") or "legacy_absolute_paths_v1")
+    if manifest_version not in {BACKUP_MANIFEST_VERSION, "legacy_absolute_paths_v1"}:
+        issues.append(f"unsupported backup manifest_version: {manifest_version}")
+    expected_members = {
+        "db": "agent_control.db",
+        "events": "events.jsonl",
+        "anchors": "anchors.jsonl",
+        "sessions": "sessions.jsonl",
+    }
+    resolved_files: dict[str, Path] = {}
+    validated_labels: set[str] = set()
+    for label, expected_member in expected_members.items():
+        info = files.get(label)
+        if not isinstance(info, dict):
+            issues.append(f"{label} backup member is not declared")
             continue
-        path = Path(str(info.get("path") or ""))
+        if info.get("exists") is not True:
+            issues.append(f"{label} backup member must be declared present")
+            continue
+        if manifest_version == BACKUP_MANIFEST_VERSION:
+            raw_member = str(info.get("member") or "")
+            member_path = Path(raw_member)
+            if not raw_member or member_path.is_absolute() or ".." in member_path.parts:
+                issues.append(f"{label} backup member must be a relative in-bundle path")
+                continue
+            if raw_member.replace("\\", "/") != expected_member:
+                issues.append(f"{label} backup member must be exactly {expected_member}")
+                continue
+            path = (backup_dir / member_path).resolve()
+            if path != backup_dir and backup_dir not in path.parents:
+                issues.append(f"{label} backup member escapes the supplied bundle")
+                continue
+        else:
+            legacy_path = Path(str(info.get("path") or expected_member))
+            if legacy_path.name != expected_member:
+                issues.append(f"{label} legacy backup member has an unexpected filename")
+                continue
+            path = (backup_dir / expected_member).resolve()
+        resolved_files[label] = path
         if not path.exists():
             issues.append(f"{label} backup file is missing")
             continue
         if info.get("sha256") != _file_sha256(path):
             issues.append(f"{label} sha256 mismatch")
-    backup_db = Path(str((files.get("db") or {}).get("path") or (backup_dir / "agent_control.db")))
-    backup_events = Path(str((files.get("events") or {}).get("path") or (backup_dir / "events.jsonl")))
-    backup_anchors = Path(str((files.get("anchors") or {}).get("path") or (backup_dir / "anchors.jsonl")))
-    if not backup_db.exists():
-        issues.append("agent_control.db backup is missing")
+            continue
+        validated_labels.add(label)
+    required_labels = set(expected_members)
+    if validated_labels != required_labels or expected_manifest_hash != actual_manifest_hash or manifest_tenant != tenant_id:
         return {
             "status": "fail",
             "backup_dir": str(backup_dir),
@@ -2749,17 +3703,22 @@ def restore_check_memory_backup(
             "manifest_sha256": actual_manifest_hash,
             "policy_banner": MEMORY_NON_AUTHORIZATION_BANNER,
         }
+    backup_db = resolved_files["db"]
+    backup_events = resolved_files["events"]
+    backup_anchors = resolved_files["anchors"]
+    backup_sessions = resolved_files["sessions"]
     with closing(sqlite3.connect(backup_db)) as conn:
         conn.row_factory = sqlite3.Row
         conn.create_function("agent_control_maintenance", 0, lambda: 0)
         ledger = validate_agent_run_ledger(conn, tenant_id=tenant_id)
         outbox = validate_event_outbox(conn)
+        mirror = validate_event_mirror(conn, events_path=backup_events)
         anchors = validate_agent_run_ledger_anchors(conn, events_path=backup_events, tenant_id=tenant_id)
         sidecar_issues = _validate_backup_jsonl_sidecars(
             conn,
             events_path=backup_events,
             anchors_path=backup_anchors,
-            sessions_path=Path(str((files.get("sessions") or {}).get("path") or (backup_dir / "sessions.jsonl"))),
+            sessions_path=backup_sessions,
             tenant_id=tenant_id,
         )
         expected_schema_version = str(manifest.get("schema_version") or CONTROL_SCHEMA_VERSION)
@@ -2767,15 +3726,24 @@ def restore_check_memory_backup(
             "SELECT version FROM schema_migrations WHERE version = ?",
             (expected_schema_version,),
         ).fetchone()
+        schema_shape_current = (
+            _schema_is_current(conn)
+            if expected_schema_version == CONTROL_SCHEMA_VERSION
+            else migration is not None
+        )
     if ledger["status"] != "pass":
         issues.append("agent run ledger audit failed")
     if outbox["status"] != "pass":
         issues.append("event outbox audit failed")
+    if mirror["status"] != "pass":
+        issues.append("events.jsonl mirror audit failed")
     if anchors["status"] != "pass":
         issues.append("agent run ledger anchor audit failed")
     issues.extend(sidecar_issues)
     if migration is None:
         issues.append(f"schema migration missing: {expected_schema_version}")
+    elif not schema_shape_current:
+        issues.append(f"schema structure is incomplete for: {expected_schema_version}")
     return {
         "status": "pass" if not issues else "fail",
         "backup_dir": str(backup_dir),
@@ -2784,6 +3752,7 @@ def restore_check_memory_backup(
         "policy_banner": MEMORY_NON_AUTHORIZATION_BANNER,
         "ledger": ledger,
         "event_outbox": outbox,
+        "event_mirror": mirror,
         "anchors": anchors,
     }
 
@@ -2800,7 +3769,7 @@ def _format_memory_backup(result: dict[str, Any]) -> str:
         "# Files",
     ]
     for label, info in (result.get("files") or {}).items():
-        lines.append(f"- {label}: exists={info.get('exists')} sha256={info.get('sha256')} path={info.get('path')}")
+        lines.append(f"- {label}: exists={info.get('exists')} sha256={info.get('sha256')} member={info.get('member')}")
     return "\n".join(lines)
 
 
@@ -2852,6 +3821,7 @@ def memory_doctor(
     write_backup: bool = False,
     max_backup_age_hours: int = 48,
 ) -> dict[str, Any]:
+    events_path = _effective_events_path(db_path=db_path, events_path=events_path)
     backup = None
     if write_backup:
         backup = create_memory_backup(
@@ -2870,12 +3840,18 @@ def memory_doctor(
         backup_age_hours = (time.time() - (latest_backup / "manifest.json").stat().st_mtime) / 3600
     ledger = agent_run_ledger_report(db_path=db_path, tenant_id=tenant_id, limit=20)
     anchor_report = agent_run_anchor_report(db_path=db_path, events_path=events_path, anchors_path=anchors_path, tenant_id=tenant_id)
+    freshness_refresh = refresh_retrieval_freshness(
+        db_path=db_path,
+        repo_root=repo_root,
+        tenant_id=tenant_id,
+    )
     audit = memory_audit(db_path=db_path, tenant_id=tenant_id)
     dashboard = operator_dashboard(db_path=db_path, runs_dir=runs_dir, tenant_id=tenant_id)
     eval_result = agent_eval_harness(db_path=db_path, events_path=events_path, repo_root=repo_root, tenant_id=tenant_id, seed=False)
     freshness = retrieval_freshness_report(db_path=db_path, tenant_id=tenant_id)
     with closing(connect(db_path)) as conn:
         outbox = validate_event_outbox(conn)
+        mirror = validate_event_mirror(conn, events_path=events_path)
     checks = [
         {"name": "agent run ledger audit", "pass": ledger.get("status") == "pass", "detail": ledger.get("status")},
         {
@@ -2884,10 +3860,11 @@ def memory_doctor(
             "detail": f"{anchor_report.get('status')} / {(anchor_report.get('anchor_validation') or {}).get('freshness')}",
         },
         {"name": "event outbox audit", "pass": outbox.get("status") == "pass", "detail": outbox.get("status")},
+        {"name": "events.jsonl mirror", "pass": mirror.get("status") == "pass", "detail": mirror.get("status")},
         {"name": "memory audit", "pass": audit.get("status") == "pass", "detail": audit.get("status")},
         {
             "name": "retrieval freshness",
-            "pass": True,
+            "pass": freshness.get("status") == "pass",
             "detail": freshness.get("detail"),
         },
         {"name": "operator dashboard", "pass": dashboard.get("status") == "pass", "detail": dashboard.get("status")},
@@ -2913,8 +3890,10 @@ def memory_doctor(
         "ledger": ledger,
         "anchors": anchor_report,
         "event_outbox": outbox,
+        "event_mirror": mirror,
         "memory_audit": audit,
         "retrieval_freshness": freshness,
+        "retrieval_freshness_refresh": freshness_refresh,
         "operator_dashboard": dashboard,
         "agent_eval": eval_result,
         "restore_check": restore_check,
@@ -3103,6 +4082,7 @@ def memory_maintenance(
         )
         living_history = ingest_living_history(
             db_path=db_path,
+            events_path=events_path,
             repo_root=repo_root,
             tenant_id=tenant_id,
         )
@@ -3899,8 +4879,450 @@ def _upsert_retrieval_document(conn: sqlite3.Connection, node: dict[str, Any]) -
         pass
 
 
+def _upsert_retrieval_source_expectation(conn: sqlite3.Connection, node: dict[str, Any]) -> None:
+    metadata = node.get("metadata") or {}
+    source_type = str(metadata.get("source_type") or "")
+    conn.execute("DELETE FROM retrieval_source_expectations WHERE node_id = ?", (str(node["id"]),))
+    if source_type not in REQUIRED_FRESH_RETRIEVAL_SOURCE_TYPES or source_type == LIVING_HISTORY_SOURCE_TYPE:
+        return
+    now = utc_now()
+    conn.execute(
+        """
+        INSERT INTO retrieval_source_expectations(
+            tenant_id, node_id, source_type, source_path, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(tenant_id, node_id) DO UPDATE SET
+            source_type = excluded.source_type,
+            source_path = excluded.source_path,
+            updated_at = excluded.updated_at
+        """,
+        (
+            str(node.get("tenant_id") or DEFAULT_TENANT_ID),
+            str(node["id"]),
+            source_type,
+            _retrieval_file_path(metadata, node.get("source_ref")),
+            now,
+            now,
+        ),
+    )
+
+
+def _missing_required_retrieval_expectations(
+    conn: sqlite3.Connection,
+    *,
+    tenant_id: str,
+) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT e.node_id, e.source_type, e.source_path, n.metadata_json AS graph_metadata_json,
+               d.source_type AS retrieval_source_type, d.freshness_status,
+               CASE WHEN n.id IS NULL THEN 1 ELSE 0 END AS graph_node_missing,
+               CASE WHEN d.doc_id IS NULL THEN 1 ELSE 0 END AS retrieval_document_missing
+        FROM retrieval_source_expectations e
+        LEFT JOIN graph_nodes n ON n.id = e.node_id AND n.tenant_id = e.tenant_id
+        LEFT JOIN retrieval_documents d ON d.source_node_id = e.node_id
+        WHERE e.tenant_id = ?
+          AND e.source_type <> ?
+        ORDER BY e.source_type, e.node_id
+        """,
+        (tenant_id, LIVING_HISTORY_SOURCE_TYPE),
+    ).fetchall()
+    issues: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        reasons: list[str] = []
+        if item["graph_node_missing"]:
+            reasons.append("graph_node_missing")
+        if item["retrieval_document_missing"]:
+            reasons.append("retrieval_document_missing")
+        graph_source_type = ""
+        if not item["graph_node_missing"]:
+            try:
+                graph_metadata = json.loads(item.get("graph_metadata_json") or "{}")
+            except json.JSONDecodeError:
+                graph_metadata = {}
+            if isinstance(graph_metadata, dict):
+                graph_source_type = str(graph_metadata.get("source_type") or "")
+            if graph_source_type != item["source_type"]:
+                reasons.append("graph_source_type_reclassified")
+        if not item["retrieval_document_missing"]:
+            if str(item.get("retrieval_source_type") or "") != item["source_type"]:
+                reasons.append("retrieval_source_type_reclassified")
+            if str(item.get("freshness_status") or "") != "current":
+                reasons.append(f"freshness_{item.get('freshness_status') or 'unknown'}")
+        if reasons:
+            item["issue"] = ",".join(reasons)
+            issues.append(item)
+    return issues
+
+
+def _latest_project_memory_seed_contract(
+    conn: sqlite3.Connection,
+    *,
+    tenant_id: str,
+) -> dict[str, Any] | None:
+    rows = conn.execute(
+        """
+        SELECT payload_json
+        FROM event_outbox
+        WHERE tenant_id = ? AND event_type = 'seed.project_memory.completed'
+        ORDER BY id DESC
+        """,
+        (tenant_id,),
+    ).fetchall()
+    for row in rows:
+        try:
+            stored = json.loads(row["payload_json"] or "{}")
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(stored, dict):
+            continue
+        payload = stored.get("payload", stored)
+        if not isinstance(payload, dict):
+            continue
+        if str(payload.get("tenant_id") or tenant_id) != tenant_id:
+            continue
+        if not str(payload.get("repo_root") or "").strip():
+            continue
+        return payload
+    return None
+
+
+def _canonical_required_retrieval_specs(
+    conn: sqlite3.Connection,
+    *,
+    tenant_id: str,
+) -> list[dict[str, Any]]:
+    seed_contract = _latest_project_memory_seed_contract(conn, tenant_id=tenant_id)
+    if seed_contract is None:
+        return []
+    repo_root = str(seed_contract["repo_root"])
+    return [
+        {
+            "tenant_id": tenant_id,
+            "repo_root": repo_root,
+            "node_id": _path_node_id(str(spec["path"])),
+            "source_type": str(spec["source_type"]),
+            "source_path": _safe_node_path(str(spec["path"])),
+        }
+        for spec in PROJECT_SEED_FILES
+        if str(spec["source_type"]) in REQUIRED_FRESH_RETRIEVAL_SOURCE_TYPES
+    ]
+
+
+def _canonical_required_retrieval_issues(
+    conn: sqlite3.Connection,
+    *,
+    tenant_id: str,
+) -> list[dict[str, Any]]:
+    issues: list[dict[str, Any]] = []
+    for spec in _canonical_required_retrieval_specs(conn, tenant_id=tenant_id):
+        row = conn.execute(
+            """
+            SELECT n.id, n.metadata_json, n.source_ref, d.doc_id,
+                   d.source_type AS retrieval_source_type, d.freshness_status
+            FROM (SELECT 1) marker
+            LEFT JOIN graph_nodes n ON n.id = ? AND n.tenant_id = ?
+            LEFT JOIN retrieval_documents d ON d.source_node_id = n.id
+            """,
+            (spec["node_id"], tenant_id),
+        ).fetchone()
+        reasons: list[str] = []
+        graph_node_missing = row is None or row["id"] is None
+        retrieval_document_missing = graph_node_missing or row["doc_id"] is None
+        if graph_node_missing:
+            reasons.append("canonical_graph_node_missing")
+        else:
+            try:
+                metadata = json.loads(row["metadata_json"] or "{}")
+            except json.JSONDecodeError:
+                metadata = {}
+            if not isinstance(metadata, dict):
+                metadata = {}
+            if str(metadata.get("source_type") or "") != spec["source_type"]:
+                reasons.append("canonical_source_type_reclassified")
+            if _safe_node_path(_retrieval_file_path(metadata, row["source_ref"])) != spec["source_path"]:
+                reasons.append("canonical_source_path_changed")
+        if retrieval_document_missing:
+            reasons.append("canonical_retrieval_document_missing")
+        else:
+            if str(row["retrieval_source_type"] or "") != spec["source_type"]:
+                reasons.append("canonical_retrieval_source_type_reclassified")
+            if str(row["freshness_status"] or "") != "current":
+                reasons.append(f"freshness_{row['freshness_status'] or 'unknown'}")
+        if reasons:
+            issues.append(
+                {
+                    **spec,
+                    "graph_node_missing": graph_node_missing,
+                    "retrieval_document_missing": retrieval_document_missing,
+                    "freshness_status": None if retrieval_document_missing else str(row["freshness_status"]),
+                    "issue": ",".join(reasons),
+                    "canonical_contract": True,
+                }
+            )
+    return issues
+
+
+def _present_required_retrieval_issues(
+    conn: sqlite3.Connection,
+    *,
+    tenant_id: str,
+) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT n.id AS node_id, n.metadata_json, n.source_ref, d.doc_id,
+               d.source_type AS retrieval_source_type, d.freshness_status
+        FROM graph_nodes n
+        LEFT JOIN retrieval_documents d ON d.source_node_id = n.id
+        WHERE n.tenant_id = ?
+        ORDER BY n.id
+        """,
+        (tenant_id,),
+    ).fetchall()
+    issues: list[dict[str, Any]] = []
+    for row in rows:
+        try:
+            metadata = json.loads(row["metadata_json"] or "{}")
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(metadata, dict):
+            continue
+        source_type = str(metadata.get("source_type") or "")
+        if source_type not in REQUIRED_FRESH_RETRIEVAL_SOURCE_TYPES or source_type == LIVING_HISTORY_SOURCE_TYPE:
+            continue
+        reasons: list[str] = []
+        retrieval_document_missing = row["doc_id"] is None
+        if retrieval_document_missing:
+            reasons.append("retrieval_document_missing")
+        else:
+            if str(row["retrieval_source_type"] or "") != source_type:
+                reasons.append("retrieval_source_type_reclassified")
+            if str(row["freshness_status"] or "") != "current":
+                reasons.append(f"freshness_{row['freshness_status'] or 'unknown'}")
+        if reasons:
+            issues.append(
+                {
+                    "tenant_id": tenant_id,
+                    "node_id": str(row["node_id"]),
+                    "source_type": source_type,
+                    "source_path": _retrieval_file_path(metadata, row["source_ref"]),
+                    "graph_node_missing": False,
+                    "retrieval_document_missing": retrieval_document_missing,
+                    "freshness_status": None if retrieval_document_missing else str(row["freshness_status"]),
+                    "issue": ",".join(reasons),
+                }
+            )
+    return issues
+
+
+def _living_history_required_retrieval_issues(
+    conn: sqlite3.Connection,
+    *,
+    tenant_id: str,
+) -> list[dict[str, Any]]:
+    rows_by_source = {_safe_node_path(path): [] for path in LIVING_HISTORY_REQUIRED_SOURCE_PATHS}
+    allowed_paths = set(rows_by_source)
+    expected_paths: set[str] = set()
+    activation_rows = conn.execute(
+        """
+        SELECT payload_json
+        FROM event_outbox
+        WHERE tenant_id = ? AND event_type = ?
+        ORDER BY id
+        """,
+        (tenant_id, LIVING_HISTORY_ACTIVATION_EVENT_TYPE),
+    ).fetchall()
+    for activation_row in activation_rows:
+        try:
+            wrapper = json.loads(activation_row["payload_json"] or "{}")
+        except json.JSONDecodeError:
+            continue
+        payload = wrapper.get("payload", wrapper) if isinstance(wrapper, dict) else {}
+        activated = payload.get("activated_source_paths") if isinstance(payload, dict) else []
+        if not isinstance(activated, list):
+            continue
+        expected_paths.update(
+            path
+            for raw_path in activated
+            if (path := _safe_node_path(str(raw_path or ""))) in allowed_paths
+        )
+    expectation_rows = conn.execute(
+        """
+        SELECT node_id, source_path
+        FROM retrieval_source_expectations
+        WHERE tenant_id = ? AND source_type = ?
+        """,
+        (tenant_id, LIVING_HISTORY_SOURCE_TYPE),
+    ).fetchall()
+    for expectation_row in expectation_rows:
+        node_id = str(expectation_row["node_id"] or "")
+        raw_path = (
+            node_id.removeprefix(LIVING_HISTORY_EXPECTATION_PREFIX)
+            if node_id.startswith(LIVING_HISTORY_EXPECTATION_PREFIX)
+            else str(expectation_row["source_path"] or "")
+        )
+        source_path = _safe_node_path(raw_path)
+        if source_path in allowed_paths:
+            expected_paths.add(source_path)
+    rows = conn.execute(
+        """
+        SELECT n.id, n.metadata_json, n.source_ref, d.doc_id,
+               d.source_type AS retrieval_source_type, d.freshness_status
+        FROM graph_nodes n
+        LEFT JOIN retrieval_documents d ON d.source_node_id = n.id
+        WHERE n.tenant_id = ?
+          AND json_extract(n.metadata_json, '$.source_type') = ?
+        ORDER BY n.id
+        """,
+        (tenant_id, LIVING_HISTORY_SOURCE_TYPE),
+    ).fetchall()
+    for row in rows:
+        try:
+            metadata = json.loads(row["metadata_json"] or "{}")
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(metadata, dict):
+            continue
+        source_path = _safe_node_path(_retrieval_file_path(metadata, row["source_ref"]))
+        if source_path in rows_by_source:
+            rows_by_source[source_path].append(row)
+            expected_paths.add(source_path)
+
+    issues: list[dict[str, Any]] = []
+    for source_path in sorted(expected_paths):
+        source_rows = rows_by_source[source_path]
+        current_rows = [
+            row
+            for row in source_rows
+            if row["doc_id"] is not None
+            and str(row["retrieval_source_type"] or "") == LIVING_HISTORY_SOURCE_TYPE
+            and str(row["freshness_status"] or "") == "current"
+        ]
+        if current_rows:
+            continue
+        graph_node_missing = not source_rows
+        retrieval_document_missing = not any(row["doc_id"] is not None for row in source_rows)
+        reasons: list[str] = []
+        if graph_node_missing:
+            reasons.append("living_history_source_missing")
+        elif retrieval_document_missing:
+            reasons.append("retrieval_document_missing")
+        else:
+            reasons.append("living_history_source_not_current")
+        issues.append(
+            {
+                "tenant_id": tenant_id,
+                "node_id": f"{LIVING_HISTORY_EXPECTATION_PREFIX}{source_path}",
+                "source_type": LIVING_HISTORY_SOURCE_TYPE,
+                "source_path": source_path,
+                "graph_node_missing": graph_node_missing,
+                "retrieval_document_missing": retrieval_document_missing,
+                "freshness_status": None if retrieval_document_missing else "not_current",
+                "issue": ",".join(reasons),
+                "class_contract": True,
+                "current_node_count": 0,
+            }
+        )
+    return issues
+
+
+def _required_retrieval_freshness_issues(
+    conn: sqlite3.Connection,
+    *,
+    tenant_id: str,
+) -> list[dict[str, Any]]:
+    merged: dict[str, dict[str, Any]] = {}
+    sources = [
+        *_missing_required_retrieval_expectations(conn, tenant_id=tenant_id),
+        *_canonical_required_retrieval_issues(conn, tenant_id=tenant_id),
+        *_present_required_retrieval_issues(conn, tenant_id=tenant_id),
+        *_living_history_required_retrieval_issues(conn, tenant_id=tenant_id),
+    ]
+    for source in sources:
+        node_id = str(source["node_id"])
+        reason_set = {reason for reason in str(source.get("issue") or "").split(",") if reason}
+        if node_id not in merged:
+            merged[node_id] = {
+                **source,
+                "graph_node_missing": bool(source.get("graph_node_missing")),
+                "retrieval_document_missing": bool(source.get("retrieval_document_missing")),
+                "issue_reasons": sorted(reason_set),
+            }
+            continue
+        current = merged[node_id]
+        current["graph_node_missing"] = bool(current.get("graph_node_missing")) or bool(
+            source.get("graph_node_missing")
+        )
+        current["retrieval_document_missing"] = bool(current.get("retrieval_document_missing")) or bool(
+            source.get("retrieval_document_missing")
+        )
+        current["canonical_contract"] = bool(current.get("canonical_contract")) or bool(
+            source.get("canonical_contract")
+        )
+        current["issue_reasons"] = sorted(set(current.get("issue_reasons") or []) | reason_set)
+        if source.get("repo_root"):
+            current["repo_root"] = source["repo_root"]
+        if source.get("freshness_status") not in (None, "current"):
+            current["freshness_status"] = source["freshness_status"]
+    for item in merged.values():
+        item["issue"] = ",".join(item.pop("issue_reasons", []))
+    return sorted(merged.values(), key=lambda item: (str(item.get("source_type") or ""), item["node_id"]))
+
+
 def _retrieval_file_path(metadata: dict[str, Any], source_ref: str | None) -> str:
     return str(metadata.get("source_path") or metadata.get("path") or source_ref or "").replace("\\", "/").strip()
+
+
+def _resolve_gateboard_source_artifact_hash_path(repo_root: Path, source_path: str) -> Path | None:
+    try:
+        resolved = _resolve_inside_repo(repo_root, Path(source_path))
+        relative_path = _safe_node_path(_relative_to_repo(repo_root, resolved))
+    except (AgentControlError, OSError, RuntimeError):
+        return None
+    path = Path(relative_path)
+    if path.name.lower() in GATEBOARD_SOURCE_ARTIFACT_DENIED_NAMES:
+        return None
+    if path.suffix.lower() not in GATEBOARD_SOURCE_ARTIFACT_HASH_SUFFIXES:
+        return None
+    if not any(relative_path == root or relative_path.startswith(f"{root}/") for root in GATEBOARD_SOURCE_ARTIFACT_HASH_ROOTS):
+        return None
+    return resolved
+
+
+def _gateboard_source_artifact_hash(repo_root: Path, source_path: str) -> str | None:
+    path = _resolve_gateboard_source_artifact_hash_path(repo_root, source_path)
+    if path is None or not path.is_file():
+        return None
+    try:
+        return _file_sha256(path)
+    except (MemoryError, OSError):
+        return None
+
+
+def _resolve_retrieval_freshness_path(
+    *,
+    repo_root: Path,
+    source_type: str,
+    source_path: str,
+) -> Path | None:
+    if source_type == "gateboard_source_artifact":
+        return _resolve_gateboard_source_artifact_hash_path(repo_root, source_path)
+    try:
+        resolved = _resolve_inside_repo(repo_root, Path(source_path))
+        relative_path = _relative_to_repo(repo_root, resolved)
+        try:
+            _assert_memory_safe_source_path(relative_path)
+        except AgentControlError:
+            allowed_gateboard_path = "data/forward-tracking/project_operator_gateboard_latest.json"
+            if not (
+                source_type.startswith("gateboard_")
+                and _safe_node_path(relative_path) == allowed_gateboard_path
+            ):
+                raise
+        return resolved
+    except (AgentControlError, OSError, RuntimeError):
+        return None
 
 
 def _retrieval_file_freshness_status(
@@ -3913,8 +5335,53 @@ def _retrieval_file_freshness_status(
 ) -> str:
     if not source_path:
         return "missing"
-    path = repo_root / source_path
-    if not path.exists() or not path.is_file():
+    if source_type == LIVING_HISTORY_SOURCE_TYPE:
+        physical_paths = metadata.get("source_physical_paths")
+        candidates = physical_paths if isinstance(physical_paths, list) and physical_paths else [source_path]
+        found = False
+        for candidate in candidates:
+            if not isinstance(candidate, str) or not candidate.strip():
+                continue
+            path = _resolve_retrieval_freshness_path(
+                repo_root=repo_root,
+                source_type=source_type,
+                source_path=candidate,
+            )
+            if path is None:
+                continue
+            if not path.is_file():
+                continue
+            found = True
+            try:
+                body = path.read_text(encoding="utf-8")
+            except (MemoryError, OSError):
+                continue
+            except UnicodeDecodeError:
+                try:
+                    body = path.read_text(encoding="utf-8", errors="replace")
+                except (MemoryError, OSError):
+                    continue
+            if _normalized_history_text(node_body) in _normalized_history_text(body):
+                return "current"
+        return "stale" if found else "missing"
+    if source_type == "gateboard_source_artifact":
+        path = _resolve_gateboard_source_artifact_hash_path(repo_root, source_path)
+        if path is None or not path.is_file():
+            return "missing"
+        expected_hash = str(metadata.get("source_content_sha256") or "")
+        if re.fullmatch(r"[0-9a-f]{64}", expected_hash) is None:
+            return "stale"
+        try:
+            actual_hash = _file_sha256(path)
+        except (MemoryError, OSError):
+            return "stale"
+        return "current" if actual_hash == expected_hash else "stale"
+    path = _resolve_retrieval_freshness_path(
+        repo_root=repo_root,
+        source_type=source_type,
+        source_path=source_path,
+    )
+    if path is None or not path.exists() or not path.is_file():
         return "missing"
     if source_type == "repo_file_index":
         try:
@@ -3935,8 +5402,9 @@ def _retrieval_file_freshness_status(
             body = path.read_text(encoding="utf-8", errors="replace")
         except (MemoryError, OSError):
             return "stale"
-    if source_type == LIVING_HISTORY_SOURCE_TYPE:
-        return "current" if _normalized_history_text(node_body) in _normalized_history_text(body) else "stale"
+    expected_source_hash = metadata.get("source_content_sha256")
+    if expected_source_hash is not None:
+        return "current" if str(expected_source_hash) == _text_sha256(body) else "stale"
     expected_hash = metadata.get("content_sha256")
     if expected_hash is None:
         return "current"
@@ -3956,6 +5424,9 @@ def refresh_retrieval_freshness(
         "stale": 0,
         "missing": 0,
         "updated": 0,
+        "missing_required_count": 0,
+        "missing_required_source_types": [],
+        "missing_required_sources": [],
     }
     with closing(connect(db_path, maintenance=True)) as conn, conn:
         rows = conn.execute(
@@ -3986,6 +5457,12 @@ def refresh_retrieval_freshness(
                     (status, utc_now(), row["doc_id"]),
                 )
                 result["updated"] += 1
+        required_issues = _required_retrieval_freshness_issues(conn, tenant_id=tenant_id)
+        result["missing_required_sources"] = required_issues
+        result["missing_required_count"] = len(required_issues)
+        result["missing_required_source_types"] = sorted({row["source_type"] for row in required_issues})
+        if required_issues:
+            result["status"] = "issues"
     return result
 
 
@@ -3997,23 +5474,41 @@ def retrieval_freshness_report(
     with closing(connect(db_path)) as conn:
         rows = conn.execute(
             """
-            SELECT freshness_status, count(*) AS count
+            SELECT source_type, freshness_status, count(*) AS count
             FROM retrieval_documents d
             JOIN graph_nodes n ON n.id = d.source_node_id
             WHERE n.tenant_id = ?
-            GROUP BY freshness_status
+            GROUP BY source_type, freshness_status
             """,
             (tenant_id,),
         ).fetchall()
-    counts = {str(row["freshness_status"]): int(row["count"]) for row in rows}
+        required_freshness_issues = _required_retrieval_freshness_issues(conn, tenant_id=tenant_id)
+    counts: dict[str, int] = {}
+    required_issues = 0
+    tier3_repo_gaps = 0
+    for row in rows:
+        source_type = str(row["source_type"])
+        freshness_status = str(row["freshness_status"])
+        count = int(row["count"])
+        counts[freshness_status] = counts.get(freshness_status, 0) + count
+        if source_type == "repo_file_index" and freshness_status in {"missing", "stale"}:
+            tier3_repo_gaps += count
     stale = int(counts.get("stale", 0))
     missing = int(counts.get("missing", 0))
+    required_issues = len(required_freshness_issues)
     return {
-        "status": "pass",
+        "status": "pass" if required_issues == 0 else "issues",
         "counts": counts,
         "stale": stale,
         "missing": missing,
-        "detail": f"stale={stale} missing={missing}",
+        "required_issue_count": required_issues,
+        "missing_required_source_types": sorted({row["source_type"] for row in required_freshness_issues}),
+        "missing_required_sources": required_freshness_issues,
+        "tier3_repo_gap_count": tier3_repo_gaps,
+        "detail": (
+            f"stale={stale} missing={missing} required_issues={required_issues} "
+            f"tier3_repo_gaps_nonfatal={tier3_repo_gaps}"
+        ),
     }
 
 
@@ -4026,6 +5521,7 @@ def _query_retrieval_documents(
     metadata_filter: dict[str, Any] | None,
     limit: int,
     include_repo_index: bool = False,
+    fresh_only: bool = False,
 ) -> list[dict[str, Any]]:
     terms = [re.sub(r"[^a-zA-Z0-9_]", "", term) for term in _query_terms(query)]
     terms = [term for term in terms if term]
@@ -4042,6 +5538,8 @@ def _query_retrieval_documents(
         scope_params.append(sub_tenant_id)
     if not include_repo_index:
         scope_clauses.append("d.source_type <> 'repo_file_index'")
+    if fresh_only:
+        scope_clauses.append("d.freshness_status = 'current'")
     scope_sql = f" AND {' AND '.join(scope_clauses)}" if scope_clauses else ""
     tier_sql = _retrieval_tier_case_sql()
     freshness_sql = "CASE WHEN d.freshness_status = 'current' THEN 0 ELSE 1 END"
@@ -4220,6 +5718,7 @@ def upsert_graph_node(
         )
     node = _graph_node_row(conn, node_id)
     _upsert_retrieval_document(conn, node)
+    _upsert_retrieval_source_expectation(conn, node)
     return node
 
 
@@ -4232,8 +5731,20 @@ def upsert_graph_edge(
     metadata: dict[str, Any] | None = None,
     source_ref: str | None = None,
 ) -> dict[str, Any]:
-    _graph_node_row(conn, source_node_id)
-    _graph_node_row(conn, target_node_id)
+    edge_metadata = dict(metadata or {})
+    _assert_memory_policy_valid(
+        title=relation,
+        body="",
+        metadata=edge_metadata,
+        field_name="graph edge metadata",
+    )
+    source_node = _graph_node_row(conn, source_node_id)
+    target_node = _graph_node_row(conn, target_node_id)
+    if source_node["tenant_id"] != target_node["tenant_id"]:
+        raise AgentControlError(
+            f"graph edge cannot cross tenants: {source_node_id} ({source_node['tenant_id']}) -> "
+            f"{target_node_id} ({target_node['tenant_id']})"
+        )
     edge_id = _edge_id(source_node_id, relation, target_node_id)
     conn.execute(
         """
@@ -4244,7 +5755,7 @@ def upsert_graph_edge(
         ON CONFLICT(source_node_id, relation, target_node_id)
         DO UPDATE SET metadata_json = excluded.metadata_json, source_ref = excluded.source_ref
         """,
-        (edge_id, source_node_id, relation, target_node_id, canonical_json(metadata or {}), source_ref, utc_now()),
+        (edge_id, source_node_id, relation, target_node_id, canonical_json(edge_metadata), source_ref, utc_now()),
     )
     row = conn.execute("SELECT * FROM graph_edges WHERE id = ?", (edge_id,)).fetchone()
     return _row_dict(row) or {}
@@ -4308,7 +5819,7 @@ def _parse_worklog_entries(text: str) -> tuple[list[dict[str, str]], list[str]]:
         current_lines = []
 
     for raw_line in text.splitlines():
-        heading = re.match(r"^##\s+(\d{4}-\d{2}-\d{2})\s*$", raw_line)
+        heading = re.match(r"^##\s+(\d{4}-\d{2}-\d{2})(?:\s+\([^)]*\))?\s*$", raw_line)
         if heading:
             flush()
             current_date = heading.group(1)
@@ -4367,6 +5878,55 @@ def _parse_decision_entries(text: str) -> tuple[list[dict[str, str]], list[str]]
     return entries, warnings
 
 
+def _living_history_corpus_sources(repo_root: Path) -> dict[str, list[dict[str, Any]]]:
+    logical_paths = {"docs/WORKLOG.md", "docs/DECISIONS.md"}
+    sources: dict[str, list[dict[str, Any]]] = {path: [] for path in logical_paths}
+    resolved_root = repo_root.resolve()
+    archive_root = (resolved_root / PROJECT_MEMORY_ARCHIVE_RELATIVE_ROOT).resolve()
+    try:
+        archive_root.relative_to(resolved_root)
+    except ValueError as exc:
+        raise AgentControlError("project-memory archive root escapes repository root") from exc
+    if archive_root.exists():
+        for manifest_path in sorted(archive_root.glob("*/manifest.json")):
+            verification = _verify_project_memory_archive_manifest(root=resolved_root, manifest_path=manifest_path)
+            if verification["status"] != "pass":
+                raise AgentControlError(
+                    f"invalid project-memory archive manifest {manifest_path}: {', '.join(verification['issues'])}"
+                )
+            manifest = verification["manifest"]
+            capture_date = str(manifest["capture_date"])
+            for item in manifest["files"]:
+                logical_path = str(item["logical_path"])
+                if logical_path not in logical_paths or item["living_history_ingest"] is not True:
+                    continue
+                physical = (resolved_root / str(item["archive_path"])).resolve()
+                sources[logical_path].append(
+                    {
+                        "logical_path": logical_path,
+                        "physical_path": physical.relative_to(resolved_root).as_posix(),
+                        "source_kind": "archive",
+                        "capture_date": capture_date,
+                    }
+                )
+    for logical_path in sorted(logical_paths):
+        live = (resolved_root / logical_path).resolve()
+        try:
+            live.relative_to(resolved_root)
+        except ValueError as exc:
+            raise AgentControlError(f"living-history source escapes repository root: {logical_path}") from exc
+        if live.is_file():
+            sources[logical_path].append(
+                {
+                    "logical_path": logical_path,
+                    "physical_path": logical_path,
+                    "source_kind": "live",
+                    "capture_date": None,
+                }
+            )
+    return sources
+
+
 REPO_PATH_REF_RE = re.compile(
     r"(?<![A-Za-z0-9_./\\-])((?:docs|scripts|data|tests|src|python-backend|public|config)"
     r"[\\/][A-Za-z0-9_./\\-]+)"
@@ -4391,6 +5951,7 @@ def _extract_repo_path_refs(body: str, *, repo_root: Path, max_edges: int = 12) 
 def ingest_living_history(
     *,
     db_path: Path = DEFAULT_DB_PATH,
+    events_path: Path = DEFAULT_EVENTS_PATH,
     repo_root: Path = ROOT,
     tenant_id: str = DEFAULT_TENANT_ID,
     max_edges_per_entry: int = 12,
@@ -4399,6 +5960,7 @@ def ingest_living_history(
         ("docs/WORKLOG.md", _parse_worklog_entries, "WORKLOG"),
         ("docs/DECISIONS.md", _parse_decision_entries, "DECISION"),
     ]
+    corpus_sources = _living_history_corpus_sources(repo_root)
     result: dict[str, Any] = {
         "status": "pass",
         "policy_banner": MEMORY_NON_AUTHORIZATION_BANNER,
@@ -4411,25 +5973,92 @@ def ingest_living_history(
         "edges_created": 0,
         "warnings": [],
     }
+    activated_source_paths: set[str] = set()
     with closing(connect(db_path, maintenance=True)) as conn, conn:
+        existing_activation_paths: set[str] = set()
+        activation_rows = conn.execute(
+            "SELECT payload_json FROM event_outbox WHERE tenant_id = ? AND event_type = ?",
+            (tenant_id, LIVING_HISTORY_ACTIVATION_EVENT_TYPE),
+        ).fetchall()
+        for activation_row in activation_rows:
+            try:
+                wrapper = json.loads(activation_row["payload_json"] or "{}")
+            except json.JSONDecodeError:
+                continue
+            payload = wrapper.get("payload", wrapper) if isinstance(wrapper, dict) else {}
+            paths = payload.get("activated_source_paths") if isinstance(payload, dict) else []
+            if isinstance(paths, list):
+                existing_activation_paths.update(_safe_node_path(str(path or "")) for path in paths)
+        conn.execute(
+            """
+            DELETE FROM retrieval_source_expectations
+            WHERE tenant_id = ? AND source_type = ? AND node_id NOT LIKE ?
+            """,
+            (tenant_id, LIVING_HISTORY_SOURCE_TYPE, f"{LIVING_HISTORY_EXPECTATION_PREFIX}%"),
+        )
         for relative_path, parser, title_prefix in sources:
-            path = repo_root / relative_path
-            if not path.exists():
+            physical_sources = corpus_sources.get(relative_path) or []
+            if not physical_sources:
                 result["warnings"].append(f"missing_source:{relative_path}")
                 result["sources"].append({"path": relative_path, "entries": 0, "status": "missing"})
                 continue
-            text = path.read_text(encoding="utf-8")
-            entries, warnings = parser(text)
-            result["warnings"].extend(warnings)
-            source_summary = {"path": relative_path, "entries": len(entries), "status": "parsed"}
-            result["sources"].append(source_summary)
             current_node_ids: set[str] = set()
-            for entry in entries:
+            entries_by_node_id: dict[str, dict[str, str]] = {}
+            locations_by_node_id: dict[str, list[dict[str, Any]]] = {}
+            for source in physical_sources:
+                physical_path = str(source["physical_path"])
+                path = repo_root / physical_path
+                text = path.read_text(encoding="utf-8")
+                entries, warnings = parser(text)
+                for warning in warnings:
+                    if warning not in result["warnings"]:
+                        result["warnings"].append(warning)
+                result["sources"].append(
+                    {
+                        "path": physical_path,
+                        "logical_path": relative_path,
+                        "source_kind": source["source_kind"],
+                        "capture_date": source.get("capture_date"),
+                        "entries": len(entries),
+                        "status": "parsed",
+                    }
+                )
+                for entry in entries:
+                    node_id = _history_node_id(
+                        entry["kind"],
+                        relative_path,
+                        entry["source_heading"],
+                        entry["body"],
+                        tenant_id=tenant_id,
+                    )
+                    current_node_ids.add(node_id)
+                    entries_by_node_id[node_id] = entry
+                    locations_by_node_id.setdefault(node_id, []).append(source)
+            if current_node_ids:
+                activated_source_paths.add(_safe_node_path(relative_path))
+                now = utc_now()
+                conn.execute(
+                    """
+                    INSERT INTO retrieval_source_expectations(
+                        tenant_id, node_id, source_type, source_path, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(tenant_id, node_id) DO UPDATE SET
+                        source_path = excluded.source_path,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        tenant_id,
+                        f"{LIVING_HISTORY_EXPECTATION_PREFIX}{_safe_node_path(relative_path)}",
+                        LIVING_HISTORY_SOURCE_TYPE,
+                        relative_path,
+                        now,
+                        now,
+                    ),
+                )
+            for node_id, entry in entries_by_node_id.items():
                 kind = entry["kind"]
                 body = entry["body"]
                 stable_heading = entry["source_heading"]
-                node_id = _history_node_id(kind, relative_path, stable_heading, body, tenant_id=tenant_id)
-                current_node_ids.add(node_id)
                 content_sha256 = _text_sha256(_normalized_history_text(body))
                 existing = conn.execute(
                     "SELECT tenant_id, metadata_json FROM graph_nodes WHERE id = ?",
@@ -4442,10 +6071,23 @@ def ingest_living_history(
                     )
                 existing_metadata = json.loads(existing["metadata_json"] or "{}") if existing else {}
                 refs = _extract_repo_path_refs(body, repo_root=repo_root, max_edges=max_edges_per_entry)
+                locations = locations_by_node_id[node_id]
+                physical_paths = list(dict.fromkeys(str(item["physical_path"]) for item in locations))
+                archive_dates = list(
+                    dict.fromkeys(
+                        str(item["capture_date"])
+                        for item in locations
+                        if item.get("source_kind") == "archive" and item.get("capture_date")
+                    )
+                )
                 metadata = _with_memory_policy_metadata(
                     {
                         "source_type": LIVING_HISTORY_SOURCE_TYPE,
                         "source_path": relative_path,
+                        "source_physical_path": physical_paths[-1],
+                        "source_physical_paths": physical_paths,
+                        "archive_capture_dates": archive_dates,
+                        "archived_source_present": bool(archive_dates),
                         "source_heading": stable_heading,
                         "source_date": entry.get("source_date"),
                         "decision_title": entry.get("decision_title"),
@@ -4457,7 +6099,7 @@ def ingest_living_history(
                     source_type=LIVING_HISTORY_SOURCE_TYPE,
                     source_quality="living_history",
                 )
-                if existing and existing_metadata.get("content_sha256") == content_sha256:
+                if existing and canonical_json(existing_metadata) == canonical_json(metadata):
                     result["nodes_skipped"] += 1
                 else:
                     upsert_graph_node(
@@ -4528,6 +6170,18 @@ def ingest_living_history(
             if stale_ids:
                 conn.executemany("DELETE FROM graph_nodes WHERE id = ?", [(node_id,) for node_id in stale_ids])
                 result["nodes_pruned"] += len(stale_ids)
+        if activated_source_paths - existing_activation_paths:
+            _record_event(
+                conn,
+                events_path=events_path,
+                event_type=LIVING_HISTORY_ACTIVATION_EVENT_TYPE,
+                tenant_id=tenant_id,
+                payload={
+                    "tenant_id": tenant_id,
+                    "ingest_version": LIVING_HISTORY_INGEST_VERSION,
+                    "activated_source_paths": sorted(existing_activation_paths | activated_source_paths),
+                },
+            )
     if result["warnings"]:
         result["status"] = "pass_with_warnings"
     return result
@@ -4604,7 +6258,34 @@ def _update_graph_node_metadata(
             "UPDATE graph_nodes SET body = ?, metadata_json = ?, updated_at = ? WHERE id = ?",
             (body, canonical_json(metadata), utc_now(), node_id),
         )
-    return _graph_node_row(conn, node_id)
+    updated = _graph_node_row(conn, node_id)
+    _upsert_retrieval_document(conn, updated)
+    return updated
+
+
+def _close_task_activity(
+    conn: sqlite3.Connection,
+    *,
+    task_id: str,
+    status: str,
+    now: str,
+) -> None:
+    run_rows = conn.execute(
+        "SELECT graph_node_id FROM worker_runs WHERE task_id = ? AND finished_at IS NULL",
+        (task_id,),
+    ).fetchall()
+    conn.execute(
+        "UPDATE task_claims SET status = ? WHERE task_id = ? AND status = 'active'",
+        (status, task_id),
+    )
+    conn.execute(
+        "UPDATE worker_runs SET status = ?, finished_at = ? WHERE task_id = ? AND finished_at IS NULL",
+        (status, now, task_id),
+    )
+    for row in run_rows:
+        node_id = row["graph_node_id"]
+        if node_id and conn.execute("SELECT 1 FROM graph_nodes WHERE id = ?", (node_id,)).fetchone():
+            _update_graph_node_metadata(conn, str(node_id), {"status": status, "finished_at": now})
 
 
 def _update_task_graph_status(conn: sqlite3.Connection, task_id: str, status: str, **extra: Any) -> None:
@@ -4677,17 +6358,19 @@ def create_task(
     task_id = _short_id("T")
     now = utc_now()
     metadata = metadata or {}
-    with closing(connect(db_path)) as conn, conn:
+    _assert_metadata_tenant_allowed(metadata, tenant_id=tenant_id)
+    with _locked_db_transaction(db_path) as conn:
         conn.execute(
             """
             INSERT INTO tasks(
-                id, created_at, updated_at, title, description, pathway, status,
+                id, tenant_id, created_at, updated_at, title, description, pathway, status,
                 permission_mode, owner, priority, metadata_json
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
             """,
             (
                 task_id,
+                tenant_id,
                 now,
                 now,
                 title,
@@ -4714,6 +6397,7 @@ def create_task(
                 "permission_mode": permission_mode,
                 "status": "open",
                 "priority": priority,
+                "tenant_id": tenant_id,
             },
             source_ref=f"task:{task_id}",
         )
@@ -4721,7 +6405,8 @@ def create_task(
             conn,
             events_path=events_path,
             event_type="task.created",
-            payload={"task_id": task_id, "graph_node_id": node["id"], "pathway": pathway},
+            payload={"task_id": task_id, "graph_node_id": node["id"], "pathway": pathway, "tenant_id": tenant_id},
+            tenant_id=tenant_id,
         )
         task = _task_row(conn, task_id)
         task["graph_node_id"] = node["id"]
@@ -4736,17 +6421,24 @@ def claim_task(
     worker_id: str,
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    with closing(connect(db_path)) as conn, conn:
+    with _locked_db_transaction(db_path) as conn:
         task = _task_row(conn, task_id)
         if task["status"] not in {"open", "reported"}:
             raise AgentControlError(f"Task {task_id} cannot be claimed from status {task['status']}")
+        if conn.execute(
+            "SELECT 1 FROM task_claims WHERE task_id = ? AND status = 'active'",
+            (task_id,),
+        ).fetchone():
+            raise AgentControlError(f"Task {task_id} already has an active claim")
+        claim_metadata = metadata or {}
+        _assert_metadata_tenant_allowed(claim_metadata, tenant_id=task["tenant_id"])
         now = utc_now()
         conn.execute(
             """
-            INSERT INTO task_claims(task_id, worker_id, claimed_at, status, metadata_json)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO task_claims(task_id, worker_id, tenant_id, claimed_at, status, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (task_id, worker_id, now, "active", canonical_json(metadata or {})),
+            (task_id, worker_id, task["tenant_id"], now, "active", canonical_json(claim_metadata)),
         )
         _guard_task_status_update(
             conn,
@@ -4763,16 +6455,17 @@ def claim_task(
             kind="worker_run",
             title=f"{worker_id} claimed {task_id}",
             body=f"Worker {worker_id} claimed task {task_id}.",
+            tenant_id=task["tenant_id"],
             sub_tenant_id=task["pathway"],
             metadata={"task_id": task_id, "worker_id": worker_id, "status": "claimed"},
             source_ref=f"task:{task_id}",
         )
         conn.execute(
             """
-            INSERT INTO worker_runs(task_id, graph_node_id, worker_id, status, started_at, metadata_json)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO worker_runs(task_id, graph_node_id, tenant_id, worker_id, status, started_at, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (task_id, run_node["id"], worker_id, "claimed", now, canonical_json(metadata or {})),
+            (task_id, run_node["id"], task["tenant_id"], worker_id, "claimed", now, canonical_json(claim_metadata)),
         )
         upsert_graph_edge(
             conn,
@@ -4786,7 +6479,13 @@ def claim_task(
             conn,
             events_path=events_path,
             event_type="task.claimed",
-            payload={"task_id": task_id, "worker_id": worker_id, "worker_run_node_id": run_node["id"]},
+            payload={
+                "task_id": task_id,
+                "worker_id": worker_id,
+                "worker_run_node_id": run_node["id"],
+                "tenant_id": task["tenant_id"],
+            },
+            tenant_id=task["tenant_id"],
         )
         result = _task_row(conn, task_id)
         result["worker_run_node_id"] = run_node["id"]
@@ -4808,10 +6507,19 @@ def report_task(
     commands_run: str = "",
     artifacts_written: str = "",
 ) -> dict[str, Any]:
-    with closing(connect(db_path)) as conn, conn:
+    proof_gate_status = _validate_choice(proof_gate_status, PROOF_GATE_STATUSES, "proof_gate_status")
+    with _locked_db_transaction(db_path) as conn:
         task = _task_row(conn, task_id)
-        if task["status"] in TERMINAL_TASK_STATUSES:
-            raise AgentControlError(f"Task {task_id} cannot be reported from terminal status {task['status']}")
+        if task["status"] != "claimed" or task.get("owner") != worker_id:
+            raise AgentControlError(
+                f"Task {task_id} report requires the active claim owner; "
+                f"status={task['status']} owner={task.get('owner')!r}"
+            )
+        if conn.execute(
+            "SELECT 1 FROM task_claims WHERE task_id = ? AND worker_id = ? AND status = 'active'",
+            (task_id, worker_id),
+        ).fetchone() is None:
+            raise AgentControlError(f"Task {task_id} report requires an active claim for {worker_id}")
         report = {
             "role": worker_id,
             "task": task_id,
@@ -4827,10 +6535,10 @@ def report_task(
         now = utc_now()
         conn.execute(
             """
-            INSERT INTO task_reports(task_id, worker_id, reported_at, report_json, status)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO task_reports(task_id, worker_id, tenant_id, reported_at, report_json, status)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (task_id, worker_id, now, canonical_json(report), "submitted"),
+            (task_id, worker_id, task["tenant_id"], now, canonical_json(report), "submitted"),
         )
         report_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
         _guard_task_status_update(
@@ -4841,12 +6549,14 @@ def report_task(
             disallowed_statuses=TERMINAL_TASK_STATUSES,
         )
         _update_task_graph_status(conn, task_id, "reported", latest_report_id=report_id, latest_report_worker=worker_id)
+        _close_task_activity(conn, task_id=task_id, status="reported", now=now)
         report_node = upsert_graph_node(
             conn,
             node_id=f"report:{task_id}:{report_id}",
             kind="episode",
             title=f"{worker_id} report for {task_id}",
             body=finding,
+            tenant_id=task["tenant_id"],
             sub_tenant_id=task["pathway"],
             metadata={
                 **report,
@@ -4871,6 +6581,7 @@ def report_task(
                 kind="blocker",
                 title=f"Blocker for {task_id}",
                 body=blockers,
+                tenant_id=task["tenant_id"],
                 sub_tenant_id=task["pathway"],
                 metadata={
                     "source_type": "task_report",
@@ -4893,7 +6604,13 @@ def report_task(
             conn,
             events_path=events_path,
             event_type="task.reported",
-            payload={"task_id": task_id, "worker_id": worker_id, "report_id": report_id},
+            payload={
+                "task_id": task_id,
+                "worker_id": worker_id,
+                "report_id": report_id,
+                "tenant_id": task["tenant_id"],
+            },
+            tenant_id=task["tenant_id"],
         )
         result = _row_dict(conn.execute("SELECT * FROM task_reports WHERE id = ?", (report_id,)).fetchone()) or {}
         result["graph_node_id"] = report_node["id"]
@@ -5005,6 +6722,7 @@ def _writeback_accepted_report(
         "pathway": task.get("pathway"),
         "files_artifacts_read": report.get("files_artifacts_read"),
         "commands_run": report.get("commands_run"),
+        "tenant_id": task.get("tenant_id") or DEFAULT_TENANT_ID,
     }
     accepted_node_ids: list[str] = []
     report_node_id = f"report:{task_id}:{report_id}"
@@ -5027,6 +6745,7 @@ def _writeback_accepted_report(
         memory_type="worker_report",
         title=f"Accepted worker report for {task_id}",
         body=str(report.get("finding") or ""),
+        tenant_id=task.get("tenant_id") or DEFAULT_TENANT_ID,
         sub_tenant_id=task.get("pathway"),
         metadata={**base_metadata, "recommendation": report.get("recommendation")},
         source_ref=source_ref,
@@ -5064,6 +6783,7 @@ def _writeback_accepted_report(
             memory_type="verification",
             title=f"Verification for {task_id}",
             body=verification,
+            tenant_id=task.get("tenant_id") or DEFAULT_TENANT_ID,
             sub_tenant_id=task.get("pathway"),
             metadata=base_metadata,
             source_ref=source_ref,
@@ -5093,6 +6813,7 @@ def _writeback_accepted_report(
             memory_type="blocker",
             title=f"Accepted blocker for {task_id}",
             body=blockers,
+            tenant_id=task.get("tenant_id") or DEFAULT_TENANT_ID,
             sub_tenant_id=task.get("pathway"),
             metadata=base_metadata,
             source_ref=source_ref,
@@ -5113,6 +6834,7 @@ def _writeback_accepted_report(
             memory_type="artifact",
             title=artifact,
             body=artifact,
+            tenant_id=task.get("tenant_id") or DEFAULT_TENANT_ID,
             sub_tenant_id=task.get("pathway"),
             metadata={**base_metadata, "artifact": artifact},
             source_ref=source_ref,
@@ -5148,28 +6870,32 @@ def accept_task(
     summary: str,
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    with closing(connect(db_path)) as conn, conn:
+    with _locked_db_transaction(db_path) as conn:
         task = _task_row(conn, task_id)
-        if task["status"] not in {"reported", "claimed", "open"}:
+        if task["status"] != "reported":
             raise AgentControlError(f"Task {task_id} cannot be accepted from status {task['status']}")
+        accept_metadata = metadata or {}
+        _assert_metadata_tenant_allowed(accept_metadata, tenant_id=task["tenant_id"])
         now = utc_now()
         _guard_task_status_update(
             conn,
             task_id=task_id,
             next_status="accepted",
             now=now,
-            allowed_statuses={"reported", "claimed", "open"},
+            allowed_statuses={"reported"},
         )
         _update_task_graph_status(conn, task_id, "accepted", accepted_by=accepted_by)
+        _close_task_activity(conn, task_id=task_id, status="accepted", now=now)
         decision_node = _upsert_operating_memory(
             conn,
             node_id=f"decision:{task_id}:{uuid.uuid4().hex[:8]}",
             memory_type="decision",
             title=f"Accepted {task_id}",
             body=summary,
+            tenant_id=task["tenant_id"],
             sub_tenant_id=task["pathway"],
             metadata={
-                **(metadata or {}),
+                **accept_metadata,
                 "task_id": task_id,
                 "accepted_by": accepted_by,
                 "pathway": task["pathway"],
@@ -5178,10 +6904,10 @@ def accept_task(
         )
         conn.execute(
             """
-            INSERT INTO decisions(task_id, graph_node_id, summary, created_at, metadata_json)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO decisions(task_id, graph_node_id, tenant_id, summary, created_at, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (task_id, decision_node["id"], summary, now, canonical_json(metadata or {})),
+            (task_id, decision_node["id"], task["tenant_id"], summary, now, canonical_json(accept_metadata)),
         )
         upsert_graph_edge(
             conn,
@@ -5210,12 +6936,25 @@ def accept_task(
                 "accepted_by": accepted_by,
                 "decision_node_id": decision_node["id"],
                 "writeback_node_ids": writeback_node_ids,
+                "tenant_id": task["tenant_id"],
             },
+            tenant_id=task["tenant_id"],
         )
         result = _task_row(conn, task_id)
         result["decision_node_id"] = decision_node["id"]
         result["writeback_node_ids"] = writeback_node_ids
         return result
+
+
+def _assert_public_trusted_evidence_attestation_absent(
+    metadata: dict[str, Any],
+    *,
+    field_name: str,
+) -> None:
+    if TRUSTED_EVIDENCE_ATTESTATION_KEY in metadata:
+        raise AgentControlError(
+            f"{field_name} cannot set reserved trusted evidence attestation; use a trusted evidence writer"
+        )
 
 
 def remember_graph_node(
@@ -5230,20 +6969,30 @@ def remember_graph_node(
     metadata: dict[str, Any] | None = None,
     source_ref: str | None = None,
     node_id: str | None = None,
-    upsert: bool = True,
+    upsert: bool = False,
 ) -> dict[str, Any]:
     node_id = node_id or _short_id(kind.upper())
-    metadata = metadata or {}
+    metadata = dict(metadata or {})
+    _assert_public_trusted_evidence_attestation_absent(metadata, field_name="graph remember")
     if metadata.get("source_type") == "operating_memory":
         raise AgentControlError("graph remember cannot create operating_memory nodes; use memory remember")
+    if node_id.startswith("memory:"):
+        raise AgentControlError("graph remember cannot use reserved operating-memory ids")
+    if node_id.startswith("session:"):
+        raise AgentControlError("graph remember cannot use reserved trusted-session ids")
     _assert_memory_policy_valid(
         title=title,
         body=body,
-        metadata=_with_memory_policy_metadata(metadata, source_type=str(metadata.get("source_type") or "graph_node")),
+        metadata=metadata,
         field_name="graph memory",
     )
     metadata = _metadata_for_retrieval(metadata)
-    with closing(connect(db_path)) as conn, conn:
+    with _locked_db_transaction(db_path) as conn:
+        existing = _row_dict(conn.execute("SELECT * FROM graph_nodes WHERE id = ?", (node_id,)).fetchone())
+        if existing is not None and _is_operating_memory(existing.get("metadata") or {}):
+            raise AgentControlError(f"graph remember cannot replace operating-memory node: {node_id}")
+        if existing is not None and TRUSTED_EVIDENCE_ATTESTATION_KEY in (existing.get("metadata") or {}):
+            raise AgentControlError(f"graph remember cannot replace trusted evidence node: {node_id}")
         node = upsert_graph_node(
             conn,
             node_id=node_id,
@@ -5261,6 +7010,7 @@ def remember_graph_node(
             events_path=events_path,
             event_type="graph.node.remembered",
             payload={"node_id": node["id"], "kind": kind, "tenant_id": tenant_id, "sub_tenant_id": sub_tenant_id},
+            tenant_id=tenant_id,
         )
         return node
 
@@ -5282,7 +7032,9 @@ def remember_operating_memory(
     supersedes: list[str] | None = None,
     freshness_days: int | None = None,
 ) -> dict[str, Any]:
-    with closing(connect(db_path)) as conn, conn:
+    metadata = dict(metadata or {})
+    _assert_public_trusted_evidence_attestation_absent(metadata, field_name="memory remember")
+    with _locked_db_transaction(db_path) as conn:
         node = _upsert_operating_memory(
             conn,
             memory_type=memory_type,
@@ -5307,9 +7059,55 @@ def remember_operating_memory(
                 "memory_type": memory_type,
                 "memory_status": memory_status,
                 "supersedes": supersedes or [],
+                "tenant_id": tenant_id,
             },
+            tenant_id=tenant_id,
         )
         return node
+
+
+def _session_payload_sha256(payload: dict[str, Any]) -> str:
+    return _text_sha256(canonical_json(payload))
+
+
+def _deliver_session_sidecar_unlocked(
+    *,
+    db_path: Path,
+    sessions_path: Path,
+    session_id: str,
+) -> None:
+    with closing(connect(db_path)) as conn:
+        row = conn.execute(
+            "SELECT payload_json, payload_sha256 FROM session_sidecar_outbox WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+    if row is None:
+        raise AgentControlError(f"session sidecar outbox row is missing: {session_id}")
+    try:
+        payload = json.loads(row["payload_json"] or "{}")
+    except json.JSONDecodeError as exc:
+        raise AgentControlError(f"session sidecar outbox payload is invalid: {session_id}") from exc
+    if not isinstance(payload, dict) or payload.get("session_id") != session_id:
+        raise AgentControlError(f"session sidecar outbox payload identity mismatch: {session_id}")
+    if _session_payload_sha256(payload) != row["payload_sha256"]:
+        raise AgentControlError(f"session sidecar outbox payload hash mismatch: {session_id}")
+    existing_rows = _read_jsonl(sessions_path)
+    matching = [item for item in existing_rows if item.get("session_id") == session_id]
+    if len(matching) > 1:
+        raise AgentControlError(f"sessions.jsonl contains duplicate session id: {session_id}")
+    if matching:
+        if canonical_json(matching[0]) != canonical_json(payload):
+            raise AgentControlError(f"sessions.jsonl conflicts with durable session payload: {session_id}")
+    else:
+        try:
+            _append_jsonl(sessions_path, payload)
+        except OSError as exc:
+            raise AgentControlError(f"session sidecar delivery failed and remains retryable: {session_id}: {exc}") from exc
+    with _locked_db_transaction(db_path) as conn:
+        conn.execute(
+            "UPDATE session_sidecar_outbox SET delivered_at = COALESCE(delivered_at, ?) WHERE session_id = ?",
+            (utc_now(), session_id),
+        )
 
 
 def log_session(
@@ -5328,17 +7126,28 @@ def log_session(
     sub_tenant_id: str | None = "operator",
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    metadata = dict(metadata or {})
+    _assert_public_trusted_evidence_attestation_absent(metadata, field_name="session log")
+    sessions_path = _effective_sessions_path(db_path=db_path, sessions_path=sessions_path)
     resolved = _resolve_inside_repo(repo_root, transcript_path)
     if not resolved.is_file():
         raise AgentControlError(f"transcript file not found: {resolved}")
     relative_path = _relative_to_repo(repo_root, resolved)
     _assert_memory_safe_source_path(relative_path)
-    current_sha256 = _file_sha256(resolved)
+    try:
+        source_snapshot = resolved.read_bytes()
+        text = source_snapshot.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise AgentControlError(f"session transcript must be UTF-8 text: {relative_path}") from exc
+    except OSError as exc:
+        raise AgentControlError(f"session transcript could not be read: {relative_path}: {exc}") from exc
+    current_sha256 = hashlib.sha256(source_snapshot).hexdigest()
     if expected_sha256 is not None and expected_sha256 != current_sha256:
         raise AgentControlError(
             f"transcript hash mismatch for {resolved}: expected {expected_sha256}, got {current_sha256}"
         )
-    text = resolved.read_text(encoding="utf-8")
+    if any(pattern.search(text) for pattern in MEMORY_SECRET_SHAPED_RE):
+        raise AgentControlError(f"session transcript contains secret-shaped content: {relative_path}")
     session_id = session_id or _short_id("S")
     now = utc_now()
     payload = {
@@ -5347,43 +7156,124 @@ def log_session(
         "title": title or relative_path,
         "summary": summary,
         "actor": actor,
+        "tenant_id": tenant_id,
         "path": relative_path,
         "source_sha256": current_sha256,
-        "bytes": resolved.stat().st_size,
+        "bytes": len(source_snapshot),
         "line_count": len(text.splitlines()),
-        "metadata": metadata or {},
+        "metadata": metadata,
     }
-    with closing(connect(db_path)) as conn, conn:
-        node = upsert_graph_node(
-            conn,
-            node_id=f"session:{session_id}",
-            kind="episode",
-            title=payload["title"],
-            body=summary or _repo_file_excerpt(text, max_chars=2500),
-            tenant_id=tenant_id,
-            sub_tenant_id=sub_tenant_id,
-            metadata={
-                **(metadata or {}),
-                "source_type": "session_transcript",
-                "session_id": session_id,
-                "actor": actor,
-                "path": relative_path,
-                "source_sha256": current_sha256,
-                "line_count": payload["line_count"],
-                "bytes": payload["bytes"],
-                "logged_at": now,
-            },
-            source_ref=relative_path,
+    trusted_attestation = {
+        "version": TRUSTED_EVIDENCE_ATTESTATION_VERSION,
+        "writer": "log_session",
+        "record_type": "session_sidecar_outbox",
+        "record_id": session_id,
+    }
+    node_body = summary or _repo_file_excerpt(text, max_chars=2500)
+    _assert_memory_policy_valid(
+        title=payload["title"],
+        body=node_body,
+        metadata=_with_memory_policy_metadata(metadata, source_type="session_transcript"),
+        field_name="session transcript memory",
+    )
+    with _control_file_lock(_lock_path_for_db(db_path), timeout_seconds=30.0):
+        idempotent = False
+        with closing(connect(db_path)) as conn, conn:
+            existing = _row_dict(
+                conn.execute("SELECT * FROM graph_nodes WHERE id = ?", (f"session:{session_id}",)).fetchone()
+            )
+            if existing is not None:
+                existing_metadata = existing.get("metadata") or {}
+                if existing.get("tenant_id") != tenant_id:
+                    raise AgentControlError(f"session id already belongs to another tenant: {session_id}")
+                if (
+                    existing_metadata.get("source_type") != "session_transcript"
+                    or existing_metadata.get("session_id") != session_id
+                ):
+                    raise AgentControlError(f"session id collides with a non-session graph node: {session_id}")
+                if existing_metadata.get("source_sha256") != current_sha256:
+                    raise AgentControlError(f"session id is immutable and already has different content: {session_id}")
+                try:
+                    existing_bytes = int(existing_metadata.get("bytes"))
+                except (TypeError, ValueError) as exc:
+                    raise AgentControlError(
+                        f"session id is immutable and has invalid stored provenance: {session_id}"
+                    ) from exc
+                if (
+                    existing_metadata.get("path") != relative_path
+                    or existing_bytes != len(source_snapshot)
+                ):
+                    raise AgentControlError(f"session id is immutable and already has different provenance: {session_id}")
+                payload["logged_at"] = existing_metadata.get("logged_at") or payload["logged_at"]
+                idempotent = True
+            else:
+                node = upsert_graph_node(
+                    conn,
+                    node_id=f"session:{session_id}",
+                    kind="episode",
+                    title=payload["title"],
+                    body=node_body,
+                    tenant_id=tenant_id,
+                    sub_tenant_id=sub_tenant_id,
+                    metadata={
+                        **metadata,
+                        "source_type": "session_transcript",
+                        "session_id": session_id,
+                        "actor": actor,
+                        "path": relative_path,
+                        "source_sha256": current_sha256,
+                        "line_count": payload["line_count"],
+                        "bytes": payload["bytes"],
+                        "logged_at": now,
+                        TRUSTED_EVIDENCE_ATTESTATION_KEY: trusted_attestation,
+                    },
+                    source_ref=relative_path,
+                    upsert=False,
+                )
+                _record_event(
+                    conn,
+                    events_path=events_path,
+                    event_type="session.logged",
+                    payload={
+                        "session_id": session_id,
+                        "node_id": node["id"],
+                        "path": relative_path,
+                        "tenant_id": tenant_id,
+                    },
+                    tenant_id=tenant_id,
+                )
+            payload_json = canonical_json(payload)
+            payload_sha256 = _session_payload_sha256(payload)
+            existing_outbox = conn.execute(
+                "SELECT payload_sha256 FROM session_sidecar_outbox WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+            if existing_outbox is not None and existing_outbox["payload_sha256"] != payload_sha256:
+                raise AgentControlError(f"session sidecar outbox conflicts with immutable session: {session_id}")
+            conn.execute(
+                """
+                INSERT INTO session_sidecar_outbox(
+                    session_id, tenant_id, payload_json, payload_sha256, created_at, delivered_at
+                ) VALUES (?, ?, ?, ?, ?, NULL)
+                ON CONFLICT(session_id) DO NOTHING
+                """,
+                (session_id, tenant_id, payload_json, payload_sha256, payload["logged_at"]),
+            )
+            if existing is not None:
+                _update_graph_node_metadata(
+                    conn,
+                    f"session:{session_id}",
+                    {TRUSTED_EVIDENCE_ATTESTATION_KEY: trusted_attestation},
+                )
+        _deliver_session_sidecar_unlocked(
+            db_path=db_path,
+            sessions_path=sessions_path,
+            session_id=session_id,
         )
-        _record_event(
-            conn,
-            events_path=events_path,
-            event_type="session.logged",
-            payload={"session_id": session_id, "node_id": node["id"], "path": relative_path},
-        )
-    _append_jsonl(sessions_path, payload)
-    payload["graph_node_id"] = f"session:{session_id}"
-    return payload
+    result = {**payload, "graph_node_id": f"session:{session_id}"}
+    if idempotent:
+        result["idempotent"] = True
+    return result
 
 
 def _parse_dream_entries(raw_entries: Any) -> list[dict[str, Any]]:
@@ -5464,6 +7354,172 @@ def _parse_dream_entries(raw_entries: Any) -> list[dict[str, Any]]:
     return entries
 
 
+def _read_dream_proposal_snapshot(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]], str]:
+    try:
+        snapshot = path.read_bytes()
+        raw_text = snapshot.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise AgentControlError("dream proposal must be UTF-8 JSON") from exc
+    except OSError as exc:
+        raise AgentControlError(f"dream proposal could not be read: {path}: {exc}") from exc
+    if any(pattern.search(raw_text) for pattern in MEMORY_SECRET_SHAPED_RE):
+        raise AgentControlError("dream proposal contains secret-shaped content")
+    try:
+        raw = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        raise AgentControlError(f"dream proposal must be valid JSON: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise AgentControlError("dream proposal must be a JSON object")
+    entries = _parse_dream_entries(raw.get("entries") or [])
+    if not entries:
+        raise AgentControlError("dream proposal requires at least one entry")
+    return raw, entries, hashlib.sha256(snapshot).hexdigest()
+
+
+def _dream_evidence_integrity_hash(metadata: dict[str, Any]) -> str:
+    value = metadata.get("source_sha256") or metadata.get("source_content_sha256") or metadata.get("content_sha256")
+    return str(value or "")
+
+
+def _session_evidence_attestation_is_valid(
+    conn: sqlite3.Connection,
+    *,
+    node: dict[str, Any],
+    metadata: dict[str, Any],
+    attestation: dict[str, Any],
+    integrity_hash: str,
+) -> bool:
+    session_id = str(metadata.get("session_id") or "")
+    if (
+        attestation.get("writer") != "log_session"
+        or attestation.get("record_type") != "session_sidecar_outbox"
+        or str(attestation.get("record_id") or "") != session_id
+        or not session_id
+        or node.get("id") != f"session:{session_id}"
+        or node.get("kind") != "episode"
+    ):
+        return False
+    row = conn.execute(
+        """
+        SELECT tenant_id, payload_json, payload_sha256
+        FROM session_sidecar_outbox
+        WHERE session_id = ?
+        """,
+        (session_id,),
+    ).fetchone()
+    if row is None or str(row["tenant_id"]) != str(node.get("tenant_id") or ""):
+        return False
+    try:
+        payload = json.loads(row["payload_json"] or "{}")
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(payload, dict) or _session_payload_sha256(payload) != str(row["payload_sha256"] or ""):
+        return False
+    path = str(metadata.get("path") or "")
+    try:
+        metadata_bytes = int(metadata.get("bytes"))
+        payload_bytes = int(payload.get("bytes"))
+    except (TypeError, ValueError):
+        return False
+    return (
+        payload.get("session_id") == session_id
+        and str(payload.get("tenant_id") or "") == str(node.get("tenant_id") or "")
+        and str(payload.get("path") or "") == path
+        and str(payload.get("source_sha256") or "") == integrity_hash
+        and payload_bytes == metadata_bytes
+        and str(payload.get("logged_at") or "") == str(metadata.get("logged_at") or "")
+        and str(node.get("source_ref") or "") == path
+    )
+
+
+def _artifact_evidence_attestation_is_valid(
+    conn: sqlite3.Connection,
+    *,
+    node: dict[str, Any],
+    metadata: dict[str, Any],
+    attestation: dict[str, Any],
+    integrity_hash: str,
+) -> bool:
+    artifact_id = attestation.get("artifact_id")
+    if (
+        attestation.get("writer") != "evidence_artifact"
+        or isinstance(artifact_id, bool)
+        or not isinstance(artifact_id, int)
+        or artifact_id < 1
+    ):
+        return False
+    row = conn.execute(
+        """
+        SELECT id, graph_node_id, tenant_id, path, evidence_class, metadata_json
+        FROM evidence_artifacts
+        WHERE id = ?
+        """,
+        (artifact_id,),
+    ).fetchone()
+    if (
+        row is None
+        or str(row["graph_node_id"] or "") != str(node.get("id") or "")
+        or str(row["tenant_id"] or "") != str(node.get("tenant_id") or "")
+        or not str(row["evidence_class"] or "").strip()
+    ):
+        return False
+    try:
+        artifact_metadata = json.loads(row["metadata_json"] or "{}")
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(artifact_metadata, dict):
+        return False
+    artifact_hash = _dream_evidence_integrity_hash(artifact_metadata)
+    node_path = str(metadata.get("path") or metadata.get("source_path") or node.get("source_ref") or "")
+    return (
+        artifact_metadata.get("trusted_writer_attestation_version") == TRUSTED_EVIDENCE_ATTESTATION_VERSION
+        and artifact_hash == integrity_hash
+        and bool(node_path)
+        and _safe_node_path(str(row["path"])) == _safe_node_path(node_path)
+    )
+
+
+def _dream_evidence_is_reviewed(conn: sqlite3.Connection, node: dict[str, Any]) -> bool:
+    metadata = node.get("metadata") or {}
+    source_type = str(metadata.get("source_type") or "")
+    if node.get("kind") not in DREAM_OBSERVED_EVIDENCE_NODE_KINDS:
+        return False
+    if source_type not in DREAM_OBSERVED_EVIDENCE_SOURCE_TYPES:
+        return False
+    integrity_hash = _dream_evidence_integrity_hash(metadata)
+    if re.fullmatch(r"[0-9a-f]{64}", integrity_hash) is None:
+        return False
+    attestation = metadata.get(TRUSTED_EVIDENCE_ATTESTATION_KEY)
+    if (
+        not isinstance(attestation, dict)
+        or attestation.get("version") != TRUSTED_EVIDENCE_ATTESTATION_VERSION
+    ):
+        return False
+    if source_type == "session_transcript":
+        return _session_evidence_attestation_is_valid(
+            conn,
+            node=node,
+            metadata=metadata,
+            attestation=attestation,
+            integrity_hash=integrity_hash,
+        )
+    if not _artifact_evidence_attestation_is_valid(
+        conn,
+        node=node,
+        metadata=metadata,
+        attestation=attestation,
+        integrity_hash=integrity_hash,
+    ):
+        return False
+    if source_type == "operating_memory":
+        return (
+            _has_operating_authority_metadata(metadata)
+            and metadata.get("memory_type") in {"artifact", "verification", "worker_report"}
+            and metadata.get("confidence") in {"accepted", "observed"}
+        )
+    return True
+
+
 def propose_dream(
     *,
     db_path: Path = DEFAULT_DB_PATH,
@@ -5481,20 +7537,11 @@ def propose_dream(
         raise AgentControlError(f"dream proposal file not found: {resolved}")
     relative_path = _relative_to_repo(repo_root, resolved)
     _assert_memory_safe_source_path(relative_path)
-    current_sha256 = _file_sha256(resolved)
+    raw, entries, current_sha256 = _read_dream_proposal_snapshot(resolved)
     if expected_sha256 is not None and expected_sha256 != current_sha256:
         raise AgentControlError(
             f"dream proposal hash mismatch for {resolved}: expected {expected_sha256}, got {current_sha256}"
         )
-    try:
-        raw = json.loads(resolved.read_text(encoding="utf-8-sig"))
-    except json.JSONDecodeError as exc:
-        raise AgentControlError(f"dream proposal must be valid JSON: {exc}") from exc
-    if not isinstance(raw, dict):
-        raise AgentControlError("dream proposal must be a JSON object")
-    entries = _parse_dream_entries(raw.get("entries") or [])
-    if not entries:
-        raise AgentControlError("dream proposal requires at least one entry")
     dream_id = dream_id or _short_id("DREAM")
     now = utc_now()
     proposal = {
@@ -5511,7 +7558,7 @@ def propose_dream(
         "entries": entries,
         "evidence": raw.get("evidence") or [],
     }
-    with closing(connect(db_path)) as conn, conn:
+    with _locked_db_transaction(db_path) as conn:
         node = upsert_graph_node(
             conn,
             node_id=f"dream:{dream_id}",
@@ -5525,9 +7572,11 @@ def propose_dream(
                     "dream_id": dream_id,
                     "proposal_status": "proposed",
                     "source_sha256": current_sha256,
+                    "proposal_repo_root": str(repo_root.resolve()),
                     "path": relative_path,
                     "entry_count": len(entries),
                     "entries": entries,
+                    "source_entries_sha256": _text_sha256(canonical_json(entries)),
                     "evidence": proposal["evidence"],
                     "proposed_at": now,
                 },
@@ -5541,7 +7590,13 @@ def propose_dream(
             conn,
             events_path=events_path,
             event_type="dream.proposed",
-            payload={"dream_id": dream_id, "node_id": node["id"], "entry_count": len(entries)},
+            payload={
+                "dream_id": dream_id,
+                "node_id": node["id"],
+                "entry_count": len(entries),
+                "tenant_id": tenant_id,
+            },
+            tenant_id=tenant_id,
         )
     proposal["graph_node_id"] = f"dream:{dream_id}"
     return proposal
@@ -5554,11 +7609,12 @@ def accept_dream(
     dream_id: str,
     accepted_by: str = "CEO",
     note: str = "",
+    repo_root: Path | None = None,
 ) -> dict[str, Any]:
     dream_node_id = dream_id if dream_id.startswith("dream:") else f"dream:{dream_id}"
     accepted_at = utc_now()
     accepted_memory_ids: list[str] = []
-    with closing(connect(db_path)) as conn, conn:
+    with _locked_db_transaction(db_path) as conn:
         proposal = _graph_node_row(conn, dream_node_id)
         metadata = proposal.get("metadata") or {}
         if metadata.get("source_type") != "dream_proposal":
@@ -5567,12 +7623,56 @@ def accept_dream(
             raise AgentControlError(
                 f"dream proposal {dream_node_id} cannot be accepted from status {metadata.get('proposal_status')}"
             )
+        source_root = (repo_root or Path(str(metadata.get("proposal_repo_root") or ROOT))).resolve()
+        source_path = _resolve_inside_repo(
+            source_root,
+            Path(str(metadata.get("path") or proposal.get("source_ref") or "")),
+        )
+        _assert_memory_safe_source_path(_relative_to_repo(source_root, source_path))
+        if not source_path.is_file():
+            raise AgentControlError(f"dream proposal source changed or is missing: {source_path}")
+        _source_raw, source_entries, source_sha256 = _read_dream_proposal_snapshot(source_path)
+        if source_sha256 != metadata.get("source_sha256"):
+            raise AgentControlError(f"dream proposal source changed or is missing: {source_path}")
         entries = _parse_dream_entries(metadata.get("entries") or [])
+        if canonical_json(source_entries) != canonical_json(entries):
+            raise AgentControlError("dream proposal stored entries differ from the verified source entries")
+        if metadata.get("source_entries_sha256") not in {
+            None,
+            "",
+            _text_sha256(canonical_json(source_entries)),
+        }:
+            raise AgentControlError("dream proposal stored entry digest differs from the verified source entries")
         for entry in entries:
             if entry["confidence"] == "observed" and not entry.get("evidence"):
                 raise AgentControlError(
                     f"dream entry {entry['id']} cannot be accepted as observed without evidence"
                 )
+            if entry["confidence"] == "observed":
+                for evidence_node_id in entry.get("evidence") or []:
+                    evidence_node = _row_dict(
+                        conn.execute("SELECT * FROM graph_nodes WHERE id = ?", (evidence_node_id,)).fetchone()
+                    )
+                    if evidence_node is None:
+                        raise AgentControlError(
+                            f"dream entry {entry['id']} evidence graph node not found: {evidence_node_id}"
+                        )
+                    if evidence_node.get("tenant_id") != proposal.get("tenant_id"):
+                        raise AgentControlError(
+                            f"dream entry {entry['id']} evidence belongs to another tenant: {evidence_node_id}"
+                        )
+                    if evidence_node.get("kind") not in DREAM_OBSERVED_EVIDENCE_NODE_KINDS:
+                        raise AgentControlError(
+                            f"dream entry {entry['id']} evidence kind is not allowed: {evidence_node_id}"
+                        )
+                    if not _dream_evidence_is_reviewed(conn, evidence_node):
+                        raise AgentControlError(
+                            f"dream entry {entry['id']} evidence is not reviewed, provenanced, and integrity-bearing: "
+                            f"{evidence_node_id}"
+                        )
+            entry_pathway = str((entry.get("metadata") or {}).get("pathway") or "").strip()
+            if entry_pathway:
+                _validate_choice(entry_pathway, PATHWAYS, "dream entry pathway")
             entry_metadata = _with_memory_policy_metadata(
                 {
                     **(entry.get("metadata") or {}),
@@ -5601,7 +7701,7 @@ def accept_dream(
                 title=entry["title"],
                 body=entry["body"],
                 tenant_id=proposal.get("tenant_id") or DEFAULT_TENANT_ID,
-                sub_tenant_id=proposal.get("sub_tenant_id"),
+                sub_tenant_id=entry_pathway or proposal.get("sub_tenant_id"),
                 confidence=entry["confidence"],
                 metadata=entry_metadata,
                 source_ref=dream_node_id,
@@ -5638,7 +7738,9 @@ def accept_dream(
                 "dream_node_id": dream_node_id,
                 "accepted_by": accepted_by,
                 "accepted_memory_ids": accepted_memory_ids,
+                "tenant_id": proposal.get("tenant_id") or DEFAULT_TENANT_ID,
             },
+            tenant_id=proposal.get("tenant_id") or DEFAULT_TENANT_ID,
         )
     return {
         "dream_id": metadata.get("dream_id"),
@@ -5657,7 +7759,7 @@ def reject_dream(
     reason: str = "",
 ) -> dict[str, Any]:
     dream_node_id = dream_id if dream_id.startswith("dream:") else f"dream:{dream_id}"
-    with closing(connect(db_path)) as conn, conn:
+    with _locked_db_transaction(db_path) as conn:
         proposal = _graph_node_row(conn, dream_node_id)
         metadata = proposal.get("metadata") or {}
         if metadata.get("source_type") != "dream_proposal":
@@ -5680,7 +7782,13 @@ def reject_dream(
             conn,
             events_path=events_path,
             event_type="dream.rejected",
-            payload={"dream_id": metadata.get("dream_id"), "dream_node_id": dream_node_id, "reason": reason},
+            payload={
+                "dream_id": metadata.get("dream_id"),
+                "dream_node_id": dream_node_id,
+                "reason": reason,
+                "tenant_id": proposal.get("tenant_id") or DEFAULT_TENANT_ID,
+            },
+            tenant_id=proposal.get("tenant_id") or DEFAULT_TENANT_ID,
         )
     return {"dream_id": metadata.get("dream_id"), "dream_node_id": dream_node_id, "status": "rejected"}
 
@@ -5812,6 +7920,8 @@ def _auto_dream_evidence_issue(
         evidence_metadata = node.get("metadata") or {}
         if evidence_metadata.get("source_type") != "session_transcript":
             return f"{field_name} evidence must cite session_transcript nodes for auto-accept: {evidence_node_id}"
+        if not _dream_evidence_is_reviewed(conn, node):
+            return f"{field_name} evidence is not trusted-writer attested: {evidence_node_id}"
     return None
 
 
@@ -5824,6 +7934,10 @@ def _auto_dream_session_source_text(session_node: dict[str, Any], *, repo_root: 
         try:
             resolved = _resolve_inside_repo(repo_root, Path(path))
             if resolved.is_file():
+                expected_sha256 = str(metadata.get("source_sha256") or "")
+                if expected_sha256 and _file_sha256(resolved) != expected_sha256:
+                    sources.append("transcript_hash_mismatch")
+                    return "", sources
                 texts.append(resolved.read_text(encoding="utf-8"))
                 sources.append("transcript_file")
             else:
@@ -5996,6 +8110,8 @@ def _load_auto_dream_session_nodes(
         metadata = node.get("metadata") or {}
         if metadata.get("source_type") != "session_transcript":
             continue
+        if not _dream_evidence_is_reviewed(conn, node):
+            continue
         try:
             extracted_entry_count = int(metadata.get("auto_dream_extracted_entry_count") or 0)
         except (TypeError, ValueError):
@@ -6136,8 +8252,11 @@ def run_dream_cycle(
                 session_entries, scanned_sources = _extract_session_dream_entries(session, repo_root=repo_root)
                 if session_entries:
                     entries.extend(session_entries)
-                source_unreadable = "transcript_file_unreadable" in scanned_sources
-                if not source_unreadable:
+                source_invalid = any(
+                    marker in scanned_sources
+                    for marker in {"transcript_file_unreadable", "transcript_hash_mismatch"}
+                )
+                if not source_invalid:
                     session_updates.append(
                         {
                             "id": session["id"],
@@ -6150,15 +8269,20 @@ def run_dream_cycle(
                         "id": session["id"],
                         "extracted_entry_count": len(session_entries),
                         "scanned_sources": scanned_sources,
-                        "marked_processed": not source_unreadable,
+                        "marked_processed": not source_invalid,
                     }
                 )
-                if source_unreadable:
+                if source_invalid:
+                    reason = (
+                        "session transcript hash changed; not marking processed"
+                        if "transcript_hash_mismatch" in scanned_sources
+                        else "session transcript source was unreadable; not marking processed"
+                    )
                     result["skipped"].append(
                         {
                             "dream_id": session["id"],
                             "dream_node_id": session["id"],
-                            "reason": "session transcript source was unreadable; not marking processed",
+                            "reason": reason,
                         }
                     )
         if entries:
@@ -6246,7 +8370,7 @@ def run_dream_cycle(
                 )
     result["completed_at"] = utc_now()
     result["status"] = "complete"
-    with closing(connect(db_path)) as conn, conn:
+    with _locked_db_transaction(db_path) as conn:
         node = upsert_graph_node(
             conn,
             node_id=f"dream_run:{run_id}",
@@ -6279,7 +8403,9 @@ def run_dream_cycle(
                 "accepted_count": len(result["accepted"]),
                 "rejected_count": len(result["rejected"]),
                 "generated_count": len(result["generated_proposals"]),
+                "tenant_id": tenant_id,
             },
+            tenant_id=tenant_id,
         )
     _write_dream_run_audit_files(result, runs_dir=runs_dir)
     return result
@@ -6332,8 +8458,8 @@ def supersede_memory(
     new_node_id: str,
     reason: str = "",
 ) -> dict[str, Any]:
-    with closing(connect(db_path)) as conn, conn:
-        _require_operating_memory_node(conn, old_node_id, field_name="old_node_id")
+    with _locked_db_transaction(db_path) as conn:
+        old_node = _require_operating_memory_node(conn, old_node_id, field_name="old_node_id")
         _require_operating_memory_node(conn, new_node_id, field_name="new_node_id")
         updated = _supersede_memory_node(
             conn,
@@ -6345,7 +8471,13 @@ def supersede_memory(
             conn,
             events_path=events_path,
             event_type="memory.superseded",
-            payload={"old_node_id": old_node_id, "new_node_id": new_node_id, "reason": reason},
+            payload={
+                "old_node_id": old_node_id,
+                "new_node_id": new_node_id,
+                "reason": reason,
+                "tenant_id": old_node["tenant_id"],
+            },
+            tenant_id=old_node["tenant_id"],
         )
         return updated
 
@@ -6362,7 +8494,8 @@ def link_graph_nodes(
 ) -> dict[str, Any]:
     if not relation.strip():
         raise AgentControlError("relation is required")
-    with closing(connect(db_path)) as conn, conn:
+    with _locked_db_transaction(db_path) as conn:
+        source_node = _graph_node_row(conn, source_node_id)
         edge = upsert_graph_edge(
             conn,
             source_node_id=source_node_id,
@@ -6380,7 +8513,9 @@ def link_graph_nodes(
                 "source_node_id": source_node_id,
                 "relation": relation,
                 "target_node_id": target_node_id,
+                "tenant_id": source_node["tenant_id"],
             },
+            tenant_id=source_node["tenant_id"],
         )
         return edge
 
@@ -6545,6 +8680,10 @@ def _seed_gateboard_memory(
         gateboard = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise AgentControlError(f"{relative_path} must be valid JSON: {exc}") from exc
+    source_content_sha256 = _text_sha256(raw)
+    gateboard_snapshot_sha256 = _gateboard_source_artifact_hash(repo_root, relative_path)
+    if gateboard_snapshot_sha256 is None:
+        raise AgentControlError(f"gateboard snapshot is missing or unsafe: {relative_path}")
 
     result["stale_nodes_pruned"] += _prune_seed_nodes_by_source_type(
         conn,
@@ -6572,6 +8711,7 @@ def _seed_gateboard_memory(
         metadata={
             "path": relative_path,
             "source_type": "gateboard_latest",
+            "source_content_sha256": source_content_sha256,
             "generated_at_utc": gateboard.get("generated_at_utc"),
             "overall_status": gateboard.get("overall_status"),
             "no_chase_status": no_chase.get("status"),
@@ -6603,6 +8743,7 @@ def _seed_gateboard_memory(
             sub_tenant_id=_gateboard_sub_tenant(pathway_id),
             metadata={
                 "source_type": "gateboard_pathway",
+                "source_content_sha256": source_content_sha256,
                 "pathway_id": pathway_id,
                 "state": pathway.get("state"),
                 "owner_docs": pathway.get("owner_docs", []),
@@ -6642,6 +8783,7 @@ def _seed_gateboard_memory(
             sub_tenant_id=_gateboard_sub_tenant(target_pathway),
             metadata={
                 "source_type": "gateboard_blocker",
+                "source_content_sha256": source_content_sha256,
                 "reason": reason_id,
                 "severity": reason.get("severity"),
                 "evidence": reason.get("evidence") or {},
@@ -6672,18 +8814,38 @@ def _seed_gateboard_memory(
             result["edges_seeded"] += 1
 
     for key, artifact in (gateboard.get("source_artifacts") or {}).items():
+        artifact_path = str(artifact.get("path") or "")
+        artifact_available = artifact.get("available")
+        if artifact_available not in {True, False}:
+            raise AgentControlError(f"gateboard source artifact available must be boolean: {key}")
+        artifact_snapshot_sha256 = None
+        if artifact_available:
+            artifact_snapshot_sha256 = _gateboard_source_artifact_hash(repo_root, artifact_path)
+            if artifact_snapshot_sha256 is None:
+                raise AgentControlError(
+                    f"declared available gateboard source artifact is missing or unsafe: {key}: {artifact_path}"
+                )
         node = upsert_graph_node(
             conn,
             node_id=f"evidence_artifact:gateboard:{key}",
             kind="evidence_artifact",
             title=f"Gateboard source artifact: {key}",
-            body=str(artifact.get("path") or ""),
+            body=artifact_path,
             tenant_id=tenant_id,
             sub_tenant_id="operator",
             metadata={
                 "source_type": "gateboard_source_artifact",
+                "source_path": relative_path,
+                "source_content_sha256": gateboard_snapshot_sha256,
+                "freshness_provenance_mode": "gateboard_snapshot_sha256",
+                "gateboard_source_path": relative_path,
+                "gateboard_source_content_sha256": gateboard_snapshot_sha256,
+                "gateboard_body_sha256": source_content_sha256,
+                "artifact_snapshot_path": artifact_path,
+                "artifact_snapshot_sha256": artifact_snapshot_sha256,
+                "artifact_snapshot_hash_mode": "sha256_bytes" if artifact_available else None,
                 "artifact_key": key,
-                "path": artifact.get("path"),
+                "path": artifact_path,
                 "available": artifact.get("available"),
                 "status": artifact.get("status"),
                 "report_id": artifact.get("report_id"),
@@ -6821,7 +8983,7 @@ def write_checkpoint(
         "commands_run": commands_run or [],
     }
     body = summary or objective
-    with closing(connect(db_path)) as conn, conn:
+    with _locked_db_transaction(db_path) as conn:
         history_node = upsert_graph_node(
             conn,
             node_id=f"checkpoint:{checkpoint_id}",
@@ -6835,7 +8997,7 @@ def write_checkpoint(
         )
         latest_node = upsert_graph_node(
             conn,
-            node_id="checkpoint:latest",
+            node_id=_latest_checkpoint_node_id(tenant_id),
             kind="memory",
             title=f"Latest CEO checkpoint: {objective}",
             body=body,
@@ -6852,7 +9014,10 @@ def write_checkpoint(
             metadata={"source_type": "session_checkpoint_latest"},
             source_ref="checkpoint",
         )
-        if conn.execute("SELECT id FROM graph_nodes WHERE id = ?", ("knowledge:gateboard:latest",)).fetchone():
+        if conn.execute(
+            "SELECT id FROM graph_nodes WHERE id = ? AND tenant_id = ?",
+            ("knowledge:gateboard:latest", tenant_id),
+        ).fetchone():
             upsert_graph_edge(
                 conn,
                 source_node_id=latest_node["id"],
@@ -6865,26 +9030,48 @@ def write_checkpoint(
             conn,
             events_path=events_path,
             event_type="checkpoint.written",
-            payload={"checkpoint_id": checkpoint_id, "latest_node_id": latest_node["id"], "status": status},
+            payload={
+                "checkpoint_id": checkpoint_id,
+                "latest_node_id": latest_node["id"],
+                "status": status,
+                "tenant_id": tenant_id,
+            },
+            tenant_id=tenant_id,
         )
         latest_node["history_node_id"] = history_node["id"]
         return latest_node
 
 
-def latest_checkpoint(*, db_path: Path = DEFAULT_DB_PATH) -> dict[str, Any] | None:
-    with closing(connect(db_path)) as conn, conn:
-        return _row_dict(conn.execute("SELECT * FROM graph_nodes WHERE id = ?", ("checkpoint:latest",)).fetchone())
+def _latest_checkpoint_node_id(tenant_id: str) -> str:
+    if tenant_id == DEFAULT_TENANT_ID:
+        return "checkpoint:latest"
+    return f"checkpoint:latest:{hashlib.sha256(tenant_id.encode('utf-8')).hexdigest()[:12]}"
 
 
-def _latest_gateboard_hash(conn: sqlite3.Connection) -> str:
+def latest_checkpoint(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    tenant_id: str = DEFAULT_TENANT_ID,
+) -> dict[str, Any] | None:
+    with _locked_db_transaction(db_path) as conn:
+        return _row_dict(
+            conn.execute(
+                "SELECT * FROM graph_nodes WHERE id = ? AND tenant_id = ?",
+                (_latest_checkpoint_node_id(tenant_id), tenant_id),
+            ).fetchone()
+        )
+
+
+def _latest_gateboard_hash(conn: sqlite3.Connection, *, tenant_id: str = DEFAULT_TENANT_ID) -> str:
     rows = conn.execute(
         """
         SELECT id, title, body, metadata_json, source_ref, updated_at
         FROM graph_nodes
-        WHERE metadata_json LIKE '%gateboard%'
+        WHERE tenant_id = ? AND metadata_json LIKE '%gateboard%'
         ORDER BY updated_at DESC
         LIMIT 50
-        """
+        """,
+        (tenant_id,),
     ).fetchall()
     payload = [
         {
@@ -6935,7 +9122,10 @@ def _write_context_manifest(
         "node_ids": node_ids,
         "seed_node_ids": result.get("graph_context", {}).get("seed_node_ids", []),
         "retrieval": result.get("retrieval", {}),
-        "gateboard_hash": _latest_gateboard_hash(conn),
+        "gateboard_hash": _latest_gateboard_hash(
+            conn,
+            tenant_id=str(result.get("tenant_id") or DEFAULT_TENANT_ID),
+        ),
     }
     manifest_hash = _text_sha256(canonical_json(payload))[:16]
     manifest_path = manifest_dir / f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{kind}-{manifest_hash}.json"
@@ -6998,7 +9188,7 @@ def seed_project_memory(
         "skipped_files": [],
         "seed_node_id": "episode:seed:project-memory:latest",
     }
-    with closing(connect(db_path)) as conn, conn:
+    with _locked_db_transaction(db_path) as conn:
         document_node_ids = _seed_document_nodes(
             conn,
             repo_root=repo_root,
@@ -7063,6 +9253,7 @@ def seed_project_memory(
             events_path=events_path,
             event_type="seed.project_memory.completed",
             payload=result,
+            tenant_id=tenant_id,
         )
         if manifest_dir is not None:
             result["context_manifest"] = _write_context_manifest(
@@ -7122,8 +9313,8 @@ def bootstrap_project_context(
         "repo_root": str(repo_root.resolve()),
         "tenant_id": tenant_id,
         "seed": seed_result,
-        "digest": digest(db_path=db_path, recent_limit=5),
-        "latest_checkpoint": latest_checkpoint(db_path=db_path),
+        "digest": digest(db_path=db_path, recent_limit=5, tenant_id=tenant_id),
+        "latest_checkpoint": latest_checkpoint(db_path=db_path, tenant_id=tenant_id),
         "context_query": {
             "query": query,
             "metadata_filter": metadata_filter or {"source_type": "gateboard_blocker"},
@@ -7210,6 +9401,7 @@ def query_graph(
             metadata_filter=metadata_filter,
             limit=limit,
             include_repo_index=include_repo_index,
+            fresh_only=fresh_only,
         )
         retrieval_by_node_id = {hit["source_node_id"]: hit for hit in retrieval_hits}
         clauses: list[str] = []
@@ -7276,6 +9468,13 @@ def query_graph(
                 continue
             if fresh_only and _memory_is_stale(metadata):
                 continue
+            if fresh_only:
+                freshness_row = conn.execute(
+                    "SELECT freshness_status FROM retrieval_documents WHERE source_node_id = ?",
+                    (node["id"],),
+                ).fetchone()
+                if freshness_row is None or freshness_row["freshness_status"] != "current":
+                    continue
             if not _metadata_matches(metadata, metadata_filter):
                 continue
             score = _score_node_for_query(node, query)
@@ -7321,12 +9520,20 @@ def query_graph(
                     continue
                 if fresh_only and _memory_is_stale(other_metadata):
                     continue
+                if fresh_only:
+                    freshness_row = conn.execute(
+                        "SELECT freshness_status FROM retrieval_documents WHERE source_node_id = ?",
+                        (other["id"],),
+                    ).fetchone()
+                    if freshness_row is None or freshness_row["freshness_status"] != "current":
+                        continue
                 edge_map[edge["id"]] = edge
                 node_map[other["id"]] = other
                 if other["id"] not in seen_depth or seen_depth[other["id"]] > depth + 1:
                     seen_depth[other["id"]] = depth + 1
                     frontier.append((other["id"], depth + 1))
 
+        safe_edges = {edge_id: _edge_for_query_result(edge) for edge_id, edge in edge_map.items()}
         triplets = [
             {
                 "source": edge["source_node_id"],
@@ -7334,7 +9541,7 @@ def query_graph(
                 "target": edge["target_node_id"],
                 "metadata": edge.get("metadata", {}),
             }
-            for edge in edge_map.values()
+            for edge in safe_edges.values()
         ]
         result = {
             "query": query,
@@ -7348,7 +9555,7 @@ def query_graph(
             "graph_context": {
                 "seed_node_ids": [node["id"] for node in seed_nodes],
                 "nodes": sorted((_node_for_query_result(node) for node in node_map.values()), key=lambda item: item["id"]),
-                "edges": sorted(edge_map.values(), key=lambda item: item["id"]),
+                "edges": sorted(safe_edges.values(), key=lambda item: item["id"]),
                 "triplets": sorted(triplets, key=lambda item: (item["source"], item["relation"], item["target"])),
             },
             "retrieval": {
@@ -7431,7 +9638,7 @@ def _select_graph_nodes(
             continue
         if active_only and _memory_is_inactive(metadata):
             continue
-        nodes.append(node)
+        nodes.append(_node_for_query_result(node))
         if len(nodes) >= limit:
             break
     return nodes
@@ -7446,10 +9653,11 @@ def build_context_pack(
     limit: int = DEFAULT_CONTEXT_PACK_LIMIT,
     include_prompt_context: bool = False,
     manifest_dir: Path | None = None,
+    include_repo_index: bool = False,
 ) -> dict[str, Any]:
     if pathway is not None:
         _validate_choice(pathway, PATHWAYS, "pathway")
-    latest = latest_checkpoint(db_path=db_path)
+    latest = latest_checkpoint(db_path=db_path, tenant_id=tenant_id)
     with closing(connect(db_path)) as conn, conn:
         pathway_blockers = _select_graph_nodes(
             conn,
@@ -7520,6 +9728,7 @@ def build_context_pack(
                         *_select_graph_nodes(
                             conn,
                             tenant_id=tenant_id,
+                            sub_tenant_id=pathway,
                             memory_type="lesson",
                             active_only=True,
                             limit=limit,
@@ -7527,6 +9736,7 @@ def build_context_pack(
                         *_select_graph_nodes(
                             conn,
                             tenant_id=tenant_id,
+                            sub_tenant_id=pathway,
                             memory_type="constraint",
                             active_only=True,
                             limit=limit,
@@ -7538,6 +9748,18 @@ def build_context_pack(
         }
     repo_query = goal or "agent control checkpoint bootstrap"
     result["relevant_repo_files"] = []
+    if include_repo_index:
+        repo_hits = query_graph(
+            db_path=db_path,
+            query=repo_query,
+            tenant_id=tenant_id,
+            metadata_filter={"source_type": "repo_file_index"},
+            limit=limit,
+            max_depth=0,
+            include_repo_index=True,
+            fresh_only=True,
+        )
+        result["relevant_repo_files"] = repo_hits["graph_context"]["nodes"][:limit]
     result["recommended_commands"] = [
         "npm run memory:bootstrap",
         f'npm run memory:context -- --goal "{goal or repo_query}" --prompt-only',
@@ -7572,6 +9794,11 @@ def memory_audit(
     supersession_inconsistencies: list[dict[str, Any]] = []
     open_questions: list[dict[str, Any]] = []
     open_blockers: list[dict[str, Any]] = []
+    retrieval_parity_issues: list[dict[str, Any]] = []
+    required_freshness_issues: list[dict[str, Any]] = []
+    tier3_repo_mirror_gaps: list[dict[str, Any]] = []
+    quarantined_metadata: list[dict[str, Any]] = []
+    quarantined_edge_metadata: list[dict[str, Any]] = []
     checked_memories = 0
     with closing(connect(db_path)) as conn, conn:
         rows = conn.execute(
@@ -7583,6 +9810,73 @@ def memory_audit(
             if node is None:
                 continue
             metadata = node.get("metadata") or {}
+            source_type = str(metadata.get("source_type") or "graph_node")
+            prohibited_paths = _prohibited_metadata_paths(metadata)
+            if prohibited_paths:
+                quarantined_metadata.append(
+                    {
+                        **node,
+                        "metadata": {
+                            **metadata,
+                            "audit_issue": "prohibited action flags",
+                            "paths": prohibited_paths,
+                        },
+                    }
+                )
+            document_row = conn.execute(
+                "SELECT * FROM retrieval_documents WHERE source_node_id = ?",
+                (node["id"],),
+            ).fetchone()
+            if document_row is None:
+                issue = {**node, "metadata": {**metadata, "audit_issue": "retrieval document missing"}}
+                if source_type == "repo_file_index":
+                    tier3_repo_mirror_gaps.append(issue)
+                else:
+                    retrieval_parity_issues.append(issue)
+            else:
+                retrieval_metadata = _metadata_for_retrieval(metadata)
+                retrieval_title, retrieval_body = _node_retrieval_title_body(node, metadata)
+                expected_content_sha256 = _text_sha256(
+                    canonical_json(
+                        {
+                            "id": node.get("id"),
+                            "title": retrieval_title,
+                            "body": retrieval_body,
+                            "metadata": retrieval_metadata,
+                            "source_ref": node.get("source_ref"),
+                        }
+                    )
+                )
+                parity_matches = (
+                    document_row["title"] == retrieval_title
+                    and document_row["body"] == retrieval_body
+                    and json.loads(document_row["metadata_json"] or "{}") == retrieval_metadata
+                    and document_row["content_sha256"] == expected_content_sha256
+                    and document_row["source_type"] == source_type
+                )
+                if not parity_matches:
+                    retrieval_parity_issues.append(
+                        {
+                            **node,
+                            "metadata": {
+                                **metadata,
+                                "audit_issue": "graph/retrieval content or metadata mismatch",
+                            },
+                        }
+                    )
+                freshness_status = str(document_row["freshness_status"])
+                if freshness_status != "current":
+                    issue = {
+                        **node,
+                        "metadata": {
+                            **metadata,
+                            "audit_issue": f"retrieval freshness is {freshness_status}",
+                        },
+                    }
+                    if source_type == "repo_file_index":
+                        tier3_repo_mirror_gaps.append(issue)
+                    elif source_type in REQUIRED_FRESH_RETRIEVAL_SOURCE_TYPES:
+                        required_freshness_issues.append(issue)
             if not _is_operating_memory(metadata):
                 continue
             checked_memories += 1
@@ -7602,7 +9896,7 @@ def memory_audit(
             policy_errors = _validate_memory_policy_text(
                 title=str(node.get("title") or ""),
                 body=str(node.get("body") or ""),
-                metadata=_with_memory_policy_metadata(metadata, source_type="operating_memory"),
+                metadata=metadata,
                 field_name=node["id"],
             )
             if policy_errors:
@@ -7669,15 +9963,111 @@ def memory_audit(
                 open_questions.append(node)
             if metadata.get("memory_type") == "blocker" and not _memory_is_inactive(metadata):
                 open_blockers.append(node)
-    issue_count = len(authority_inconsistencies) + len(stale_or_expired) + len(supersession_inconsistencies)
+        existing_required_ids = {str(item.get("id") or "") for item in required_freshness_issues}
+        for issue in _required_retrieval_freshness_issues(conn, tenant_id=tenant_id):
+            if issue["node_id"] in existing_required_ids:
+                continue
+            existing_node = _row_dict(
+                conn.execute(
+                    "SELECT * FROM graph_nodes WHERE id = ? AND tenant_id = ?",
+                    (issue["node_id"], tenant_id),
+                ).fetchone()
+            )
+            if existing_node is not None:
+                existing_metadata = existing_node.get("metadata") or {}
+                required_freshness_issues.append(
+                    {
+                        **existing_node,
+                        "metadata": {
+                            **existing_metadata,
+                            "required_source_type": issue["source_type"],
+                            "audit_issue": issue["issue"],
+                            "graph_node_missing": bool(issue["graph_node_missing"]),
+                            "retrieval_document_missing": bool(issue["retrieval_document_missing"]),
+                        },
+                    }
+                )
+            else:
+                required_freshness_issues.append(
+                    {
+                        "id": issue["node_id"],
+                        "kind": "knowledge",
+                        "tenant_id": tenant_id,
+                        "sub_tenant_id": None,
+                        "title": f"Missing required retrieval source: {issue['source_type']}",
+                        "body": issue.get("source_path") or "",
+                        "source_ref": issue.get("source_path") or "",
+                        "created_at": "",
+                        "updated_at": "",
+                        "metadata": {
+                            "source_type": issue["source_type"],
+                            "audit_issue": issue["issue"],
+                            "graph_node_missing": bool(issue["graph_node_missing"]),
+                            "retrieval_document_missing": bool(issue["retrieval_document_missing"]),
+                        },
+                    }
+                )
+            existing_required_ids.add(issue["node_id"])
+        edge_rows = conn.execute(
+            """
+            SELECT e.*
+            FROM graph_edges e
+            JOIN graph_nodes source ON source.id = e.source_node_id
+            WHERE source.tenant_id = ?
+            ORDER BY e.created_at DESC
+            """,
+            (tenant_id,),
+        ).fetchall()
+        for edge_row in edge_rows:
+            edge = _row_dict(edge_row)
+            if edge is None:
+                continue
+            edge_metadata = edge.get("metadata") or {}
+            prohibited_paths = _prohibited_metadata_paths(edge_metadata)
+            policy_errors = _validate_memory_policy_text(
+                title=str(edge.get("relation") or ""),
+                body="",
+                metadata=edge_metadata,
+                field_name=f"edge {edge['id']}",
+            )
+            if prohibited_paths or policy_errors:
+                quarantined_edge_metadata.append(
+                    {
+                        **edge,
+                        "metadata": {
+                            **edge_metadata,
+                            "audit_issue": "edge metadata contains prohibited authority context",
+                            "paths": prohibited_paths,
+                            "policy_errors": policy_errors,
+                        },
+                    }
+                )
+    issue_count = (
+        len(authority_inconsistencies)
+        + len(stale_or_expired)
+        + len(supersession_inconsistencies)
+        + len(retrieval_parity_issues)
+        + len(required_freshness_issues)
+        + len(quarantined_metadata)
+        + len(quarantined_edge_metadata)
+    )
+    safe_nodes = lambda items: [_node_for_query_result(item) for item in items[:limit]]
     result = {
         "status": "pass" if issue_count == 0 else "issues",
         "checked_memories": checked_memories,
-        "authority_inconsistencies": authority_inconsistencies[:limit],
-        "stale_or_expired": stale_or_expired[:limit],
-        "supersession_inconsistencies": supersession_inconsistencies[:limit],
-        "open_questions": open_questions[:limit],
-        "open_blockers": open_blockers[:limit],
+        "authority_inconsistencies": safe_nodes(authority_inconsistencies),
+        "stale_or_expired": safe_nodes(stale_or_expired),
+        "supersession_inconsistencies": safe_nodes(supersession_inconsistencies),
+        "retrieval_parity_issues": safe_nodes(retrieval_parity_issues),
+        "required_freshness_issues": safe_nodes(required_freshness_issues),
+        "tier3_repo_mirror_gaps_nonfatal": safe_nodes(tier3_repo_mirror_gaps),
+        "quarantined_metadata": safe_nodes(quarantined_metadata),
+        "quarantined_edge_metadata": [
+            _edge_for_query_result(edge) for edge in quarantined_edge_metadata[:limit]
+        ],
+        "open_questions": safe_nodes(open_questions),
+        "open_blockers": safe_nodes(open_blockers),
+        "policy_banner": MEMORY_NON_AUTHORIZATION_BANNER,
     }
     return result
 
@@ -7690,7 +10080,7 @@ def repair_operating_memory_authority_metadata(
     repaired_node_ids: list[str] = []
     skipped_policy_errors: list[dict[str, Any]] = []
     checked_memories = 0
-    with closing(connect(db_path)) as conn, conn:
+    with _locked_db_transaction(db_path) as conn:
         rows = conn.execute(
             "SELECT id, title, body, metadata_json FROM graph_nodes WHERE tenant_id = ? ORDER BY updated_at DESC",
             (tenant_id,),
@@ -7719,6 +10109,7 @@ def repair_operating_memory_authority_metadata(
                 "UPDATE graph_nodes SET metadata_json = ? WHERE id = ?",
                 (canonical_json(candidate_metadata), row["id"]),
             )
+            _upsert_retrieval_document(conn, _graph_node_row(conn, row["id"]))
             repaired_node_ids.append(row["id"])
     return {
         "status": "issues" if skipped_policy_errors else ("repaired" if repaired_node_ids else "noop"),
@@ -7746,7 +10137,7 @@ def memory_eval(
             repo_root=repo_root,
             tenant_id=tenant_id,
         )
-    checkpoint = latest_checkpoint(db_path=db_path)
+    checkpoint = latest_checkpoint(db_path=db_path, tenant_id=tenant_id)
     gateboard = query_graph(
         db_path=db_path,
         query="gateboard",
@@ -7774,7 +10165,14 @@ def memory_eval(
     )
     audit = memory_audit(db_path=db_path, tenant_id=tenant_id)
     with closing(connect(db_path)) as conn:
-        retrieval_count = conn.execute("SELECT count(*) FROM retrieval_documents").fetchone()[0]
+        retrieval_count = conn.execute(
+            """
+            SELECT count(*) FROM retrieval_documents d
+            JOIN graph_nodes n ON n.id = d.source_node_id
+            WHERE n.tenant_id = ?
+            """,
+            (tenant_id,),
+        ).fetchone()[0]
         outbox_count = conn.execute("SELECT count(*) FROM event_outbox").fetchone()[0]
     gateboard_blocker_ids = gateboard["graph_context"]["seed_node_ids"]
     if seed_result is not None:
@@ -7802,7 +10200,7 @@ def memory_eval(
             "name": "checkpoint autonomy fails closed",
             "pass": (
                 checkpoint is None and not require_checkpoint
-            ) or checkpoint is not None and checkpoint.get("metadata", {}).get("autonomy_level") == DEFAULT_CHECKPOINT_AUTONOMY_LEVEL,
+            ) or checkpoint is not None and checkpoint.get("metadata", {}).get("autonomy_level") in TRADING_FAIL_CLOSED_PERMISSION_MODES,
             "detail": checkpoint.get("metadata", {}).get("autonomy_level") if checkpoint else "",
         },
         {
@@ -8313,7 +10711,7 @@ def record_zero_candidate_episode(
         metadata=safe_metadata,
         field_name="zero candidate episode",
     )
-    with closing(connect(db_path)) as conn, conn:
+    with _locked_db_transaction(db_path) as conn:
         existing_episode = conn.execute(
             "SELECT tenant_id FROM zero_candidate_episodes WHERE id = ?",
             (episode_id,),
@@ -8364,7 +10762,14 @@ def record_zero_candidate_episode(
             conn,
             events_path=events_path,
             event_type="provenance.zero_candidate.recorded",
-            payload={"id": episode_id, "graph_node_id": node["id"], "lane": lane, "selection_date": selection_date},
+            payload={
+                "id": episode_id,
+                "graph_node_id": node["id"],
+                "lane": lane,
+                "selection_date": selection_date,
+                "tenant_id": tenant_id,
+            },
+            tenant_id=tenant_id,
         )
     return {
         "id": episode_id,
@@ -9040,7 +11445,7 @@ def profit_learning_sync(
             events_path=events_path,
         )
         now = utc_now()
-        with closing(connect(db_path)) as conn, conn:
+        with _locked_db_transaction(db_path) as conn:
             for table, records in (
                 ("zero_candidate_episodes", zero_records),
                 ("strategy_hypotheses", hypothesis_records),
@@ -9190,6 +11595,7 @@ def profit_learning_sync(
                     "written": written,
                     "source_refs": [artifact["source_ref"] for artifact in loaded],
                 },
+                tenant_id=tenant_id,
             )
     return {
         "status": "ready" if loaded else "empty",
@@ -9338,25 +11744,37 @@ def _format_profit_learning_audit(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def digest(*, db_path: Path = DEFAULT_DB_PATH, recent_limit: int = 8) -> dict[str, Any]:
-    with closing(connect(db_path)) as conn, conn:
+def digest(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    recent_limit: int = 8,
+    tenant_id: str = DEFAULT_TENANT_ID,
+) -> dict[str, Any]:
+    with _locked_db_transaction(db_path) as conn:
         task_counts = {
             row["status"]: row["count"]
-            for row in conn.execute("SELECT status, count(*) AS count FROM tasks GROUP BY status")
+            for row in conn.execute(
+                "SELECT status, count(*) AS count FROM tasks WHERE tenant_id = ? GROUP BY status",
+                (tenant_id,),
+            )
         }
         graph_counts = {
             row["kind"]: row["count"]
-            for row in conn.execute("SELECT kind, count(*) AS count FROM graph_nodes GROUP BY kind")
+            for row in conn.execute(
+                "SELECT kind, count(*) AS count FROM graph_nodes WHERE tenant_id = ? GROUP BY kind",
+                (tenant_id,),
+            )
         }
         recent_tasks = [
             _row_dict(row)
             for row in conn.execute(
                 """
                 SELECT * FROM tasks
+                WHERE tenant_id = ?
                 ORDER BY updated_at DESC, created_at DESC
                 LIMIT ?
                 """,
-                (recent_limit,),
+                (tenant_id, recent_limit),
             )
         ]
         blockers = [
@@ -9365,11 +11783,11 @@ def digest(*, db_path: Path = DEFAULT_DB_PATH, recent_limit: int = 8) -> dict[st
                 """
                 SELECT graph_nodes.*
                 FROM graph_nodes
-                WHERE kind = 'blocker'
+                WHERE kind = 'blocker' AND tenant_id = ?
                 ORDER BY updated_at DESC
                 LIMIT ?
                 """,
-                (recent_limit,),
+                (tenant_id, recent_limit),
             )
         ]
         events = [
@@ -9377,15 +11795,17 @@ def digest(*, db_path: Path = DEFAULT_DB_PATH, recent_limit: int = 8) -> dict[st
             for row in conn.execute(
                 """
                 SELECT * FROM event_log
+                WHERE json_extract(payload_json, '$.tenant_id') = ?
                 ORDER BY id DESC
                 LIMIT ?
                 """,
-                (recent_limit,),
+                (tenant_id, recent_limit),
             )
         ]
         return {
             "db_path": str(db_path),
             "runtime_use": True,
+            "tenant_id": tenant_id,
             "task_counts": task_counts,
             "graph_counts": graph_counts,
             "recent_tasks": [row for row in recent_tasks if row is not None],
@@ -9399,14 +11819,15 @@ def list_tasks(
     db_path: Path = DEFAULT_DB_PATH,
     status: str | None = None,
     pathway: str | None = None,
+    tenant_id: str = DEFAULT_TENANT_ID,
     limit: int = 20,
 ) -> dict[str, Any]:
     if status is not None:
         _validate_choice(status, TASK_STATUSES, "status")
     if pathway is not None:
         _validate_choice(pathway, PATHWAYS, "pathway")
-    clauses = []
-    params: list[Any] = []
+    clauses = ["tenant_id = ?"]
+    params: list[Any] = [tenant_id]
     if status is not None:
         clauses.append("status = ?")
         params.append(status)
@@ -9597,6 +12018,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     checkpoint_latest = checkpoint_sub.add_parser("latest", help="Read the latest CEO checkpoint.")
     checkpoint_latest.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
+    checkpoint_latest.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
     checkpoint_latest.add_argument("--json", action="store_true")
     checkpoint_latest.add_argument("--prompt-only", action="store_true")
     checkpoint_latest.set_defaults(func=_cmd_checkpoint_latest)
@@ -9629,7 +12051,7 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("task_id")
     report.add_argument("--worker-id", required=True)
     report.add_argument("--finding", required=True)
-    report.add_argument("--proof-gate-status", default="not_applicable")
+    report.add_argument("--proof-gate-status", default="not_applicable", choices=sorted(PROOF_GATE_STATUSES))
     report.add_argument("--recommendation", default="")
     report.add_argument("--verification", default="")
     report.add_argument("--blockers", default="")
@@ -9650,6 +12072,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common(list_cmd)
     list_cmd.add_argument("--status", choices=sorted(TASK_STATUSES))
     list_cmd.add_argument("--pathway", choices=sorted(PATHWAYS))
+    list_cmd.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
     list_cmd.add_argument("--limit", type=int, default=20)
     list_cmd.set_defaults(func=_cmd_task_list)
 
@@ -9666,7 +12089,11 @@ def build_parser() -> argparse.ArgumentParser:
     remember.add_argument("--metadata", default="{}")
     remember.add_argument("--source-ref")
     remember.add_argument("--node-id")
-    remember.add_argument("--no-upsert", action="store_true")
+    remember.add_argument(
+        "--no-upsert",
+        action="store_true",
+        help="Deprecated compatibility flag; graph remember is always create-only.",
+    )
     remember.set_defaults(func=_cmd_graph_remember)
 
     link = graph_sub.add_parser("link", help="Create a source -> relation -> target graph triplet.")
@@ -9715,6 +12142,11 @@ def build_parser() -> argparse.ArgumentParser:
     context_pack.add_argument("--pathway", choices=sorted(PATHWAYS))
     context_pack.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
     context_pack.add_argument("--limit", type=int, default=DEFAULT_CONTEXT_PACK_LIMIT)
+    context_pack.add_argument(
+        "--include-repo-index",
+        action="store_true",
+        help="Opt in to goal-aware tier-3 repo-file hits; the safe default remains off.",
+    )
     context_pack.add_argument("--manifest-dir", type=Path, default=DEFAULT_CONTEXT_PACKS_DIR)
     context_pack.add_argument("--prompt-only", action="store_true")
     context_pack.set_defaults(func=_cmd_context_pack)
@@ -9754,6 +12186,7 @@ def build_parser() -> argparse.ArgumentParser:
     dream_accept.add_argument("dream_id")
     dream_accept.add_argument("--accepted-by", default="CEO")
     dream_accept.add_argument("--note", default="")
+    dream_accept.add_argument("--repo-root", type=Path)
     dream_accept.set_defaults(func=_cmd_dream_accept)
 
     dream_reject = dream_sub.add_parser("reject", help="Reject a proposed dream without promoting memory.")
@@ -9840,6 +12273,16 @@ def build_parser() -> argparse.ArgumentParser:
     memory_restore_check.add_argument("--json", action="store_true")
     memory_restore_check.add_argument("--prompt-only", action="store_true")
     memory_restore_check.set_defaults(func=_cmd_memory_restore_check)
+    memory_mirror_repair = memory_sub.add_parser(
+        "repair-event-mirror",
+        help="Rebuild events.jsonl from the DB outbox; dry-run unless --apply is supplied.",
+    )
+    memory_mirror_repair.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
+    memory_mirror_repair.add_argument("--events", type=Path, default=DEFAULT_EVENTS_PATH)
+    memory_mirror_repair.add_argument("--archive-dir", type=Path)
+    memory_mirror_repair.add_argument("--apply", action="store_true")
+    memory_mirror_repair.add_argument("--json", action="store_true")
+    memory_mirror_repair.set_defaults(func=_cmd_memory_repair_event_mirror)
     memory_doctor_parser = memory_sub.add_parser("doctor", help="Run full memory integrity, backup, and eval checks.")
     memory_doctor_parser.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
     memory_doctor_parser.add_argument("--events", type=Path, default=DEFAULT_EVENTS_PATH)
@@ -10062,6 +12505,7 @@ def build_parser() -> argparse.ArgumentParser:
     digest_parser = subparsers.add_parser("digest", help="Summarize task and graph state.")
     digest_parser.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
     digest_parser.add_argument("--recent-limit", type=int, default=8)
+    digest_parser.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
     digest_parser.add_argument("--json", action="store_true")
     digest_parser.set_defaults(func=_cmd_digest)
     return parser
@@ -10139,7 +12583,7 @@ def _cmd_checkpoint_write(args: argparse.Namespace) -> int:
 
 
 def _cmd_checkpoint_latest(args: argparse.Namespace) -> int:
-    result = latest_checkpoint(db_path=args.db)
+    result = latest_checkpoint(db_path=args.db, tenant_id=args.tenant_id)
     if args.prompt_only:
         print(_format_checkpoint_context(result))
         return 0
@@ -10232,7 +12676,13 @@ def _cmd_writeback(args: argparse.Namespace) -> int:
 
 
 def _cmd_task_list(args: argparse.Namespace) -> int:
-    result = list_tasks(db_path=args.db, status=args.status, pathway=args.pathway, limit=args.limit)
+    result = list_tasks(
+        db_path=args.db,
+        status=args.status,
+        pathway=args.pathway,
+        tenant_id=args.tenant_id,
+        limit=args.limit,
+    )
     _emit(result, as_json=True if args.json else False)
     return 0
 
@@ -10249,7 +12699,7 @@ def _cmd_graph_remember(args: argparse.Namespace) -> int:
         metadata=parse_json_object(args.metadata, field_name="metadata"),
         source_ref=args.source_ref,
         node_id=args.node_id,
-        upsert=not args.no_upsert,
+        upsert=False,
     )
     _emit(result, as_json=args.json)
     return 0
@@ -10305,6 +12755,7 @@ def _cmd_context_pack(args: argparse.Namespace) -> int:
         limit=args.limit,
         include_prompt_context=True,
         manifest_dir=args.manifest_dir,
+        include_repo_index=args.include_repo_index,
     )
     if args.prompt_only:
         print(result["prompt_context"])
@@ -10356,6 +12807,7 @@ def _cmd_dream_accept(args: argparse.Namespace) -> int:
         dream_id=args.dream_id,
         accepted_by=args.accepted_by,
         note=args.note,
+        repo_root=args.repo_root,
     )
     _emit(result, as_json=True if args.json else False)
     return 0
@@ -10438,7 +12890,7 @@ def _cmd_audit_alias(args: argparse.Namespace) -> int:
         limit=args.limit,
     )
     print(_format_memory_audit(result))
-    return 0
+    return 0 if result["status"] == "pass" else 1
 
 
 def _cmd_dreams_alias(args: argparse.Namespace) -> int:
@@ -10562,6 +13014,17 @@ def _cmd_memory_restore_check(args: argparse.Namespace) -> int:
         return 0 if result["status"] == "pass" else 1
     _emit(result, as_json=True)
     return 0 if result["status"] == "pass" else 1
+
+
+def _cmd_memory_repair_event_mirror(args: argparse.Namespace) -> int:
+    result = repair_event_mirror(
+        db_path=args.db,
+        events_path=args.events,
+        archive_dir=args.archive_dir,
+        apply=args.apply,
+    )
+    _emit(result, as_json=True)
+    return 0 if result["status"] in {"pass", "would_repair"} else 1
 
 
 def _cmd_memory_doctor(args: argparse.Namespace) -> int:
@@ -10725,9 +13188,9 @@ def _cmd_memory_audit(args: argparse.Namespace) -> int:
     )
     if args.prompt_only:
         print(_format_memory_audit(result))
-        return 0
+        return 0 if result["status"] == "pass" else 1
     _emit(result, as_json=True if args.json else False)
-    return 0
+    return 0 if result["status"] == "pass" else 1
 
 
 def _cmd_memory_repair_authority(args: argparse.Namespace) -> int:
@@ -10850,7 +13313,7 @@ def _cmd_memory_profit_learning_audit(args: argparse.Namespace) -> int:
 
 
 def _cmd_digest(args: argparse.Namespace) -> int:
-    result = digest(db_path=args.db, recent_limit=args.recent_limit)
+    result = digest(db_path=args.db, recent_limit=args.recent_limit, tenant_id=args.tenant_id)
     _emit(result, as_json=True if args.json else False)
     return 0
 

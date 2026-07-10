@@ -1,0 +1,41 @@
+{
+  "report_id": "regular_options_post_event_premium_selling_design",
+  "contract_id": "regular_options_post_event_premium_selling_design_v1",
+  "schema_version": 1,
+  "created_at_utc": "2026-07-08T15:25:00Z",
+  "status": "design_only_no_evaluation_authorized",
+  "authority": "none_research_only_not_forward_proof",
+  "operator_authorization": "docs/DECISIONS.md 2026-07-08 end-to-end mandate (design registration); evaluation requires its own window/consumption registration before any scoring",
+  "evidence_basis": {
+    "grade": "literature_extracted_verification_votes_incomplete — treat as leads, weaker than the VRP family's 3-0 verified basis",
+    "claims": [
+      "option traders overestimate volatility immediately AFTER earnings announcements (positive-expectancy post-print selling window)",
+      "pre-earnings high-EAV ATM straddles underperform ~11% on announcement day plus ~9% over 10 days (short side positive gross)",
+      "conditional signal: historical average earnings move minus option-implied move predicted weekly straddle returns (~14.2%/quarter L/S gross)",
+      "single-name earnings-week half-spreads ~7-8% of midpoint are the binding constraint; edges may die at conservative costs"
+    ],
+    "source_review": "docs/research-decisions/external-evidence-review-options-edges-2026-07-07.md; docs/options-strategy-deep-research-recovery-2026-07-07.md (independent recovery, same conclusion: conditional and cost-sensitive)"
+  },
+  "concept": {
+    "id": "post_event_premium_selling_v1",
+    "structure": "defined_risk_short_premium_only (put or call credit verticals, or iron condors) — no naked short options ever",
+    "universe_candidates": ["AAPL", "GOOGL", "UNH", "LLY", "JNJ", "XOM", "CVX", "COP", "NEM"],
+    "event_source": "SEC EDGAR Item 2.02 observed releases (point-in-time known-at already trusted in-repo)",
+    "entry_window_hypothesis": "first 1-3 sessions AFTER the announcement known-at timestamp",
+    "conditional_signal_hypothesis": "AvgEA_minus_Implied computed from historical realized announcement moves (underlying daily source) vs option-implied move (ATM straddle mid / spot) at the pre-event close",
+    "cost_reality": "this repo's 9 equity names have materially tighter spreads than the literature's broad single-name universe; the leg bid/ask width gate from the VRP geometry (<=25% of mid) carries over"
+  },
+  "required_before_any_evaluation": [
+    "separate_window_and_split_registration (the 2018-2021 fresh window MAY be reused only via explicit registration acknowledging multiplicity across families tested on it)",
+    "frozen geometry packet (strike selection, DTE, credit minimums, exits) written before any scoring",
+    "implied-move computation validated point-in-time (needs ATM straddle quotes at the pre-event 15:55 surface — already imported for 2018-2021)",
+    "operator visibility: surfaced to Kale before first scoring because the evidence grade is weaker than VRP's"
+  ],
+  "prohibited_actions": [
+    "do_not_score_anything_from_this_design_document",
+    "do_not_change_scanner_policy_or_proof_bars",
+    "do_not_enable_live_auto_track_or_broker_paths",
+    "do_not_consume_protected_holdout",
+    "do_not_treat_extracted_literature_claims_as_verified"
+  ]
+}

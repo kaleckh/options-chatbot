@@ -10,14 +10,14 @@
 
 | Horizon | Market Days | Remaining | Completed | Required Rate | Current Rate | Projected Rows | Reachable |
 |---|---:|---:|---:|---:|---:|---:|---|
-| `cohort_eval_2026_07_28` | 30 | 17 | 0 / 30 | 1.764706 | 0.0 | 0.0 | false |
-| `freeze_anchored_four_month_forward_2026_10_14` | 85 | 72 | 0 / 30 | 0.416667 | 0.0 | 0.0 | false |
+| `cohort_eval_2026_07_28` | 30 | 15 | 0 / 30 | 2.0 | 0.0 | 0.0 | false |
+| `freeze_anchored_four_month_forward_2026_10_14` | 85 | 70 | 0 / 30 | 0.428571 | 0.0 | 0.0 | false |
 
 ## Separate Denominators
 
 - Tracker denominator `filtered_forward_paper_shadow_tracker`: matched `0`, completed `0`.
 - Materializer denominator `scanner_materializer_parity_diff_materializer_window`: in-window rows `182`, filter-matched selected `0`, historical upper-bound rows/market-day `0.607143`.
-- Scheduled-scan denominator `forward_candidate_throughput_audit_scheduled_scan_drops`: drops `2398`, symbol drop reasons `2398`, near-miss status `symbol_level_near_miss_table_ready`.
+- Scheduled-scan denominator `forward_candidate_throughput_audit_scheduled_scan_drops`: drops `1642`, symbol drop reasons `1642`, near-miss status `symbol_level_near_miss_table_ready`.
 
 ## Dominant Starvation Stage
 

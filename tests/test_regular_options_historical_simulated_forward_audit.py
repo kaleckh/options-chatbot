@@ -42,6 +42,16 @@ def _feature_store() -> dict:
 
 
 class RegularOptionsHistoricalSimulatedForwardAuditTests(unittest.TestCase):
+    def test_trade_value_prefers_fee_adjusted_net_return(self) -> None:
+        row = {
+            "pnl_pct": 12.0,
+            "gross_pnl_pct": 12.0,
+            "net_pnl_pct": 11.0,
+            "net_pnl_pct_after_fees": 9.5,
+        }
+
+        self.assertEqual(audit._trade_value(row), 9.5)
+
     def test_current_shape_blocks_when_selected_trade_history_is_shorter_than_requested_split(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -241,6 +251,14 @@ class RegularOptionsHistoricalSimulatedForwardAuditTests(unittest.TestCase):
         self.assertEqual(history["accepted_exact_candidate_rows_before_dedupe"], 2)
         self.assertEqual(history["deduped_row_count"], 1)
         self.assertEqual(history["duplicate_rows_removed"], 1)
+        self.assertIn("cross_lane_allocation_policy_missing", report["blockers"])
+        self.assertFalse(report["allocation_policy"]["combined_portfolio_unbiased"])
+        self.assertEqual(report["allocation_policy"]["collision_group_count"], 1)
+        self.assertEqual(report["allocation_policy"]["rows_removed_by_lexical_dedupe"], 1)
+        self.assertEqual(
+            report["allocation_policy"]["dedupe_rule"],
+            "lexical_lane_then_contract_diagnostic_only",
+        )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,75 @@
+{
+  "capture_date": "2026-07-10",
+  "captured_at_utc": "2026-07-10T03:48:05.759426Z",
+  "files": [
+    {
+      "archive_path": "docs/archive/project-memory/2026-07-10/PROJECT_CONTEXT.md",
+      "authority": "historical_evidence_record_not_current_source_of_truth",
+      "earliest_date": null,
+      "latest_date": null,
+      "living_history_ingest": false,
+      "logical_path": "docs/PROJECT_CONTEXT.md",
+      "mtime_ns": 1783652437155054300,
+      "parser_type": "current_context",
+      "sha256": "95538b5d2e17098b0a87497eaea7882cf57ad4bea4e7f061bea9e2a73d883108",
+      "size_bytes": 156953,
+      "source_mtime_ns": 1783652437155054300
+    },
+    {
+      "archive_path": "docs/archive/project-memory/2026-07-10/DECISIONS.md",
+      "authority": "historical_evidence_record_not_current_source_of_truth",
+      "earliest_date": "2026-05-22",
+      "latest_date": "2026-07-09",
+      "living_history_ingest": true,
+      "logical_path": "docs/DECISIONS.md",
+      "mtime_ns": 1783652437152544000,
+      "parser_type": "decisions",
+      "sha256": "baaadf918f4baa46764ec9cbe3998475d6153e97f5af1190e8c7eecd085cccee",
+      "size_bytes": 378943,
+      "source_mtime_ns": 1783652437152544000
+    },
+    {
+      "archive_path": "docs/archive/project-memory/2026-07-10/WORKLOG.md",
+      "authority": "historical_evidence_record_not_current_source_of_truth",
+      "earliest_date": "2026-05-22",
+      "latest_date": "2026-07-09",
+      "living_history_ingest": true,
+      "logical_path": "docs/WORKLOG.md",
+      "mtime_ns": 1783652437151543500,
+      "parser_type": "worklog",
+      "sha256": "d00437396f75a78047118b7ea42784b6472cdc7c74e3879cb6b03519aef3148a",
+      "size_bytes": 1004924,
+      "source_mtime_ns": 1783652437151543500
+    },
+    {
+      "archive_path": "docs/archive/project-memory/2026-07-10/NEXT_STEPS.md",
+      "authority": "historical_evidence_record_not_current_source_of_truth",
+      "earliest_date": null,
+      "latest_date": null,
+      "living_history_ingest": false,
+      "logical_path": "docs/NEXT_STEPS.md",
+      "mtime_ns": 1783652437154048100,
+      "parser_type": "current_actions",
+      "sha256": "bc1086b4a9989209412d7d42ec864d734b298a42026632161704cc6b9ecf8b38",
+      "size_bytes": 272998,
+      "source_mtime_ns": 1783652437154048100
+    },
+    {
+      "archive_path": "docs/archive/project-memory/2026-07-10/index.md",
+      "authority": "historical_evidence_record_not_current_source_of_truth",
+      "earliest_date": null,
+      "latest_date": null,
+      "living_history_ingest": false,
+      "logical_path": "docs/index.md",
+      "mtime_ns": 1783433399137348700,
+      "parser_type": "documentation_index",
+      "sha256": "0e23239ca0a62f4fcb5148b99f77c614075f82aa77b80761c4338bafdf9ad0f0",
+      "size_bytes": 69582,
+      "source_mtime_ns": 1783433399137348700
+    }
+  ],
+  "logical_identity_rule": "archived WORKLOG and DECISIONS entries retain their original logical_path",
+  "manifest_sha256": "9622ac0b8b5f9e423657a88d80607390da942c0cc6d21ac607a3a2969670f7be",
+  "report_id": "project_memory_archive_manifest",
+  "schema_version": 1
+}

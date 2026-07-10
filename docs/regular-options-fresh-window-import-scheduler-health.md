@@ -6,8 +6,8 @@
 - Task name: `\OptionsFreshWindowThetaDataOPRAImport`.
 - Scheduled task state: `Enabled`.
 - Windows task state: `Running`.
-- Next run time: `7/6/2026 5:30:00 PM`.
-- Last run time: `7/3/2026 5:30:00 PM`.
+- Next run time: `7/8/2026 5:30:00 PM`.
+- Last run time: `7/7/2026 5:30:00 PM`.
 - Last result: `267009`.
 - Task to run: `cmd.exe /c "C:\Users\kalec\options-chatbot\scripts\run_fresh_window_thetadata_opra_import.bat"`.
 

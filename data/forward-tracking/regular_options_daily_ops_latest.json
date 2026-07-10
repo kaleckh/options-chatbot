@@ -4,7 +4,7 @@
     "latest_markdown": "docs/regular-options-daily-ops.md"
   },
   "boundary": "This runner refreshes read-only operator artifacts and row plans. It refreshes point-in-time earnings readiness and source-repair planning before tracking historical scanner input source-surface coverage. It refreshes the frozen candidate-generation replay, source-surface, engine, and historical simulated-forward audit every run. It also tracks the historical profitability filter iteration and filtered simulated-forward audit every run. It tracks prospective matches to the filtered policy as forward paper-shadow dashboard rows. It refreshes filtered-forward exit evidence in no-write mode and evaluates the pre-registered forward evidence bar. It projects read-only evidence-bar throughput against the cohort checkpoint and four-month forward audit horizon. It refreshes materializer match-rate stationarity and preregistered zero-run trigger escalation status. It checks scheduled-scan heartbeat health before the gateboard refresh. It does not submit broker orders, create trades, mutate tracked-position rows, import quotes, change scanner policy, or lower proof bars.",
-  "completed_at_utc": "2026-07-04T19:09:23Z",
+  "completed_at_utc": "2026-07-07T21:40:43Z",
   "failed_step_count": 0,
   "report_id": "regular_options_daily_ops",
   "required_stage_order": [
@@ -16,7 +16,7 @@
     "heartbeat_check",
     "gateboard_refresh"
   ],
-  "started_at_utc": "2026-07-04T19:00:43Z",
+  "started_at_utc": "2026-07-07T21:30:00Z",
   "status": "completed",
   "step_count": 26,
   "steps": [
@@ -206,7 +206,7 @@
       "stderr_tail": [],
       "stdout_tail": [
         "- Completion rows appended: `0`.",
-        "- Latest completed market day: `2026-07-03`.",
+        "- Latest completed market day: `2026-07-07`.",
         "- Reject counts: `{}`.",
         "",
         "This script appends completion events only to the filtered forward matched-row log. It reads trusted quote stores in read-only mode and never imports quotes, submits orders, creates tracked positions, or changes scanner policy."

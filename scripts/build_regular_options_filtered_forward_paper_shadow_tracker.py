@@ -3,17 +3,20 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from collections import Counter
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Sequence
+from zoneinfo import ZoneInfo
 
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from options_execution import position_pnl_snapshot  # noqa: E402
 from scripts.build_regular_options_historical_profitability_filter_iteration import (  # noqa: E402
     _as_dict,
     _as_list,
@@ -21,28 +24,57 @@ from scripts.build_regular_options_historical_profitability_filter_iteration imp
     _load_json,
     _safe_float,
 )
-from scripts.evaluate_regular_options_autoresearch import block_bootstrap_confidence_for_values  # noqa: E402
+from scripts.evaluate_regular_options_autoresearch import (  # noqa: E402
+    block_bootstrap_confidence_for_values,
+)
+from us_equity_market_calendar import (  # noqa: E402
+    is_us_equity_market_day,
+    next_market_day,
+    previous_market_day,
+)
 
 
 REPORT_ID = "regular_options_filtered_forward_paper_shadow_tracker"
 POLICY_ID = "historical_filtered_candidate_v1"
 MATCHED_ROW_IDENTITY_SCHEMA = "policy_ticker_scan_date_direction_v2"
 DEFAULT_FILTERED_AUDIT = (
-    ROOT / "data" / "profitability-lab" / "regular-options-historical-filtered-simulated-forward-audit" / "latest.json"
+    ROOT
+    / "data"
+    / "profitability-lab"
+    / "regular-options-historical-filtered-simulated-forward-audit"
+    / "latest.json"
 )
 DEFAULT_SOURCE_SCAN_PICKS = ROOT / "data" / "forward-tracking" / "scan_picks.jsonl"
 DEFAULT_UNDERLYING_DAILY_SOURCE_ROWS = (
-    ROOT / "data" / "profitability-lab" / "regular-options-point-in-time-underlying-daily-history" / "source_rows.jsonl"
+    ROOT
+    / "data"
+    / "profitability-lab"
+    / "regular-options-point-in-time-underlying-daily-history"
+    / "source_rows.jsonl"
 )
-DEFAULT_OUTPUT_DIR = ROOT / "data" / "forward-tracking" / "regular-options-filtered-forward-paper-shadow"
+DEFAULT_OUTPUT_DIR = (
+    ROOT / "data" / "forward-tracking" / "regular-options-filtered-forward-paper-shadow"
+)
 DEFAULT_CANDIDATES_JSONL = DEFAULT_OUTPUT_DIR / "candidate_rows.jsonl"
 DEFAULT_MATCHED_ROWS_LOG = DEFAULT_OUTPUT_DIR / "matched_rows.jsonl"
-DEFAULT_DOCS_REPORT = ROOT / "docs" / "regular-options-filtered-forward-paper-shadow-tracker.md"
-DEFAULT_POLICY_CONTRACT = ROOT / "data" / "contracts" / "regular-options-frozen-filtered-policy-v1.json"
-DEFAULT_FORWARD_EVIDENCE_BAR_CONTRACT = (
-    ROOT / "data" / "contracts" / "regular-options-filtered-forward-evidence-bar-v1.json"
+DEFAULT_DOCS_REPORT = (
+    ROOT / "docs" / "regular-options-filtered-forward-paper-shadow-tracker.md"
 )
-DEFAULT_SCAN_TASK_HEALTH = ROOT / "data" / "forward-tracking" / "regular_options_strict_forward_scan_task_health_latest.json"
+DEFAULT_POLICY_CONTRACT = (
+    ROOT / "data" / "contracts" / "regular-options-frozen-filtered-policy-v1.json"
+)
+DEFAULT_FORWARD_EVIDENCE_BAR_CONTRACT = (
+    ROOT
+    / "data"
+    / "contracts"
+    / "regular-options-filtered-forward-evidence-bar-v1.json"
+)
+DEFAULT_SCAN_TASK_HEALTH = (
+    ROOT
+    / "data"
+    / "forward-tracking"
+    / "regular_options_strict_forward_scan_task_health_latest.json"
+)
 HISTORICAL_FILTERED_MATERIALIZER_ROW_COUNT = 306
 HISTORICAL_FILTERED_MATERIALIZER_MONTH_COUNT = 24
 
@@ -64,9 +96,32 @@ TRUSTED_EXECUTABLE_QUOTE_SOURCES = {
     "alpaca_opra",
     "alpaca_opra_daily_snapshot",
 }
+TRUSTED_COMPLETION_ENTRY_QUOTE_SOURCES = {
+    "opra_nbbo",
+    "trusted_opra_nbbo",
+    "trusted_intraday_opra_nbbo",
+    "thetadata_opra_nbbo_1m",
+    "alpaca_opra",
+}
+TRUSTED_COMPLETION_EXIT_QUOTE_SOURCES = set(TRUSTED_COMPLETION_ENTRY_QUOTE_SOURCES)
 CONTRACT_MULTIPLIER = 100
 DEFAULT_FEE_PER_CONTRACT_LEG_USD = 0.65
 TARGET_EXIT_PCT_OF_DTE = 0.75
+COMPLETION_LINEAGE_SCHEMA = "trusted_synchronized_exact_exit_v1"
+EXIT_CAPTURE_MINUTE_START_ET = 15 * 60 + 50
+EXIT_CAPTURE_MINUTE_END_ET = 16 * 60
+ALLOWED_EXIT_CAPTURE_BASES = {
+    "trusted_thetadata_intraday_options_history_db_read_only",
+    "trusted_live_exit_evidence_jsonl",
+}
+EASTERN = ZoneInfo("America/New_York")
+OCC_CONTRACT_RE = re.compile(r"^([A-Z0-9]{1,6})(\d{6})([CP])(\d{8})$")
+SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+READY_SCAN_TASK_HEALTH_STATUS = "scan_tasks_ready_for_next_market_window"
+ENTRY_QUOTE_STORE_VERIFICATION_BLOCKER = (
+    "entry_quote_store_verification_not_established"
+)
 
 
 def _utc_now_iso() -> str:
@@ -92,9 +147,23 @@ def _norm_lower(value: Any) -> str:
     return _norm(value).lower()
 
 
+def _canonical_net_pnl_pct(row: dict[str, Any]) -> float | None:
+    for field in ("net_pnl_pct_after_fees", "net_pnl_pct", "pnl_pct"):
+        value = _safe_float(row.get(field))
+        if value is not None:
+            return value
+    return None
+
+
 def _load_jsonl(path: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     if not path.exists():
-        return [], {"path": _rel(path), "exists": False, "status": "missing", "row_count": 0, "bad_row_count": 0}
+        return [], {
+            "path": _rel(path),
+            "exists": False,
+            "status": "missing",
+            "row_count": 0,
+            "bad_row_count": 0,
+        }
     rows: list[dict[str, Any]] = []
     bad = 0
     for raw in path.read_text(encoding="utf8").splitlines():
@@ -109,7 +178,13 @@ def _load_jsonl(path: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
             rows.append(parsed)
         else:
             bad += 1
-    return rows, {"path": _rel(path), "exists": True, "status": "loaded", "row_count": len(rows), "bad_row_count": bad}
+    return rows, {
+        "path": _rel(path),
+        "exists": True,
+        "status": "loaded" if bad == 0 else "malformed",
+        "row_count": len(rows),
+        "bad_row_count": bad,
+    }
 
 
 def _file_hash(path: Path) -> str | None:
@@ -133,10 +208,20 @@ def _load_policy_contract(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     try:
         payload = json.loads(path.read_text(encoding="utf8"))
     except json.JSONDecodeError as exc:
-        return {}, {"path": _rel(path), "exists": True, "status": "invalid_json", "error": str(exc)}
+        return {}, {
+            "path": _rel(path),
+            "exists": True,
+            "status": "invalid_json",
+            "error": str(exc),
+        }
     if not isinstance(payload, dict):
         return {}, {"path": _rel(path), "exists": True, "status": "invalid_payload"}
-    return payload, {"path": _rel(path), "exists": True, "status": "loaded", "sha256": _file_hash(path)}
+    return payload, {
+        "path": _rel(path),
+        "exists": True,
+        "status": "loaded",
+        "sha256": _file_hash(path),
+    }
 
 
 def _load_optional_json(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -145,16 +230,28 @@ def _load_optional_json(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     try:
         payload = json.loads(path.read_text(encoding="utf8"))
     except json.JSONDecodeError as exc:
-        return {}, {"path": _rel(path), "exists": True, "status": "invalid_json", "error": str(exc)}
+        return {}, {
+            "path": _rel(path),
+            "exists": True,
+            "status": "invalid_json",
+            "error": str(exc),
+        }
     if not isinstance(payload, dict):
         return {}, {"path": _rel(path), "exists": True, "status": "invalid_payload"}
-    return payload, {"path": _rel(path), "exists": True, "status": "loaded", "sha256": _file_hash(path)}
+    return payload, {
+        "path": _rel(path),
+        "exists": True,
+        "status": "loaded",
+        "sha256": _file_hash(path),
+    }
 
 
-def _stable_tracking_start_at(previous_tracker_dir: Path, *, policy_id: str = POLICY_ID) -> str | None:
+def _stable_tracking_start_at(
+    previous_tracker_dir: Path, *, policy_id: str = POLICY_ID
+) -> str | None:
     if not previous_tracker_dir.exists():
         return None
-    candidates: list[str] = []
+    candidates: list[datetime] = []
     for path in sorted(previous_tracker_dir.glob("*.json")):
         try:
             payload = json.loads(path.read_text(encoding="utf8"))
@@ -162,14 +259,20 @@ def _stable_tracking_start_at(previous_tracker_dir: Path, *, policy_id: str = PO
             continue
         if not isinstance(payload, dict):
             continue
-        if payload.get("report_id") != REPORT_ID or payload.get("tracking_policy_id") != policy_id:
+        if (
+            payload.get("report_id") != REPORT_ID
+            or payload.get("tracking_policy_id") != policy_id
+        ):
             continue
         if payload.get("status") != "filtered_forward_paper_shadow_tracking_active":
             continue
-        value = _norm(payload.get("tracking_start_at_utc") or payload.get("generated_at_utc"))
-        if value:
-            candidates.append(value)
-    return min(candidates) if candidates else None
+        value = _norm(
+            payload.get("tracking_start_at_utc") or payload.get("generated_at_utc")
+        )
+        parsed = _parse_utc_timestamp(value)
+        if parsed is not None:
+            candidates.append(parsed)
+    return _utc_iso(min(candidates)) if candidates else None
 
 
 def _candidate_date(row: dict[str, Any]) -> str:
@@ -208,7 +311,9 @@ def _field_from_row(row: dict[str, Any], fields: Sequence[str]) -> Any:
     return None
 
 
-def _source_row_index(rows: Sequence[dict[str, Any]]) -> dict[tuple[str, str], dict[str, Any]]:
+def _source_row_index(
+    rows: Sequence[dict[str, Any]],
+) -> dict[tuple[str, str], dict[str, Any]]:
     indexed: dict[tuple[str, str], dict[str, Any]] = {}
     for row in rows:
         if row.get("point_in_time_valid") is False:
@@ -216,11 +321,21 @@ def _source_row_index(rows: Sequence[dict[str, Any]]) -> dict[tuple[str, str], d
         symbol = _norm(row.get("symbol")).upper()
         input_date = _norm(row.get("input_date_et") or row.get("bar_date"))[:10]
         if symbol and input_date:
-            indexed[(symbol, input_date)] = dict(row)
+            key = (symbol, input_date)
+            if key in indexed:
+                indexed[key] = {
+                    "symbol": symbol,
+                    "input_date_et": input_date,
+                    "_duplicate_point_in_time_signal_source_lineage": True,
+                }
+            else:
+                indexed[key] = dict(row)
     return indexed
 
 
-def _prior_20_return(row: dict[str, Any], source_index: dict[tuple[str, str], dict[str, Any]]) -> tuple[float | None, str]:
+def _prior_20_return(
+    row: dict[str, Any], source_index: dict[tuple[str, str], dict[str, Any]]
+) -> tuple[float | None, str]:
     direct = _safe_float(
         _field_from_row(
             row,
@@ -234,18 +349,26 @@ def _prior_20_return(row: dict[str, Any], source_index: dict[tuple[str, str], di
     )
     if direct is not None:
         return direct, "scan_row"
-    symbol = _norm(row.get("ticker") or row.get("symbol") or row.get("underlying")).upper()
+    symbol = _norm(
+        row.get("ticker") or row.get("symbol") or row.get("underlying")
+    ).upper()
     scan_date = _candidate_date(row)
     source = source_index.get((symbol, scan_date))
     if source:
+        if source.get("_duplicate_point_in_time_signal_source_lineage") is True:
+            return None, "duplicate_point_in_time_signal_source_lineage"
         parsed = _safe_float(source.get("prior_20_trading_day_return_pct"))
         if parsed is not None:
             return parsed, "point_in_time_underlying_daily_source_rows"
     return None, "missing_prior_20_trading_day_return_pct"
 
 
-def _scan_row_for_filter(row: dict[str, Any], source_index: dict[tuple[str, str], dict[str, Any]]) -> tuple[dict[str, Any], str | None]:
-    ticker = _norm(row.get("ticker") or row.get("symbol") or row.get("underlying")).upper()
+def _scan_row_for_filter(
+    row: dict[str, Any], source_index: dict[tuple[str, str], dict[str, Any]]
+) -> tuple[dict[str, Any], str | None]:
+    ticker = _norm(
+        row.get("ticker") or row.get("symbol") or row.get("underlying")
+    ).upper()
     scan_date = _candidate_date(row)
     prior_20, prior_source = _prior_20_return(row, source_index)
     if not ticker:
@@ -256,20 +379,33 @@ def _scan_row_for_filter(row: dict[str, Any], source_index: dict[tuple[str, str]
         enriched = dict(row)
         enriched["ticker"] = ticker
         enriched["candidate_generation_date"] = scan_date
-        return enriched, "missing_prior_20_trading_day_return_pct"
+        return enriched, prior_source
     enriched = dict(row)
     enriched["ticker"] = ticker
     enriched["symbol"] = ticker
     enriched["candidate_generation_date"] = scan_date
     signal = dict(_as_dict(enriched.get("signal_evidence")))
     signal["prior_20_trading_day_return_pct"] = prior_20
-    signal["prior_20_trading_day_return_source"] = prior_source
+    signal.setdefault("prior_20_trading_day_return_source", prior_source)
+    if prior_source == "point_in_time_underlying_daily_source_rows":
+        source = source_index.get((ticker, scan_date)) or {}
+        signal.setdefault(
+            "known_at_utc",
+            source.get("known_at_utc") or source.get("source_timestamp_utc"),
+        )
+        signal.setdefault("source_ref", source.get("source_ref"))
+        signal.setdefault("source_row_hash", source.get("source_row_hash"))
     enriched["signal_evidence"] = signal
     return enriched, None
 
 
 def _candidate_direction(row: dict[str, Any]) -> str:
-    return _norm_lower(row.get("direction") or row.get("option_direction") or row.get("side") or "unknown")
+    return _norm_lower(
+        row.get("direction")
+        or row.get("option_direction")
+        or row.get("side")
+        or "unknown"
+    )
 
 
 def _candidate_identity_key(row: dict[str, Any]) -> tuple[str, str, str, str]:
@@ -314,8 +450,12 @@ def _sort_key_first_session(row: dict[str, Any], index: int) -> tuple[str, str, 
     return (_candidate_date(row), _candidate_timestamp(row), index)
 
 
-def _first_daily_signal_matches(rows: Sequence[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, int]]:
-    first_by_key: dict[tuple[str, str, str, str], tuple[dict[str, Any], tuple[str, str, int]]] = {}
+def _first_daily_signal_matches(
+    rows: Sequence[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    first_by_key: dict[
+        tuple[str, str, str, str], tuple[dict[str, Any], tuple[str, str, int]]
+    ] = {}
     duplicate_count = 0
     for index, row in enumerate(rows):
         key = _candidate_identity_key(row)
@@ -327,7 +467,9 @@ def _first_daily_signal_matches(rows: Sequence[dict[str, Any]]) -> tuple[list[di
         duplicate_count += 1
         if sort_key < current[1]:
             first_by_key[key] = (dict(row), sort_key)
-    return [item[0] for item in sorted(first_by_key.values(), key=lambda item: item[1])], {
+    return [
+        item[0] for item in sorted(first_by_key.values(), key=lambda item: item[1])
+    ], {
         "duplicate_same_day_signal_matches_suppressed": duplicate_count,
     }
 
@@ -335,30 +477,59 @@ def _first_daily_signal_matches(rows: Sequence[dict[str, Any]]) -> tuple[list[di
 def _matched_log_has_current_identity_schema(rows: Sequence[dict[str, Any]]) -> bool:
     if not rows:
         return True
-    return all(_norm(row.get("candidate_identity_schema")) == MATCHED_ROW_IDENTITY_SCHEMA for row in rows)
+    return all(
+        _norm(row.get("candidate_identity_schema")) == MATCHED_ROW_IDENTITY_SCHEMA
+        for row in rows
+    )
 
 
-def _matched_log_duplicate_daily_signal_identities(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+def _matched_log_duplicate_daily_signal_identities(
+    rows: Sequence[dict[str, Any]],
+) -> list[dict[str, Any]]:
     matched_entry_rows = [
         row
         for row in rows
-        if _norm(row.get("record_type") or "matched_entry") == "matched_entry"
-        and not _is_completed_forward_row(dict(row))
+        if not _declares_completed_forward_row(dict(row))
+        and _norm(row.get("record_type") or "matched_entry") == "matched_entry"
     ]
     grouped: dict[tuple[str, str, str, str], list[dict[str, Any]]] = {}
     for row in matched_entry_rows:
         key_payload = _as_dict(row.get("candidate_identity_key"))
         key = (
-            _norm(key_payload.get("policy_id") or row.get("identity_policy_id") or row.get("tracking_policy_id") or POLICY_ID),
-            _norm(key_payload.get("ticker") or row.get("identity_ticker") or row.get("ticker")).upper(),
-            _norm(key_payload.get("scan_date") or row.get("identity_scan_date") or row.get("scan_date"))[:10],
-            _norm_lower(key_payload.get("direction") or row.get("identity_direction") or row.get("direction") or "unknown"),
+            _norm(
+                key_payload.get("policy_id")
+                or row.get("identity_policy_id")
+                or row.get("tracking_policy_id")
+                or POLICY_ID
+            ),
+            _norm(
+                key_payload.get("ticker")
+                or row.get("identity_ticker")
+                or row.get("ticker")
+            ).upper(),
+            _norm(
+                key_payload.get("scan_date")
+                or row.get("identity_scan_date")
+                or row.get("scan_date")
+            )[:10],
+            _norm_lower(
+                key_payload.get("direction")
+                or row.get("identity_direction")
+                or row.get("direction")
+                or "unknown"
+            ),
         )
         if all(key):
             grouped.setdefault(key, []).append(dict(row))
     duplicates: list[dict[str, Any]] = []
     for key, group in sorted(grouped.items()):
-        candidate_ids = sorted({_norm(row.get("candidate_id")) for row in group if _norm(row.get("candidate_id"))})
+        candidate_ids = sorted(
+            {
+                _norm(row.get("candidate_id"))
+                for row in group
+                if _norm(row.get("candidate_id"))
+            }
+        )
         if len(group) > 1 or len(candidate_ids) > 1:
             duplicates.append(
                 {
@@ -374,7 +545,9 @@ def _matched_log_duplicate_daily_signal_identities(rows: Sequence[dict[str, Any]
 
 
 def _candidate_month(row: dict[str, Any]) -> str:
-    return _norm(row.get("scan_date") or row.get("entry_date") or row.get("exit_date"))[:7]
+    return _norm(row.get("scan_date") or row.get("entry_date") or row.get("exit_date"))[
+        :7
+    ]
 
 
 def _ticker_week_cluster(row: dict[str, Any]) -> str:
@@ -390,20 +563,36 @@ def _ticker_week_cluster(row: dict[str, Any]) -> str:
 
 def _policy_exit_date(row: dict[str, Any]) -> str | None:
     raw_scan_date = _candidate_date(row)
-    raw_expiry = _norm(row.get("expiry") or row.get("expiration") or row.get("resolved_listed_expiry"))[:10]
+    raw_expiry = _norm(
+        row.get("expiry") or row.get("expiration") or row.get("resolved_listed_expiry")
+    )[:10]
     dte = _safe_float(row.get("dte"))
     try:
         entry = date.fromisoformat(raw_scan_date)
         expiry = date.fromisoformat(raw_expiry)
-    except ValueError:
+    except (TypeError, ValueError):
+        return None
+    if expiry <= entry:
         return None
     if dte is None:
         dte = max((expiry - entry).days, 1)
+    if dte <= 0:
+        return None
     target_days = max(1, int(round(float(dte) * TARGET_EXIT_PCT_OF_DTE)))
-    return min(expiry, entry + timedelta(days=target_days)).isoformat()
+    raw_target = min(expiry, entry + timedelta(days=target_days))
+    target = (
+        raw_target
+        if is_us_equity_market_day(raw_target)
+        else next_market_day(raw_target)
+    )
+    if target > expiry:
+        target = previous_market_day(expiry + timedelta(days=1))
+    if target <= entry or target > expiry or not is_us_equity_market_day(target):
+        return None
+    return target.isoformat()
 
 
-def _is_completed_forward_row(row: dict[str, Any]) -> bool:
+def _declares_completed_forward_row(row: dict[str, Any]) -> bool:
     state = _norm(row.get("tracking_state"))
     realized = _norm(row.get("realized_pnl_status"))
     return state == "forward_paper_shadow_completed" or realized in {
@@ -412,6 +601,584 @@ def _is_completed_forward_row(row: dict[str, Any]) -> bool:
         "closed_with_realized_pnl",
         "completed_exact_exit",
     }
+
+
+def _parse_utc_timestamp(value: Any) -> datetime | None:
+    text = _norm(value)
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(
+            text[:-1] + "+00:00" if text.endswith("Z") else text
+        )
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(UTC)
+
+
+def _utc_iso(value: datetime) -> str:
+    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _parse_occ_contract(value: Any) -> dict[str, Any] | None:
+    match = OCC_CONTRACT_RE.fullmatch(_norm(value).upper())
+    if match is None:
+        return None
+    root, expiry_token, right, strike_token = match.groups()
+    try:
+        expiry = datetime.strptime(expiry_token, "%y%m%d").date()
+        strike = int(strike_token) / 1000.0
+    except (TypeError, ValueError):
+        return None
+    return {"root": root, "expiry": expiry, "right": right, "strike": strike}
+
+
+def _canonical_ticker_root(value: Any) -> str:
+    return "".join(
+        character for character in _norm(value).upper() if character.isalnum()
+    )
+
+
+def _vertical_geometry(
+    row: dict[str, Any],
+    *,
+    reason_prefix: str = "",
+) -> tuple[dict[str, Any], list[str]]:
+    reasons: list[str] = []
+
+    def reject(reason: str) -> None:
+        reasons.append(f"{reason_prefix}{reason}")
+
+    long_symbol = _norm(
+        row.get("long_contract_symbol") or row.get("contract_symbol")
+    ).upper()
+    short_symbol = _norm(row.get("short_contract_symbol")).upper()
+    long_occ = _parse_occ_contract(long_symbol)
+    short_occ = _parse_occ_contract(short_symbol)
+    if long_occ is None:
+        reject("long_contract_symbol_not_valid_occ")
+    if short_occ is None:
+        reject("short_contract_symbol_not_valid_occ")
+    if long_occ is None or short_occ is None:
+        return {}, sorted(set(reasons))
+    ticker_root = _canonical_ticker_root(row.get("ticker") or row.get("symbol"))
+    if (
+        not ticker_root
+        or long_occ["root"] != ticker_root
+        or short_occ["root"] != ticker_root
+    ):
+        reject("occ_contract_root_ticker_mismatch")
+    if long_occ["expiry"] != short_occ["expiry"]:
+        reject("vertical_contract_expiry_mismatch")
+    if long_occ["right"] != short_occ["right"]:
+        reject("vertical_contract_right_mismatch")
+    direction = _candidate_direction(row)
+    expected_right = (
+        "C"
+        if direction.startswith("call")
+        else "P"
+        if direction.startswith("put")
+        else None
+    )
+    if expected_right is None:
+        reject("vertical_direction_missing_or_invalid")
+    elif long_occ["right"] != expected_right or short_occ["right"] != expected_right:
+        reject("vertical_contract_right_direction_mismatch")
+    expiry_text = _norm(
+        row.get("expiry") or row.get("expiration") or row.get("resolved_listed_expiry")
+    )[:10]
+    try:
+        declared_expiry = date.fromisoformat(expiry_text)
+    except ValueError:
+        declared_expiry = None
+        reject("vertical_declared_expiry_missing_or_invalid")
+    if declared_expiry is not None and (
+        long_occ["expiry"] != declared_expiry or short_occ["expiry"] != declared_expiry
+    ):
+        reject("vertical_occ_expiry_declared_expiry_mismatch")
+    long_strike = float(long_occ["strike"])
+    short_strike = float(short_occ["strike"])
+    width = abs(short_strike - long_strike)
+    if width <= 0:
+        reject("vertical_width_non_positive")
+    if expected_right == "C" and short_strike <= long_strike:
+        reject("call_vertical_strike_order_invalid")
+    if expected_right == "P" and short_strike >= long_strike:
+        reject("put_vertical_strike_order_invalid")
+    for field, expected in (
+        ("long_strike", long_strike),
+        ("short_strike", short_strike),
+        ("spread_width", width),
+    ):
+        declared = _safe_float(row.get(field))
+        if declared is not None and abs(declared - expected) > 0.0001:
+            reject(f"vertical_{field}_occ_mismatch")
+    scan_date_text = _candidate_date(row)
+    try:
+        scan_date = date.fromisoformat(scan_date_text)
+    except ValueError:
+        scan_date = None
+        reject("vertical_scan_date_missing_or_invalid")
+    dte = _safe_float(row.get("dte"))
+    if dte is None or int(dte) != dte or dte <= 0:
+        reject("vertical_dte_missing_or_invalid")
+    elif scan_date is not None and int(dte) != (long_occ["expiry"] - scan_date).days:
+        reject("vertical_dte_expiry_mismatch")
+    return {
+        "long_contract_symbol": long_symbol,
+        "short_contract_symbol": short_symbol,
+        "expiry": long_occ["expiry"].isoformat(),
+        "long_strike": long_strike,
+        "short_strike": short_strike,
+        "spread_width": width,
+        "dte": int(dte) if dte is not None and int(dte) == dte else None,
+        "option_right": long_occ["right"],
+    }, sorted(set(reasons))
+
+
+def _scan_task_health_reject_reasons(
+    scan_task_health: dict[str, Any],
+    scan_task_meta: dict[str, Any],
+) -> list[str]:
+    reasons: list[str] = []
+    if scan_task_meta.get("status") != "loaded":
+        reasons.append("scan_task_health_not_loaded")
+    if (
+        scan_task_health.get("report_id")
+        != "regular_options_strict_forward_scan_task_health"
+    ):
+        reasons.append("scan_task_health_report_id_invalid")
+    if scan_task_health.get("status") != READY_SCAN_TASK_HEALTH_STATUS:
+        reasons.append("scan_task_health_status_not_ready")
+    if _as_list(scan_task_health.get("blockers")):
+        reasons.append("scan_task_health_has_blockers")
+    if _as_list(scan_task_health.get("config_blockers")):
+        reasons.append("scan_task_health_has_config_blockers")
+    if _as_list(scan_task_health.get("runtime_blockers")):
+        reasons.append("scan_task_health_has_runtime_blockers")
+    if _parse_utc_timestamp(scan_task_health.get("generated_at_utc")) is None:
+        reasons.append("scan_task_health_generated_at_missing_or_not_timezone_aware")
+    if not SHA256_RE.fullmatch(_norm_lower(scan_task_meta.get("sha256"))):
+        reasons.append("scan_task_health_artifact_hash_missing_or_invalid")
+    return sorted(set(reasons))
+
+
+def _scan_provenance(row: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    stored = _as_dict(row.get("scan_provenance"))
+    scan_timestamp_raw = stored.get("scan_timestamp_utc") or _candidate_timestamp(row)
+    scan_timestamp = _parse_utc_timestamp(scan_timestamp_raw)
+    health_generated_raw = stored.get("scan_task_health_generated_at_utc") or row.get(
+        "_scan_task_health_generated_at_utc"
+    )
+    health_generated = _parse_utc_timestamp(health_generated_raw)
+    payload = {
+        "schema": "proof_grade_scan_provenance_v1",
+        "scan_run_id": _norm(
+            stored.get("scan_run_id")
+            or row.get("scanner_run_id")
+            or row.get("scan_run_id")
+            or row.get("source_scan_run_id")
+        ),
+        "scan_timestamp_utc": _utc_iso(scan_timestamp)
+        if scan_timestamp is not None
+        else _norm(scan_timestamp_raw),
+        "scan_host": _norm(stored.get("scan_host") or row.get("scan_host")),
+        "scan_commit_sha": _norm_lower(
+            stored.get("scan_commit_sha") or row.get("scan_commit_sha")
+        ),
+        "scan_branch": _norm(stored.get("scan_branch") or row.get("scan_branch")),
+        "source_scan_picks_sha256": _norm_lower(
+            stored.get("source_scan_picks_sha256")
+            or row.get("_source_scan_picks_sha256")
+        ),
+        "scan_task_health_sha256": _norm_lower(
+            stored.get("scan_task_health_sha256") or row.get("_scan_task_health_sha256")
+        ),
+        "scan_task_health_status": _norm(
+            stored.get("scan_task_health_status") or row.get("_scan_task_health_status")
+        ),
+        "scan_task_health_generated_at_utc": (
+            _utc_iso(health_generated)
+            if health_generated is not None
+            else _norm(health_generated_raw)
+        ),
+    }
+    reasons: list[str] = []
+    if payload["schema"] != "proof_grade_scan_provenance_v1":
+        reasons.append("scan_provenance_schema_invalid")
+    if not payload["scan_run_id"]:
+        reasons.append("scan_run_id_missing")
+    if scan_timestamp is None:
+        reasons.append("scan_timestamp_missing_or_not_timezone_aware")
+    else:
+        scan_date = _candidate_date(row)
+        if (
+            not scan_date
+            or scan_timestamp.astimezone(EASTERN).date().isoformat() != scan_date
+        ):
+            reasons.append("scan_timestamp_date_mismatch")
+    if not payload["scan_host"]:
+        reasons.append("scan_host_missing")
+    if not GIT_SHA_RE.fullmatch(payload["scan_commit_sha"]):
+        reasons.append("scan_commit_sha_missing_or_invalid")
+    if not payload["scan_branch"]:
+        reasons.append("scan_branch_missing")
+    if not SHA256_RE.fullmatch(payload["source_scan_picks_sha256"]):
+        reasons.append("source_scan_picks_hash_missing_or_invalid")
+    if not SHA256_RE.fullmatch(payload["scan_task_health_sha256"]):
+        reasons.append("scan_task_health_hash_missing_or_invalid")
+    if payload["scan_task_health_status"] != READY_SCAN_TASK_HEALTH_STATUS:
+        reasons.append("scan_task_health_status_not_ready")
+    if health_generated is None:
+        reasons.append("scan_task_health_generated_at_missing_or_not_timezone_aware")
+    elif scan_timestamp is not None and health_generated < scan_timestamp:
+        reasons.append("scan_task_health_predates_scan")
+    return payload, sorted(set(reasons))
+
+
+def _signal_lineage(row: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    stored = _as_dict(row.get("signal_lineage"))
+    signal = _as_dict(row.get("signal_evidence"))
+    known_raw = (
+        stored.get("known_at_utc") or signal.get("known_at_utc") or row.get("known_at")
+    )
+    decision_raw = (
+        stored.get("decision_timestamp_utc")
+        or row.get("decision_timestamp_utc")
+        or _candidate_timestamp(row)
+    )
+    known_at = _parse_utc_timestamp(known_raw)
+    decision = _parse_utc_timestamp(decision_raw)
+    payload = {
+        "schema": "point_in_time_signal_lineage_v1",
+        "known_at_utc": _utc_iso(known_at)
+        if known_at is not None
+        else _norm(known_raw),
+        "decision_timestamp_utc": _utc_iso(decision)
+        if decision is not None
+        else _norm(decision_raw),
+        "source_ref": _norm(stored.get("source_ref") or signal.get("source_ref")),
+        "source_row_hash": _norm_lower(
+            stored.get("source_row_hash") or signal.get("source_row_hash")
+        ),
+        "prior_20_trading_day_return_source": _norm(
+            stored.get("prior_20_trading_day_return_source")
+            or signal.get("prior_20_trading_day_return_source")
+            or row.get("prior_20_trading_day_return_source")
+        ),
+        "prior_20_trading_day_return_pct": _safe_float(
+            stored.get("prior_20_trading_day_return_pct")
+            if stored.get("prior_20_trading_day_return_pct") is not None
+            else signal.get("prior_20_trading_day_return_pct")
+            if signal.get("prior_20_trading_day_return_pct") is not None
+            else row.get("prior_20_trading_day_return_pct")
+        ),
+    }
+    reasons: list[str] = []
+    if known_at is None:
+        reasons.append("signal_known_at_missing_or_not_timezone_aware")
+    if decision is None:
+        reasons.append("signal_decision_timestamp_missing_or_not_timezone_aware")
+    elif known_at is not None and known_at > decision:
+        reasons.append("signal_known_after_candidate_decision")
+    if not payload["source_ref"]:
+        reasons.append("signal_source_ref_missing")
+    if not SHA256_RE.fullmatch(payload["source_row_hash"]):
+        reasons.append("signal_source_row_hash_missing_or_invalid")
+    if not payload["prior_20_trading_day_return_source"] or payload[
+        "prior_20_trading_day_return_source"
+    ] in {"scan_row", "missing_prior_20_trading_day_return_pct"}:
+        reasons.append("signal_source_lineage_missing_or_ambiguous")
+    if payload["prior_20_trading_day_return_pct"] is None:
+        reasons.append("signal_prior_20_return_missing")
+    return payload, sorted(set(reasons))
+
+
+def _entry_quote_store_verification_established(
+    row: dict[str, Any] | None = None,
+) -> bool:
+    """Fail closed until exact entry rows are revalidated against a trusted store."""
+    # Caller-supplied fields, booleans, and hashes are intentionally ignored. Replace
+    # this seam only with a verifier that opens and content-validates the bound store.
+    del row
+    return False
+
+
+def _completion_lineage_reject_reasons(row: dict[str, Any]) -> list[str]:
+    reasons: list[str] = []
+    candidate_id = _norm(row.get("candidate_id"))
+    if not candidate_id:
+        reasons.append("completion_candidate_id_missing")
+    if _norm(row.get("tracking_state")) != "forward_paper_shadow_completed":
+        reasons.append("completion_tracking_state_not_exact")
+    if _norm(row.get("realized_pnl_status")) != "completed_exact_exit":
+        reasons.append("completion_realized_pnl_status_not_exact")
+    if _norm(row.get("record_type")) != "completion":
+        reasons.append("completion_record_type_not_exact")
+    if _norm(row.get("lifecycle_event")) != "completed_exact_exit":
+        reasons.append("completion_lifecycle_event_not_exact")
+    if _norm(row.get("completion_lineage_schema")) != COMPLETION_LINEAGE_SCHEMA:
+        reasons.append("completion_lineage_schema_missing_or_invalid")
+    if _norm(row.get("source_entry_candidate_id")) != candidate_id:
+        reasons.append("completion_source_entry_candidate_id_mismatch")
+    if _norm(row.get("source_entry_record_type")) != "matched_entry":
+        reasons.append("completion_source_entry_record_type_not_exact")
+    if _norm(row.get("source_entry_lifecycle_event")) != "matched_entry":
+        reasons.append("completion_source_entry_lifecycle_event_not_exact")
+    geometry, geometry_reasons = _vertical_geometry(row, reason_prefix="completion_")
+    reasons.extend(geometry_reasons)
+    _scan, scan_reasons = _scan_provenance(row)
+    reasons.extend(f"completion_{reason}" for reason in scan_reasons)
+    _signal, signal_reasons = _signal_lineage(row)
+    reasons.extend(f"completion_{reason}" for reason in signal_reasons)
+    expected_policy_exit = _policy_exit_date(row)
+    declared_policy_exit = _norm(row.get("policy_exit_date"))[:10]
+    declared_exit = _norm(row.get("exit_date"))[:10]
+    try:
+        entry_day = date.fromisoformat(_candidate_date(row))
+        expiry_day = date.fromisoformat(_norm(row.get("expiry"))[:10])
+        exit_day = date.fromisoformat(declared_exit)
+    except ValueError:
+        entry_day = expiry_day = exit_day = None
+        reasons.append("completion_entry_expiry_or_exit_date_missing_or_invalid")
+    if expected_policy_exit is None:
+        reasons.append("completion_policy_exit_date_not_computable")
+    elif declared_policy_exit != expected_policy_exit:
+        reasons.append("completion_policy_exit_date_mismatch")
+    if expected_policy_exit is not None and declared_exit != expected_policy_exit:
+        reasons.append("completion_exit_date_not_policy_exit_date")
+    if _norm(row.get("exit_reason")) != "fixed_75pct_dte_time_exit":
+        reasons.append("completion_exit_reason_not_policy_exact")
+    if entry_day is not None and expiry_day is not None and exit_day is not None:
+        if exit_day <= entry_day:
+            reasons.append("completion_exit_not_after_entry")
+        if exit_day > expiry_day:
+            reasons.append("completion_exit_after_expiry")
+        if not is_us_equity_market_day(exit_day):
+            reasons.append("completion_exit_date_not_authoritative_market_day")
+
+    entry_source = _norm_lower(row.get("entry_quote_source"))
+    if entry_source not in TRUSTED_COMPLETION_ENTRY_QUOTE_SOURCES:
+        reasons.append("completion_entry_quote_source_untrusted")
+    entry_timestamp = _parse_utc_timestamp(row.get("entry_quote_timestamp_utc"))
+    long_entry_timestamp = _parse_utc_timestamp(
+        row.get("long_entry_quote_timestamp_utc")
+    )
+    short_entry_timestamp = _parse_utc_timestamp(
+        row.get("short_entry_quote_timestamp_utc")
+    )
+    if entry_timestamp is None:
+        reasons.append("completion_entry_timestamp_missing_or_invalid")
+    if long_entry_timestamp is None:
+        reasons.append("completion_long_entry_timestamp_missing_or_invalid")
+    if short_entry_timestamp is None:
+        reasons.append("completion_short_entry_timestamp_missing_or_invalid")
+    if (
+        entry_timestamp is not None
+        and long_entry_timestamp is not None
+        and short_entry_timestamp is not None
+    ):
+        if (
+            entry_timestamp != long_entry_timestamp
+            or entry_timestamp != short_entry_timestamp
+        ):
+            reasons.append("completion_entry_quote_timestamps_not_exactly_synchronized")
+        long_entry_et = long_entry_timestamp.astimezone(EASTERN)
+        short_entry_et = short_entry_timestamp.astimezone(EASTERN)
+        candidate_date = _candidate_date(row)
+        if candidate_date and (
+            candidate_date != long_entry_et.date().isoformat()
+            or candidate_date != short_entry_et.date().isoformat()
+        ):
+            reasons.append("completion_entry_date_timestamp_mismatch")
+
+    entry_long_ask = _safe_float(row.get("entry_long_ask"))
+    entry_long_bid = _safe_float(row.get("entry_long_bid"))
+    entry_short_bid = _safe_float(row.get("entry_short_bid"))
+    entry_short_ask = _safe_float(row.get("entry_short_ask"))
+    entry_debit = _safe_float(row.get("entry_debit"))
+    if entry_long_ask is None or entry_long_ask <= 0:
+        reasons.append("completion_entry_long_ask_missing_or_invalid")
+    if entry_short_bid is None or entry_short_bid < 0:
+        reasons.append("completion_entry_short_bid_missing_or_invalid")
+    if entry_long_bid is None or entry_long_bid < 0:
+        reasons.append("completion_entry_long_bid_missing_or_invalid")
+    if entry_short_ask is None or entry_short_ask < 0:
+        reasons.append("completion_entry_short_ask_missing_or_invalid")
+    if (
+        entry_long_bid is not None
+        and entry_long_ask is not None
+        and entry_long_ask < entry_long_bid
+    ):
+        reasons.append("completion_entry_long_quote_crossed")
+    if (
+        entry_short_bid is not None
+        and entry_short_ask is not None
+        and entry_short_ask < entry_short_bid
+    ):
+        reasons.append("completion_entry_short_quote_crossed")
+    if entry_long_ask is not None and entry_short_bid is not None:
+        expected_entry_debit = entry_long_ask - entry_short_bid
+        if expected_entry_debit <= 0:
+            reasons.append("completion_entry_debit_non_positive")
+        elif entry_debit is None or abs(entry_debit - expected_entry_debit) > 0.0001:
+            reasons.append("completion_entry_debit_not_derived_from_executable_sides")
+        elif (
+            _safe_float(geometry.get("spread_width")) is not None
+            and entry_debit > float(geometry["spread_width"]) + 0.0001
+        ):
+            reasons.append("completion_entry_debit_exceeds_vertical_width")
+    if _norm(row.get("entry_debit_basis")) != "long_ask_minus_short_bid":
+        reasons.append("completion_entry_debit_basis_not_exact")
+
+    source = _norm_lower(row.get("exit_quote_source"))
+    if source not in TRUSTED_COMPLETION_EXIT_QUOTE_SOURCES:
+        reasons.append("completion_exit_quote_source_untrusted")
+    if _norm(row.get("exit_capture_basis")) not in ALLOWED_EXIT_CAPTURE_BASES:
+        reasons.append("completion_exit_capture_basis_untrusted")
+    if not _norm(row.get("long_contract_symbol")):
+        reasons.append("completion_long_contract_symbol_missing")
+    if not _norm(row.get("short_contract_symbol")):
+        reasons.append("completion_short_contract_symbol_missing")
+    lineage = _as_dict(row.get("exit_price_lineage"))
+    if _norm(lineage.get("schema")) != COMPLETION_LINEAGE_SCHEMA:
+        reasons.append("completion_exit_price_lineage_schema_missing_or_invalid")
+    if _norm(lineage.get("long_contract_symbol")) != _norm(
+        row.get("long_contract_symbol")
+    ):
+        reasons.append("completion_exit_lineage_long_contract_mismatch")
+    if _norm(lineage.get("short_contract_symbol")) != _norm(
+        row.get("short_contract_symbol")
+    ):
+        reasons.append("completion_exit_lineage_short_contract_mismatch")
+
+    exit_timestamp = _parse_utc_timestamp(row.get("exit_quote_timestamp_utc"))
+    long_timestamp = _parse_utc_timestamp(row.get("long_exit_quote_timestamp_utc"))
+    short_timestamp = _parse_utc_timestamp(row.get("short_exit_quote_timestamp_utc"))
+    if exit_timestamp is None:
+        reasons.append("completion_exit_timestamp_missing_or_invalid")
+    if long_timestamp is None:
+        reasons.append("completion_long_exit_timestamp_missing_or_invalid")
+    if short_timestamp is None:
+        reasons.append("completion_short_exit_timestamp_missing_or_invalid")
+    if (
+        exit_timestamp is not None
+        and long_timestamp is not None
+        and short_timestamp is not None
+    ):
+        if exit_timestamp != long_timestamp or exit_timestamp != short_timestamp:
+            reasons.append("completion_exit_quote_timestamps_not_exactly_synchronized")
+        long_et = long_timestamp.astimezone(EASTERN)
+        short_et = short_timestamp.astimezone(EASTERN)
+        long_minute = long_et.hour * 60 + long_et.minute
+        short_minute = short_et.hour * 60 + short_et.minute
+        if (
+            not EXIT_CAPTURE_MINUTE_START_ET
+            <= long_minute
+            <= EXIT_CAPTURE_MINUTE_END_ET
+        ):
+            reasons.append("completion_exit_quote_outside_capture_window")
+        try:
+            declared_long_minute = int(row.get("long_exit_quote_minute_et"))
+            declared_short_minute = int(row.get("short_exit_quote_minute_et"))
+        except (TypeError, ValueError):
+            reasons.append("completion_exit_quote_minutes_missing_or_invalid")
+        else:
+            if (
+                declared_long_minute != long_minute
+                or declared_short_minute != short_minute
+            ):
+                reasons.append("completion_exit_quote_minute_lineage_mismatch")
+        exit_date = _norm(row.get("exit_date"))[:10]
+        if (
+            exit_date != long_et.date().isoformat()
+            or exit_date != short_et.date().isoformat()
+        ):
+            reasons.append("completion_exit_date_timestamp_mismatch")
+
+    long_bid = _safe_float(row.get("long_exit_bid"))
+    long_ask = _safe_float(row.get("long_exit_ask"))
+    short_bid = _safe_float(row.get("short_exit_bid"))
+    short_ask = _safe_float(row.get("short_exit_ask"))
+    exit_value = _safe_float(row.get("exit_value"))
+    if long_bid is None or long_bid < 0:
+        reasons.append("completion_long_exit_bid_missing_or_invalid")
+    if short_ask is None or short_ask < 0:
+        reasons.append("completion_short_exit_ask_missing_or_invalid")
+    if long_ask is not None and long_bid is not None and long_ask < long_bid:
+        reasons.append("completion_long_exit_quote_crossed")
+    if short_bid is not None and short_ask is not None and short_ask < short_bid:
+        reasons.append("completion_short_exit_quote_crossed")
+    if long_bid is not None and short_ask is not None:
+        expected_exit_value = max(0.0, long_bid - short_ask)
+        if exit_value is None or abs(exit_value - expected_exit_value) > 0.0001:
+            reasons.append("completion_exit_value_not_derived_from_executable_sides")
+        width = _safe_float(geometry.get("spread_width"))
+        if width is not None and expected_exit_value > width + 0.0001:
+            reasons.append("completion_exit_value_exceeds_vertical_width")
+    net_pnl_pct = _safe_float(row.get("net_pnl_pct_after_fees"))
+    net_pnl_usd = _safe_float(row.get("net_pnl_usd"))
+    if net_pnl_pct is None:
+        reasons.append("completion_fee_adjusted_pnl_pct_missing")
+    if net_pnl_usd is None:
+        reasons.append("completion_net_pnl_usd_missing")
+    fee_per_leg = _safe_float(row.get("fee_per_contract_leg_usd"))
+    if fee_per_leg is None or fee_per_leg < 0:
+        reasons.append("completion_fee_per_contract_leg_missing_or_invalid")
+    try:
+        contract_multiplier = int(row.get("contract_multiplier"))
+    except (TypeError, ValueError):
+        contract_multiplier = -1
+        reasons.append("completion_contract_multiplier_missing_or_invalid")
+    if contract_multiplier != CONTRACT_MULTIPLIER:
+        reasons.append("completion_contract_multiplier_not_exact")
+    if (
+        entry_debit is not None
+        and entry_debit > 0
+        and exit_value is not None
+        and fee_per_leg is not None
+        and fee_per_leg >= 0
+        and contract_multiplier == CONTRACT_MULTIPLIER
+    ):
+        expected_pnl = position_pnl_snapshot(
+            entry_execution_price=entry_debit,
+            exit_execution_price=exit_value,
+            contracts=1,
+            entry_fee_total_usd=2.0 * fee_per_leg,
+            exit_fee_total_usd=2.0 * fee_per_leg,
+            contract_multiplier=contract_multiplier,
+        )
+        expected_net_pct = _safe_float(expected_pnl.get("net_pnl_pct"))
+        expected_net_usd = _safe_float(expected_pnl.get("net_pnl_usd"))
+        expected_fees = _safe_float(expected_pnl.get("fee_total_usd"))
+        if (
+            expected_net_pct is None
+            or net_pnl_pct is None
+            or abs(net_pnl_pct - expected_net_pct) > 0.0001
+        ):
+            reasons.append("completion_fee_adjusted_pnl_pct_not_recomputed")
+        if (
+            expected_net_usd is None
+            or net_pnl_usd is None
+            or abs(net_pnl_usd - expected_net_usd) > 0.0001
+        ):
+            reasons.append("completion_net_pnl_usd_not_recomputed")
+        recorded_fees = _safe_float(row.get("total_fees_usd"))
+        if (
+            expected_fees is None
+            or recorded_fees is None
+            or abs(recorded_fees - expected_fees) > 0.0001
+        ):
+            reasons.append("completion_total_fees_not_recomputed")
+    return sorted(set(reasons))
+
+
+def _is_completed_forward_row(row: dict[str, Any]) -> bool:
+    return _declares_completed_forward_row(
+        row
+    ) and not _completion_lineage_reject_reasons(row)
 
 
 def _is_fixture_row(row: dict[str, Any]) -> bool:
@@ -463,22 +1230,47 @@ def _forward_evidence_bar_progress(
     min_total_usd = float(requirements.get("min_total_net_pnl_usd_exclusive") or 0.0)
     max_fixture_rows = int(requirements.get("max_fixture_rows") or 0)
     draws = int(requirements.get("bootstrap_draws") or 10000)
-    completed = [dict(row) for row in rows if _is_completed_forward_row(dict(row))]
+    completed_rows, declared_rows, lineage_reject_counts = _validated_completion_rows(
+        rows
+    )
+    declared_completed = [dict(row) for row in declared_rows]
+    completed = [dict(row) for row in completed_rows]
+    declared_candidate_ids = {
+        _norm(row.get("candidate_id"))
+        for row in declared_completed
+        if _norm(row.get("candidate_id"))
+    }
+    completed_candidate_ids = {
+        _norm(row.get("candidate_id"))
+        for row in completed
+        if _norm(row.get("candidate_id"))
+    }
+    unresolved_candidate_ids = sorted(declared_candidate_ids - completed_candidate_ids)
+    duplicate_valid_completion_event_count = int(
+        lineage_reject_counts.get("duplicate_valid_completion_event") or 0
+    )
     clusters = sorted({_ticker_week_cluster(row) for row in completed})
-    months = sorted({_candidate_month(row) for row in completed if _candidate_month(row)})
+    months = sorted(
+        {_candidate_month(row) for row in completed if _candidate_month(row)}
+    )
     fixture_count = sum(1 for row in completed if _is_fixture_row(row))
     pct_entries: list[tuple[str, float]] = []
     usd_entries: list[tuple[str, float]] = []
     for row in completed:
         cluster = _ticker_week_cluster(row)
-        pct = _safe_float(row.get("net_pnl_pct", row.get("pnl_pct")))
+        pct = _canonical_net_pnl_pct(row)
         usd = _safe_float(row.get("net_pnl_usd"))
         if pct is not None:
             pct_entries.append((cluster, pct))
         if usd is not None:
             usd_entries.append((cluster, usd))
 
-    evaluation_permitted = len(completed) >= min_rows
+    entry_quote_store_verification_established = (
+        _entry_quote_store_verification_established()
+    )
+    evaluation_permitted = bool(
+        entry_quote_store_verification_established and len(completed) >= min_rows
+    )
     percent_bootstrap = None
     usd_bootstrap = None
     if evaluation_permitted:
@@ -493,7 +1285,9 @@ def _forward_evidence_bar_progress(
             draws=max(draws, 1),
         )
 
-    total_net_pnl_usd = round(sum(value for _cluster, value in usd_entries), 4) if usd_entries else None
+    total_net_pnl_usd = (
+        round(sum(value for _cluster, value in usd_entries), 4) if usd_entries else None
+    )
     checks = {
         "completed_rows": len(completed) >= min_rows,
         "ticker_week_clusters": len(clusters) >= min_clusters,
@@ -513,11 +1307,18 @@ def _forward_evidence_bar_progress(
             and _safe_float(usd_bootstrap.get("pf_lb_5pct")) is not None
             and float(usd_bootstrap.get("pf_lb_5pct")) > min_usd_lb
         ),
-        "total_net_pnl_usd": bool(total_net_pnl_usd is not None and total_net_pnl_usd > min_total_usd),
+        "total_net_pnl_usd": bool(
+            total_net_pnl_usd is not None and total_net_pnl_usd > min_total_usd
+        ),
+        "trusted_synchronized_exit_price_lineage": not unresolved_candidate_ids,
+        "unique_valid_completion_events": duplicate_valid_completion_event_count == 0,
+        "entry_quote_store_verification": entry_quote_store_verification_established,
     }
     criteria_met = bool(evaluation_permitted and all(checks.values()))
     if bar_meta.get("status") != "loaded":
         status = "forward_evidence_bar_contract_missing"
+    elif not entry_quote_store_verification_established:
+        status = ENTRY_QUOTE_STORE_VERIFICATION_BLOCKER
     elif not evaluation_permitted:
         status = "waiting_for_min_completed_forward_rows"
     elif criteria_met:
@@ -532,10 +1333,25 @@ def _forward_evidence_bar_progress(
         "accepted_profitability": False,
         "can_change_scanner_policy": False,
         "evaluation_permitted": evaluation_permitted,
+        "entry_quote_store_verification_established": (
+            entry_quote_store_verification_established
+        ),
+        "proof_blockers": (
+            []
+            if entry_quote_store_verification_established
+            else [ENTRY_QUOTE_STORE_VERIFICATION_BLOCKER]
+        ),
         "evaluation_waits_for_min_completed_rows": bool(
             requirements.get("evaluation_may_not_occur_before_min_completed_rows", True)
         ),
         "completed_forward_rows": len(completed),
+        "declared_completed_forward_rows": len(declared_completed),
+        "declared_completed_candidate_count": len(declared_candidate_ids),
+        "completion_lineage_incomplete_count": len(unresolved_candidate_ids),
+        "completion_lineage_unresolved_candidate_ids": unresolved_candidate_ids,
+        "duplicate_valid_completion_event_count": duplicate_valid_completion_event_count,
+        "completion_lineage_reject_counts": dict(sorted(lineage_reject_counts.items())),
+        "completion_lineage_schema": COMPLETION_LINEAGE_SCHEMA,
         "required_completed_forward_rows": min_rows,
         "ticker_week_cluster_count": len(clusters),
         "required_ticker_week_clusters": min_clusters,
@@ -553,8 +1369,13 @@ def _forward_evidence_bar_progress(
     }
 
 
-def _parity_disclosure(scan_task_health: dict[str, Any], scan_task_meta: dict[str, Any]) -> dict[str, Any]:
-    monthly_upper_bound = HISTORICAL_FILTERED_MATERIALIZER_ROW_COUNT / HISTORICAL_FILTERED_MATERIALIZER_MONTH_COUNT
+def _parity_disclosure(
+    scan_task_health: dict[str, Any], scan_task_meta: dict[str, Any]
+) -> dict[str, Any]:
+    monthly_upper_bound = (
+        HISTORICAL_FILTERED_MATERIALIZER_ROW_COUNT
+        / HISTORICAL_FILTERED_MATERIALIZER_MONTH_COUNT
+    )
     return {
         "historical_materializer_entry_window_et": "10:10-10:25",
         "historical_materializer": "deterministic_local_pit_candidate_materializer_v1",
@@ -593,32 +1414,97 @@ def _entry_quote_source(row: dict[str, Any]) -> str:
 def _entry_quote_timestamp(row: dict[str, Any]) -> str:
     return _norm(
         row.get("entry_quote_timestamp_utc")
+        or row.get("entry_quote_as_of_utc")
         or row.get("quote_timestamp_utc")
         or row.get("quote_time_utc")
         or _as_dict(row.get("entry_quote_snapshot")).get("quote_timestamp_utc")
-        or _as_dict(row.get("entry_quote_snapshot")).get("captured_at_utc")
     )
 
 
-def _entry_leg_prices(row: dict[str, Any]) -> tuple[float | None, float | None, float | None, float | None]:
-    liquidity = _as_dict(row.get("spread_liquidity"))
-    snapshot = _as_dict(row.get("entry_quote_snapshot"))
+def _entry_snapshot_leg(row: dict[str, Any], role: str) -> dict[str, Any]:
+    for raw_leg in _as_list(_as_dict(row.get("entry_quote_snapshot")).get("legs")):
+        leg = _as_dict(raw_leg)
+        if _norm_lower(leg.get("role")) == role:
+            return leg
+    return {}
+
+
+def _entry_leg_prices(
+    row: dict[str, Any],
+) -> tuple[float | None, float | None, float | None, float | None]:
+    long_leg = _entry_snapshot_leg(row, "long")
+    short_leg = _entry_snapshot_leg(row, "short")
+    long_bid = _field_from_row(
+        row,
+        (
+            "entry_long_bid",
+            "long_bid",
+            "spread_liquidity.long_bid",
+            "entry_quote_snapshot.long_bid",
+        ),
+    )
+    long_ask = _field_from_row(
+        row,
+        (
+            "entry_long_ask",
+            "long_ask",
+            "spread_liquidity.long_ask",
+            "entry_quote_snapshot.long_ask",
+        ),
+    )
+    short_bid = _field_from_row(
+        row,
+        (
+            "entry_short_bid",
+            "short_bid",
+            "spread_liquidity.short_bid",
+            "entry_quote_snapshot.short_bid",
+        ),
+    )
+    short_ask = _field_from_row(
+        row,
+        (
+            "entry_short_ask",
+            "short_ask",
+            "spread_liquidity.short_ask",
+            "entry_quote_snapshot.short_ask",
+        ),
+    )
     return (
-        _safe_float(_field_from_row(row, ("long_bid", "spread_liquidity.long_bid", "entry_quote_snapshot.long_bid"))),
-        _safe_float(_field_from_row(row, ("long_ask", "spread_liquidity.long_ask", "entry_quote_snapshot.long_ask"))),
-        _safe_float(_field_from_row(row, ("short_bid", "spread_liquidity.short_bid", "entry_quote_snapshot.short_bid"))),
-        _safe_float(_field_from_row(row, ("short_ask", "spread_liquidity.short_ask", "entry_quote_snapshot.short_ask"))),
+        _safe_float(long_bid if long_bid is not None else long_leg.get("bid")),
+        _safe_float(long_ask if long_ask is not None else long_leg.get("ask")),
+        _safe_float(short_bid if short_bid is not None else short_leg.get("bid")),
+        _safe_float(short_ask if short_ask is not None else short_leg.get("ask")),
     )
 
 
 def _entry_provenance(row: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
     reasons: list[str] = []
-    long_contract = _norm(row.get("long_contract_symbol") or row.get("contract_symbol"))
-    short_contract = _norm(row.get("short_contract_symbol"))
+    long_leg = _entry_snapshot_leg(row, "long")
+    short_leg = _entry_snapshot_leg(row, "short")
+    long_contract = _norm(
+        row.get("long_contract_symbol")
+        or row.get("contract_symbol")
+        or long_leg.get("contract_symbol")
+    )
+    short_contract = _norm(
+        row.get("short_contract_symbol") or short_leg.get("contract_symbol")
+    )
     quote_source = _entry_quote_source(row)
-    quote_timestamp = _entry_quote_timestamp(row)
-    expiry = _norm(row.get("expiry") or row.get("expiration") or row.get("resolved_listed_expiry"))[:10]
-    dte = _safe_float(row.get("dte"))
+    quote_timestamp_raw = _entry_quote_timestamp(row)
+    long_timestamp_raw = _norm(
+        row.get("long_entry_quote_timestamp_utc")
+        or row.get("long_entry_quote_as_of_utc")
+        or long_leg.get("quote_timestamp_utc")
+    )
+    short_timestamp_raw = _norm(
+        row.get("short_entry_quote_timestamp_utc")
+        or row.get("short_entry_quote_as_of_utc")
+        or short_leg.get("quote_timestamp_utc")
+    )
+    quote_timestamp = _parse_utc_timestamp(quote_timestamp_raw)
+    long_timestamp = _parse_utc_timestamp(long_timestamp_raw)
+    short_timestamp = _parse_utc_timestamp(short_timestamp_raw)
     long_bid, long_ask, short_bid, short_ask = _entry_leg_prices(row)
     if not long_contract:
         reasons.append("missing_long_contract_symbol")
@@ -626,41 +1512,118 @@ def _entry_provenance(row: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
         reasons.append("missing_short_contract_symbol")
     if not quote_source:
         reasons.append("missing_entry_quote_source")
-    elif _norm_lower(quote_source) not in TRUSTED_EXECUTABLE_QUOTE_SOURCES:
+    elif _norm_lower(quote_source) not in TRUSTED_COMPLETION_ENTRY_QUOTE_SOURCES:
         reasons.append("untrusted_entry_quote_source")
-    if not quote_timestamp:
-        reasons.append("missing_entry_quote_timestamp")
-    if not expiry:
-        reasons.append("missing_expiry")
-    if dte is None:
-        reasons.append("missing_dte")
-    if long_ask is None:
-        reasons.append("missing_entry_long_ask")
-    if short_bid is None:
-        reasons.append("missing_entry_short_bid")
-    entry_debit = round(float(long_ask) - float(short_bid), 4) if long_ask is not None and short_bid is not None else None
+    if quote_timestamp is None:
+        reasons.append("missing_or_invalid_timezone_aware_entry_quote_timestamp")
+    if long_timestamp is None:
+        reasons.append("missing_or_invalid_explicit_long_entry_quote_timestamp")
+    if short_timestamp is None:
+        reasons.append("missing_or_invalid_explicit_short_entry_quote_timestamp")
+    if (
+        quote_timestamp is not None
+        and long_timestamp is not None
+        and short_timestamp is not None
+    ):
+        if quote_timestamp != long_timestamp or quote_timestamp != short_timestamp:
+            reasons.append("entry_quote_timestamps_not_exactly_synchronized")
+        scan_date = _candidate_date(row)
+        if not scan_date or any(
+            timestamp.astimezone(EASTERN).date().isoformat() != scan_date
+            for timestamp in (quote_timestamp, long_timestamp, short_timestamp)
+        ):
+            reasons.append("entry_quote_timestamp_date_mismatch")
+    for field, value in (
+        ("long_bid", long_bid),
+        ("long_ask", long_ask),
+        ("short_bid", short_bid),
+        ("short_ask", short_ask),
+    ):
+        if value is None or value < 0:
+            reasons.append(f"missing_or_invalid_entry_{field}")
+    if long_bid is not None and long_ask is not None and long_ask < long_bid:
+        reasons.append("entry_long_quote_crossed")
+    if short_bid is not None and short_ask is not None and short_ask < short_bid:
+        reasons.append("entry_short_quote_crossed")
+    entry_debit = (
+        round(float(long_ask) - float(short_bid), 4)
+        if long_ask is not None and short_bid is not None
+        else None
+    )
     if entry_debit is not None and entry_debit <= 0:
         reasons.append("non_positive_entry_debit")
-    return (
+    geometry, geometry_reasons = _vertical_geometry(
         {
+            **row,
             "long_contract_symbol": long_contract,
             "short_contract_symbol": short_contract,
+        }
+    )
+    reasons.extend(geometry_reasons)
+    width = _safe_float(geometry.get("spread_width"))
+    if entry_debit is not None and width is not None and entry_debit > width + 0.0001:
+        reasons.append("entry_debit_exceeds_vertical_width")
+    declared_debit = _safe_float(
+        row.get("net_debit")
+        if row.get("net_debit") is not None
+        else row.get("entry_execution_price")
+        if row.get("entry_execution_price") is not None
+        else row.get("entry_debit")
+    )
+    if (
+        declared_debit is not None
+        and entry_debit is not None
+        and abs(declared_debit - entry_debit) > 0.0001
+    ):
+        reasons.append("declared_entry_debit_not_executable_leg_debit")
+    canonical_timestamp = (
+        _utc_iso(quote_timestamp)
+        if quote_timestamp is not None
+        else quote_timestamp_raw
+    )
+    canonical_long_timestamp = (
+        _utc_iso(long_timestamp) if long_timestamp is not None else long_timestamp_raw
+    )
+    canonical_short_timestamp = (
+        _utc_iso(short_timestamp)
+        if short_timestamp is not None
+        else short_timestamp_raw
+    )
+    derived_minute = (
+        quote_timestamp.astimezone(EASTERN).hour * 60
+        + quote_timestamp.astimezone(EASTERN).minute
+        if quote_timestamp is not None
+        else None
+    )
+    return (
+        {
+            **geometry,
+            "long_contract_symbol": long_contract
+            or geometry.get("long_contract_symbol"),
+            "short_contract_symbol": short_contract
+            or geometry.get("short_contract_symbol"),
             "entry_quote_source": quote_source,
-            "entry_quote_timestamp_utc": quote_timestamp,
+            "entry_quote_timestamp_utc": canonical_timestamp,
+            "entry_quote_as_of_utc": canonical_timestamp,
+            "entry_quote_minute_et": derived_minute,
+            "long_entry_quote_timestamp_utc": canonical_long_timestamp,
+            "short_entry_quote_timestamp_utc": canonical_short_timestamp,
+            "long_entry_quote_minute_et": derived_minute,
+            "short_entry_quote_minute_et": derived_minute,
             "entry_long_bid": long_bid,
             "entry_long_ask": long_ask,
             "entry_short_bid": short_bid,
             "entry_short_ask": short_ask,
             "entry_debit": entry_debit,
             "entry_debit_basis": "long_ask_minus_short_bid",
-            "expiry": expiry,
-            "dte": int(dte) if dte is not None else None,
         },
-        reasons,
+        sorted(set(reasons)),
     )
 
 
-def _paper_shadow_row(row: dict[str, Any], *, tracking_start_date: str, tracking_start_at_utc: str) -> dict[str, Any]:
+def _paper_shadow_row(
+    row: dict[str, Any], *, tracking_start_date: str, tracking_start_at_utc: str
+) -> dict[str, Any]:
     signal = _as_dict(row.get("signal_evidence"))
     tracking_state = _norm(row.get("tracking_state")) or "forward_paper_shadow_open"
     if not tracking_state.startswith("forward_paper_shadow_"):
@@ -676,12 +1639,17 @@ def _paper_shadow_row(row: dict[str, Any], *, tracking_start_date: str, tracking
         "policy_exit_date": row.get("policy_exit_date") or _policy_exit_date(row),
         "exit_date": row.get("exit_date"),
         "ticker": _norm(row.get("ticker") or row.get("symbol")).upper(),
-        "lane_id": _norm(row.get("lane_id") or row.get("playbook_id") or row.get("lane")),
+        "lane_id": _norm(
+            row.get("lane_id") or row.get("playbook_id") or row.get("lane")
+        ),
         "direction": _candidate_direction(row),
         "strategy_type": row.get("strategy_type"),
-        "expiry": row.get("expiry") or row.get("expiration") or row.get("resolved_listed_expiry"),
+        "expiry": row.get("expiry")
+        or row.get("expiration")
+        or row.get("resolved_listed_expiry"),
         "dte": row.get("dte"),
-        "long_contract_symbol": row.get("long_contract_symbol") or row.get("contract_symbol"),
+        "long_contract_symbol": row.get("long_contract_symbol")
+        or row.get("contract_symbol"),
         "short_contract_symbol": row.get("short_contract_symbol"),
         "long_strike": row.get("long_strike"),
         "short_strike": row.get("short_strike"),
@@ -689,13 +1657,47 @@ def _paper_shadow_row(row: dict[str, Any], *, tracking_start_date: str, tracking
         "net_debit": row.get("net_debit") or row.get("entry_execution_price"),
         "debit_pct_of_width": row.get("debit_pct_of_width"),
         "underlying_price": row.get("underlying_price"),
-        "prior_20_trading_day_return_pct": signal.get("prior_20_trading_day_return_pct"),
-        "prior_20_trading_day_return_source": signal.get("prior_20_trading_day_return_source"),
-        "entry_quote_source": row.get("entry_quote_source") or row.get("quote_source") or row.get("options_data_source"),
-        "entry_quote_timestamp_utc": row.get("entry_quote_timestamp_utc") or row.get("quote_timestamp_utc") or row.get("quote_time_utc"),
+        "prior_20_trading_day_return_pct": signal.get(
+            "prior_20_trading_day_return_pct"
+        ),
+        "prior_20_trading_day_return_source": signal.get(
+            "prior_20_trading_day_return_source"
+        ),
+        "entry_quote_source": row.get("entry_quote_source")
+        or row.get("quote_source")
+        or row.get("options_data_source"),
+        "entry_quote_timestamp_utc": _entry_quote_timestamp(row),
+        "entry_quote_as_of_utc": row.get("entry_quote_as_of_utc")
+        or _entry_quote_timestamp(row),
+        "entry_quote_minute_et": row.get("entry_quote_minute_et"),
+        "long_entry_quote_timestamp_utc": row.get("long_entry_quote_timestamp_utc")
+        or row.get("long_entry_quote_as_of_utc"),
+        "short_entry_quote_timestamp_utc": row.get("short_entry_quote_timestamp_utc")
+        or row.get("short_entry_quote_as_of_utc"),
+        "long_entry_quote_minute_et": row.get("long_entry_quote_minute_et"),
+        "short_entry_quote_minute_et": row.get("short_entry_quote_minute_et"),
+        "known_at": row.get("known_at"),
+        "tradable_after": row.get("tradable_after"),
+        "decision_timestamp_utc": row.get("decision_timestamp_utc"),
         "planned_exit_status": row.get("planned_exit_status") or "waiting_policy_exit",
         "realized_pnl_status": row.get("realized_pnl_status") or "open_no_exit_yet",
-        "net_pnl_pct": row.get("net_pnl_pct", row.get("pnl_pct")),
+        "exit_quote_timestamp_utc": row.get("exit_quote_timestamp_utc")
+        or row.get("exit_quote_as_of_utc"),
+        "exit_quote_as_of_utc": row.get("exit_quote_as_of_utc")
+        or row.get("exit_quote_timestamp_utc"),
+        "exit_quote_minute_et": row.get("exit_quote_minute_et"),
+        "long_exit_quote_timestamp_utc": row.get("long_exit_quote_timestamp_utc")
+        or row.get("long_exit_quote_as_of_utc"),
+        "short_exit_quote_timestamp_utc": row.get("short_exit_quote_timestamp_utc")
+        or row.get("short_exit_quote_as_of_utc"),
+        "long_exit_quote_minute_et": row.get("long_exit_quote_minute_et"),
+        "short_exit_quote_minute_et": row.get("short_exit_quote_minute_et"),
+        "pnl_pct": row.get("pnl_pct"),
+        "gross_pnl_pct": row.get("gross_pnl_pct")
+        if row.get("gross_pnl_pct") is not None
+        else row.get("pnl_pct"),
+        "net_pnl_pct": _canonical_net_pnl_pct(row),
+        "net_pnl_pct_after_fees": row.get("net_pnl_pct_after_fees"),
         "net_pnl_usd": row.get("net_pnl_usd"),
         "source_scan_run_id": row.get("scanner_run_id") or row.get("scan_run_id"),
         "source_logged_at": row.get("logged_at"),
@@ -708,9 +1710,17 @@ def _paper_shadow_row(row: dict[str, Any], *, tracking_start_date: str, tracking
     }
 
 
-def _matched_entry_log_row(row: dict[str, Any], *, tracking_start_date: str, tracking_start_at_utc: str) -> tuple[dict[str, Any], list[str]]:
-    base = _paper_shadow_row(row, tracking_start_date=tracking_start_date, tracking_start_at_utc=tracking_start_at_utc)
+def _matched_entry_log_row(
+    row: dict[str, Any], *, tracking_start_date: str, tracking_start_at_utc: str
+) -> tuple[dict[str, Any], list[str]]:
+    base = _paper_shadow_row(
+        row,
+        tracking_start_date=tracking_start_date,
+        tracking_start_at_utc=tracking_start_at_utc,
+    )
     provenance, reasons = _entry_provenance(row)
+    scan_provenance, scan_reasons = _scan_provenance(row)
+    signal_lineage, signal_reasons = _signal_lineage(row)
     base.update(provenance)
     base.update(
         {
@@ -722,19 +1732,159 @@ def _matched_entry_log_row(row: dict[str, Any], *, tracking_start_date: str, tra
             "fixture_mode": False,
             "contract_multiplier": CONTRACT_MULTIPLIER,
             "fee_per_contract_leg_usd": DEFAULT_FEE_PER_CONTRACT_LEG_USD,
+            "scan_provenance": scan_provenance,
+            "signal_lineage": signal_lineage,
         }
     )
-    return base, reasons
+    return base, sorted(set([*reasons, *scan_reasons, *signal_reasons]))
+
+
+def _matched_entry_lineage_reject_reasons(row: dict[str, Any]) -> list[str]:
+    reasons: list[str] = []
+    if _norm(row.get("record_type")) != "matched_entry":
+        reasons.append("preceding_entry_record_type_not_exact")
+    if _norm(row.get("lifecycle_event")) != "matched_entry":
+        reasons.append("preceding_entry_lifecycle_event_not_exact")
+    if _norm(row.get("candidate_identity_schema")) != MATCHED_ROW_IDENTITY_SCHEMA:
+        reasons.append("preceding_entry_identity_schema_missing_or_invalid")
+    if not _norm(row.get("candidate_id")):
+        reasons.append("preceding_entry_candidate_id_missing")
+    _provenance, provenance_reasons = _entry_provenance(row)
+    reasons.extend(f"preceding_entry_{reason}" for reason in provenance_reasons)
+    _scan, scan_reasons = _scan_provenance(row)
+    reasons.extend(f"preceding_entry_{reason}" for reason in scan_reasons)
+    _signal, signal_reasons = _signal_lineage(row)
+    reasons.extend(f"preceding_entry_{reason}" for reason in signal_reasons)
+    if not _norm(row.get("ticker")):
+        reasons.append("preceding_entry_ticker_missing")
+    if not _norm(row.get("lane_id")):
+        reasons.append("preceding_entry_lane_id_missing")
+    if _norm(row.get("tracking_policy_id")) != POLICY_ID:
+        reasons.append("preceding_entry_tracking_policy_id_invalid")
+    expected_exit = _policy_exit_date(row)
+    if expected_exit is None:
+        reasons.append("preceding_entry_policy_exit_date_not_computable")
+    elif _norm(row.get("policy_exit_date"))[:10] != expected_exit:
+        reasons.append("preceding_entry_policy_exit_date_mismatch")
+    return sorted(set(reasons))
+
+
+def _completion_preceding_entry_reject_reasons(
+    completion: dict[str, Any],
+    preceding_entry: dict[str, Any] | None,
+) -> list[str]:
+    if preceding_entry is None:
+        return ["completion_preceding_matched_entry_missing"]
+    reasons: list[str] = []
+    text_fields = (
+        "candidate_id",
+        "ticker",
+        "direction",
+        "lane_id",
+        "strategy_type",
+        "tracking_policy_id",
+        "expiry",
+        "policy_exit_date",
+        "long_contract_symbol",
+        "short_contract_symbol",
+        "entry_quote_source",
+        "entry_quote_timestamp_utc",
+        "long_entry_quote_timestamp_utc",
+        "short_entry_quote_timestamp_utc",
+    )
+    for field in text_fields:
+        left = (
+            _norm_lower(completion.get(field))
+            if field == "entry_quote_source"
+            else _norm(completion.get(field))
+        )
+        right = (
+            _norm_lower(preceding_entry.get(field))
+            if field == "entry_quote_source"
+            else _norm(preceding_entry.get(field))
+        )
+        if left != right:
+            reasons.append(f"completion_preceding_entry_{field}_mismatch")
+    numeric_fields = (
+        "dte",
+        "long_strike",
+        "short_strike",
+        "spread_width",
+        "entry_long_ask",
+        "entry_short_bid",
+        "entry_debit",
+    )
+    for field in numeric_fields:
+        left = _safe_float(completion.get(field))
+        right = _safe_float(preceding_entry.get(field))
+        if left is None or right is None or abs(left - right) > 0.0001:
+            reasons.append(f"completion_preceding_entry_{field}_mismatch")
+    for field in ("scan_provenance", "signal_lineage"):
+        if _as_dict(completion.get(field)) != _as_dict(preceding_entry.get(field)):
+            reasons.append(f"completion_preceding_entry_{field}_mismatch")
+    return sorted(set(reasons))
+
+
+def _validated_completion_rows(
+    rows: Sequence[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], Counter[str]]:
+    valid_entries: dict[str, dict[str, Any]] = {}
+    completed_by_candidate: dict[str, dict[str, Any]] = {}
+    declared: list[dict[str, Any]] = []
+    reject_counts: Counter[str] = Counter()
+    for row in rows:
+        candidate_id = _norm(row.get("candidate_id"))
+        if _norm(
+            row.get("record_type")
+        ) == "matched_entry" and not _matched_entry_lineage_reject_reasons(row):
+            valid_entries[candidate_id] = row
+        if not _declares_completed_forward_row(row):
+            continue
+        declared.append(row)
+        reasons = [
+            *_completion_lineage_reject_reasons(row),
+            *_completion_preceding_entry_reject_reasons(
+                row, valid_entries.get(candidate_id)
+            ),
+        ]
+        if not _entry_quote_store_verification_established(
+            valid_entries.get(candidate_id)
+        ):
+            reasons.append(ENTRY_QUOTE_STORE_VERIFICATION_BLOCKER)
+        if reasons:
+            for reason in sorted(set(reasons)):
+                reject_counts[reason] += 1
+            continue
+        if candidate_id in completed_by_candidate:
+            reject_counts["duplicate_valid_completion_event"] += 1
+            continue
+        completed_by_candidate[candidate_id] = row
+    return list(completed_by_candidate.values()), declared, reject_counts
+
+
+def _validated_completed_candidate_ids(rows: Sequence[dict[str, Any]]) -> set[str]:
+    completed, _declared, _reject_counts = _validated_completion_rows(rows)
+    return {
+        _norm(row.get("candidate_id"))
+        for row in completed
+        if _norm(row.get("candidate_id"))
+    }
 
 
 def _merge_lifecycle_rows(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    valid_completed, _declared, _reject_counts = _validated_completion_rows(rows)
+    valid_completion_objects = {id(row) for row in valid_completed}
     by_candidate: dict[str, dict[str, Any]] = {}
     for row in rows:
         candidate_id = _norm(row.get("candidate_id"))
         if not candidate_id:
             continue
+        if _declares_completed_forward_row(row):
+            if id(row) in valid_completion_objects:
+                by_candidate[candidate_id] = dict(row)
+            continue
         current = by_candidate.get(candidate_id)
-        if current is None or (_is_completed_forward_row(row) and not _is_completed_forward_row(current)):
+        if current is None:
             by_candidate[candidate_id] = dict(row)
     return sorted(
         by_candidate.values(),
@@ -753,7 +1903,9 @@ def _append_jsonl_rows(path: Path, rows: Sequence[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf8", newline="\n") as handle:
         for row in rows:
-            handle.write(json.dumps(dict(row), sort_keys=True, separators=(",", ":")) + "\n")
+            handle.write(
+                json.dumps(dict(row), sort_keys=True, separators=(",", ":")) + "\n"
+            )
 
 
 def _conditions_text(conditions: Sequence[Any]) -> str:
@@ -782,7 +1934,13 @@ def build_report(
     generated_at_utc: str | None = None,
     append_matched_rows: bool = False,
 ) -> dict[str, Any]:
-    generated_at = generated_at_utc or _utc_now_iso()
+    generated_at_raw = generated_at_utc or _utc_now_iso()
+    generated_at_parsed = _parse_utc_timestamp(generated_at_raw)
+    generated_at = (
+        _utc_iso(generated_at_parsed)
+        if generated_at_parsed is not None
+        else _norm(generated_at_raw)
+    )
     policy_contract, policy_contract_meta = _load_policy_contract(policy_contract_path)
     bar_contract, bar_meta = _load_optional_json(forward_evidence_bar_contract_path)
     scan_task_health, scan_task_meta = _load_optional_json(scan_task_health_path)
@@ -795,7 +1953,9 @@ def build_report(
     contract_conditions = _as_list(policy_contract.get("conditions"))
     conditions = contract_conditions
     expected_conditions_hash = _norm(policy_contract.get("conditions_sha256"))
-    computed_conditions_hash = _conditions_sha256(contract_conditions) if contract_conditions else ""
+    computed_conditions_hash = (
+        _conditions_sha256(contract_conditions) if contract_conditions else ""
+    )
     latest_audit_conditions = _as_list(filter_source.get("conditions"))
     if filtered_meta.get("status") != "loaded":
         policy_drift_status = "latest_filtered_audit_unavailable"
@@ -803,15 +1963,23 @@ def build_report(
         policy_drift_status = "latest_filtered_audit_diverged_from_frozen_contract"
     else:
         policy_drift_status = "latest_filtered_audit_matches_frozen_contract"
-    prior_start_at = _stable_tracking_start_at(previous_tracker_dir) if previous_tracker_dir else None
+    prior_start_at = (
+        _stable_tracking_start_at(previous_tracker_dir)
+        if previous_tracker_dir
+        else None
+    )
     contract_start_at = _norm(policy_contract.get("tracking_start_at_utc"))
-    start_at = _norm(
+    start_at_raw = _norm(
         contract_start_at
         or tracking_start_at_utc
         or prior_start_at
         or filtered_audit.get("generated_at_utc")
         or filtered_audit.get("completed_at_utc")
         or generated_at
+    )
+    start_at_parsed = _parse_utc_timestamp(start_at_raw)
+    start_at = (
+        _utc_iso(start_at_parsed) if start_at_parsed is not None else start_at_raw
     )
     start_source = (
         "frozen_policy_contract"
@@ -822,23 +1990,44 @@ def build_report(
         if prior_start_at
         else "filtered_audit_timestamp"
     )
-    start_date = _norm(start_at if contract_start_at else tracking_start_date or start_at)[:10]
+    start_date = (
+        start_at_parsed.astimezone(EASTERN).date().isoformat()
+        if start_at_parsed is not None
+        else _norm(tracking_start_date or start_at)[:10]
+    )
 
     blockers: list[str] = []
+    if generated_at_parsed is None:
+        blockers.append("generated_at_timestamp_missing_or_not_timezone_aware")
+    if start_at_parsed is None:
+        blockers.append("tracking_start_timestamp_missing_or_not_timezone_aware")
+    if tracking_start_date and _norm(tracking_start_date)[:10] != start_date:
+        blockers.append("tracking_start_date_timestamp_mismatch")
     if policy_contract_meta.get("status") != "loaded":
         blockers.append("frozen_filtered_policy_contract_missing")
     if not conditions:
         blockers.append("frozen_filtered_policy_conditions_missing")
-    if expected_conditions_hash and computed_conditions_hash and expected_conditions_hash != computed_conditions_hash:
+    if (
+        expected_conditions_hash
+        and computed_conditions_hash
+        and expected_conditions_hash != computed_conditions_hash
+    ):
         blockers.append("frozen_filtered_policy_hash_mismatch")
     elif conditions and not expected_conditions_hash:
         blockers.append("frozen_filtered_policy_hash_missing")
     if scan_meta.get("status") != "loaded":
         blockers.append("scan_picks_not_loaded")
-    matched_log_duplicates = _matched_log_duplicate_daily_signal_identities(matched_log_rows)
-    matched_log_identity_schema_current = _matched_log_has_current_identity_schema(matched_log_rows)
+    blockers.extend(_scan_task_health_reject_reasons(scan_task_health, scan_task_meta))
+    matched_log_duplicates = _matched_log_duplicate_daily_signal_identities(
+        matched_log_rows
+    )
+    matched_log_identity_schema_current = _matched_log_has_current_identity_schema(
+        matched_log_rows
+    )
     if matched_log_rows and not matched_log_identity_schema_current:
-        blockers.append("matched_rows_log_nonempty_before_daily_signal_identity_upgrade")
+        blockers.append(
+            "matched_rows_log_nonempty_before_daily_signal_identity_upgrade"
+        )
     if matched_log_duplicates:
         blockers.append("duplicate_ticker_date_direction_matched_rows")
 
@@ -846,31 +2035,55 @@ def build_report(
     rejected_counts: Counter[str] = Counter()
     if not blockers:
         for row in scan_rows:
-            enriched, reject_reason = _scan_row_for_filter(row, source_index)
+            source_row = {
+                **row,
+                "_source_scan_picks_sha256": _file_hash(source_scan_picks_path),
+                "_scan_task_health_sha256": scan_task_meta.get("sha256"),
+                "_scan_task_health_status": scan_task_health.get("status"),
+                "_scan_task_health_generated_at_utc": scan_task_health.get(
+                    "generated_at_utc"
+                ),
+            }
+            enriched, reject_reason = _scan_row_for_filter(source_row, source_index)
             if reject_reason:
                 rejected_counts[reject_reason] += 1
                 continue
             scan_date = _candidate_date(enriched)
-            if start_date and scan_date < start_date:
+            if start_date and scan_date and scan_date < start_date:
                 rejected_counts["pre_tracking_start_date"] += 1
                 continue
-            if start_at and scan_date == start_date:
-                scan_timestamp = _candidate_timestamp(enriched)
-                if not scan_timestamp:
-                    rejected_counts["missing_post_tracking_timestamp"] += 1
-                    continue
-                if scan_timestamp < start_at:
-                    rejected_counts["pre_tracking_start_timestamp"] += 1
-                    continue
+            scan_timestamp = _parse_utc_timestamp(_candidate_timestamp(enriched))
+            if scan_timestamp is None:
+                rejected_counts["missing_or_invalid_timezone_aware_scan_timestamp"] += 1
+                continue
+            if (
+                not scan_date
+                or scan_timestamp.astimezone(EASTERN).date().isoformat() != scan_date
+            ):
+                rejected_counts["scan_timestamp_date_mismatch"] += 1
+                continue
+            if start_at_parsed is not None and scan_timestamp < start_at_parsed:
+                rejected_counts["pre_tracking_start_timestamp"] += 1
+                continue
             enriched_rows.append(enriched)
-    raw_matched = _filter_rows(enriched_rows, {"conditions": conditions}) if conditions and not blockers else []
+    raw_matched = (
+        _filter_rows(enriched_rows, {"conditions": conditions})
+        if conditions and not blockers
+        else []
+    )
     matched, match_dedupe_counts = _first_daily_signal_matches(raw_matched)
-    existing_candidate_ids = {_norm(row.get("candidate_id")) for row in matched_log_rows if _norm(row.get("candidate_id"))}
+    existing_candidate_ids = {
+        _norm(row.get("candidate_id"))
+        for row in matched_log_rows
+        if _norm(row.get("candidate_id"))
+    }
     appendable_entries: list[dict[str, Any]] = []
     unappendable_rows: list[dict[str, Any]] = []
     unappendable_counts: Counter[str] = Counter()
     for row in matched:
-        entry, reasons = _matched_entry_log_row(row, tracking_start_date=start_date, tracking_start_at_utc=start_at)
+        entry, reasons = _matched_entry_log_row(
+            row, tracking_start_date=start_date, tracking_start_at_utc=start_at
+        )
         if reasons:
             for reason in reasons:
                 unappendable_counts[reason] += 1
@@ -894,30 +2107,64 @@ def build_report(
         matched_log_meta = {
             **matched_log_meta,
             "exists": True,
-            "status": "loaded" if matched_log_meta.get("status") in {"loaded", "missing"} else matched_log_meta.get("status"),
-            "row_count": int(matched_log_meta.get("row_count") or 0) + len(appendable_entries),
+            "status": "loaded"
+            if matched_log_meta.get("status") in {"loaded", "missing"}
+            else matched_log_meta.get("status"),
+            "row_count": int(matched_log_meta.get("row_count") or 0)
+            + len(appendable_entries),
         }
-    merged_source_rows = [*matched_log_rows, *([] if append_matched_rows else appendable_entries)]
+    merged_source_rows = [
+        *matched_log_rows,
+        *([] if append_matched_rows else appendable_entries),
+    ]
     paper_shadow_rows = _merge_lifecycle_rows(merged_source_rows)
-    by_state = Counter(str(row.get("tracking_state")) for row in paper_shadow_rows)
     by_ticker = Counter(str(row.get("ticker")) for row in paper_shadow_rows)
     by_date = Counter(str(row.get("scan_date")) for row in paper_shadow_rows)
     historical_metrics = _as_dict(filtered_audit.get("metrics"))
     audit_metrics = _as_dict(historical_metrics.get("simulated_forward_audit"))
-    audit_bootstrap = _as_dict(audit_metrics.get("bootstrap_cluster") or audit_metrics.get("bootstrap"))
+    audit_bootstrap = _as_dict(
+        audit_metrics.get("bootstrap_cluster") or audit_metrics.get("bootstrap")
+    )
     forward_evidence_bar = _forward_evidence_bar_progress(
-        paper_shadow_rows,
+        merged_source_rows,
         bar_contract=bar_contract,
         bar_meta=bar_meta,
     )
     parity_disclosure = _parity_disclosure(scan_task_health, scan_task_meta)
-    status = "filtered_forward_paper_shadow_tracking_active" if not blockers else "blocked_filtered_forward_paper_shadow_tracker"
+    (
+        validated_completion_rows,
+        declared_completion_rows,
+        raw_completion_lineage_reject_counts,
+    ) = _validated_completion_rows(matched_log_rows)
+    duplicate_valid_completion_event_count = int(
+        raw_completion_lineage_reject_counts.get("duplicate_valid_completion_event")
+        or 0
+    )
+    invalid_completion_claim_count = max(
+        0,
+        len(declared_completion_rows)
+        - len(validated_completion_rows)
+        - duplicate_valid_completion_event_count,
+    )
+    validated_completed_count = len(
+        {_norm(row.get("candidate_id")) for row in validated_completion_rows}
+    )
+    status = (
+        "filtered_forward_paper_shadow_tracking_active"
+        if not blockers
+        else "blocked_filtered_forward_paper_shadow_tracker"
+    )
     return {
         "report_id": REPORT_ID,
         "status": status,
         "generated_at_utc": generated_at,
         "schema_version": 1,
-        "read_only": True,
+        "read_only": not append_matched_rows,
+        "matched_rows_log_write_requested": bool(append_matched_rows),
+        "matched_rows_log_rows_written": len(appendable_entries)
+        if append_matched_rows
+        else 0,
+        "report_artifact_write_performed": False,
         "tracking_policy_id": POLICY_ID,
         "tracking_start_date": start_date,
         "tracking_start_at_utc": start_at,
@@ -928,8 +2175,14 @@ def build_report(
             "forward_evidence_bar_contract": bar_meta,
             "scan_task_health": scan_task_meta,
             "filtered_audit": filtered_meta,
-            "source_scan_picks": {**scan_meta, "sha256": _file_hash(source_scan_picks_path)},
-            "matched_rows_log": {**matched_log_meta, "sha256": _file_hash(matched_rows_log_path)},
+            "source_scan_picks": {
+                **scan_meta,
+                "sha256": _file_hash(source_scan_picks_path),
+            },
+            "matched_rows_log": {
+                **matched_log_meta,
+                "sha256": _file_hash(matched_rows_log_path),
+            },
             "underlying_daily_source_rows": daily_meta,
         },
         "frozen_filter": {
@@ -950,17 +2203,23 @@ def build_report(
             "source_report_id": filter_source.get("source_report_id"),
             "source_status": filter_source.get("source_status"),
             "filter_id": filter_source.get("filter_id"),
-            "conditions_sha256": _conditions_sha256(latest_audit_conditions) if latest_audit_conditions else None,
+            "conditions_sha256": _conditions_sha256(latest_audit_conditions)
+            if latest_audit_conditions
+            else None,
         },
         "historical_audit_context": {
             "status": filtered_audit.get("status"),
-            "accepted_historical_filtered_audit": filtered_audit.get("accepted_historical_filtered_audit"),
+            "accepted_historical_filtered_audit": filtered_audit.get(
+                "accepted_historical_filtered_audit"
+            ),
             "accepted_profitability": filtered_audit.get("accepted_profitability"),
             "audit_exact_trade_count": audit_metrics.get("exact_trade_count"),
             "audit_profit_factor": audit_metrics.get("profit_factor"),
             "audit_avg_pnl_pct": audit_metrics.get("avg_pnl_pct"),
             "audit_pf_lb_5pct": audit_bootstrap.get("pf_lb_5pct"),
-            "historical_rows_are_forward_proof": filtered_audit.get("historical_rows_are_forward_proof"),
+            "historical_rows_are_forward_proof": filtered_audit.get(
+                "historical_rows_are_forward_proof"
+            ),
         },
         "forward_tracking": {
             "tracking_start_date": start_date,
@@ -969,17 +2228,32 @@ def build_report(
             "source_scan_row_count": len(scan_rows),
             "evaluated_scan_row_count": len(enriched_rows),
             "matched_candidate_count": len(paper_shadow_rows),
-            "open_candidate_count": by_state.get("forward_paper_shadow_open", 0),
-            "completed_candidate_count": by_state.get("forward_paper_shadow_completed", 0),
+            "open_candidate_count": len(paper_shadow_rows) - validated_completed_count,
+            "completed_candidate_count": validated_completed_count,
+            "invalid_completion_claim_count": invalid_completion_claim_count,
+            "duplicate_valid_completion_event_count": duplicate_valid_completion_event_count,
+            "completion_lineage_reject_counts": dict(
+                sorted(raw_completion_lineage_reject_counts.items())
+            ),
+            "completion_lineage_schema": COMPLETION_LINEAGE_SCHEMA,
+            "entry_quote_store_verification_established": forward_evidence_bar.get(
+                "entry_quote_store_verification_established"
+            ),
             "appendable_entry_count": len(appendable_entries),
-            "entry_rows_appended_count": len(appendable_entries) if append_matched_rows else 0,
+            "entry_rows_appended_count": len(appendable_entries)
+            if append_matched_rows
+            else 0,
             "raw_matched_scan_row_count": len(raw_matched),
             "daily_signal_matched_row_count": len(matched),
             "same_day_signal_duplicate_matches_suppressed_count": match_dedupe_counts[
                 "duplicate_same_day_signal_matches_suppressed"
             ],
-            "matched_but_unappendable_missing_entry_provenance_count": len(unappendable_rows),
-            "matched_but_unappendable_counts": dict(sorted(unappendable_counts.items())),
+            "matched_but_unappendable_missing_entry_provenance_count": len(
+                unappendable_rows
+            ),
+            "matched_but_unappendable_counts": dict(
+                sorted(unappendable_counts.items())
+            ),
             "matched_rows_log_identity_schema": MATCHED_ROW_IDENTITY_SCHEMA,
             "matched_rows_log_identity_schema_current": matched_log_identity_schema_current,
             "duplicate_daily_signal_identity_count": len(matched_log_duplicates),
@@ -988,6 +2262,7 @@ def build_report(
             "rejected_counts": dict(sorted(rejected_counts.items())),
         },
         "forward_evidence_bar": forward_evidence_bar,
+        "profitability_proof_blockers": forward_evidence_bar.get("proof_blockers", []),
         "parity_disclosure": parity_disclosure,
         "candidate_rows": paper_shadow_rows,
         "matched_but_unappendable_rows": unappendable_rows,
@@ -1040,6 +2315,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Matched-but-unappendable counts: `{json.dumps(tracking.get('matched_but_unappendable_counts') or {}, sort_keys=True)}`.",
         f"- Rejected counts: `{json.dumps(tracking.get('rejected_counts') or {}, sort_keys=True)}`.",
         f"- Forward evidence bar status: `{bar.get('status')}`.",
+        f"- Entry quote store verification established: `{bar.get('entry_quote_store_verification_established')}`.",
+        f"- Profitability proof blockers: `{json.dumps(bar.get('proof_blockers') or [], sort_keys=True)}`.",
         "",
         "## Historical Context",
         "",
@@ -1057,6 +2334,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Calendar months with rows: `{bar.get('calendar_month_count')}` / `{bar.get('required_calendar_months')}`.",
         f"- Fixture rows: `{bar.get('fixture_row_count')}` / max `{bar.get('max_fixture_rows')}`.",
         f"- Evaluation permitted: `{bar.get('evaluation_permitted')}`.",
+        f"- Entry quote store verification established: `{bar.get('entry_quote_store_verification_established')}`.",
+        f"- Proof blockers: `{json.dumps(bar.get('proof_blockers') or [], sort_keys=True)}`.",
         f"- Criteria met reporting-only: `{bar.get('criteria_met_reporting_only')}`.",
         f"- Approval authority: `{bar.get('approval_authority')}`.",
         f"- Percent cluster PF LB 5%: `{_as_dict(bar.get('percent_cluster_bootstrap')).get('pf_lb_5pct')}`.",
@@ -1118,6 +2397,7 @@ def write_outputs(
     matched_rows_log: Path = DEFAULT_MATCHED_ROWS_LOG,
     docs_report: Path = DEFAULT_DOCS_REPORT,
 ) -> dict[str, str]:
+    report["report_artifact_write_performed"] = True
     output_dir.mkdir(parents=True, exist_ok=True)
     candidates_jsonl.parent.mkdir(parents=True, exist_ok=True)
     docs_report.parent.mkdir(parents=True, exist_ok=True)
@@ -1139,7 +2419,10 @@ def write_outputs(
     payload = json.dumps(report, indent=2, sort_keys=True) + "\n"
     markdown = render_markdown(report) + "\n"
     rows = _as_list(report.get("candidate_rows"))
-    jsonl = "".join(json.dumps(_as_dict(row), sort_keys=True, separators=(",", ":")) + "\n" for row in rows)
+    jsonl = "".join(
+        json.dumps(_as_dict(row), sort_keys=True, separators=(",", ":")) + "\n"
+        for row in rows
+    )
     json_path.write_text(payload, encoding="utf8")
     latest_json.write_text(payload, encoding="utf8")
     md_path.write_text(markdown, encoding="utf8")
@@ -1150,19 +2433,37 @@ def write_outputs(
 
 
 def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Track forward paper-shadow candidates for the frozen filtered policy.")
+    parser = argparse.ArgumentParser(
+        description="Track forward paper-shadow candidates for the frozen filtered policy."
+    )
     parser.add_argument("--policy-contract", type=Path, default=DEFAULT_POLICY_CONTRACT)
-    parser.add_argument("--forward-evidence-bar-contract", type=Path, default=DEFAULT_FORWARD_EVIDENCE_BAR_CONTRACT)
-    parser.add_argument("--scan-task-health", type=Path, default=DEFAULT_SCAN_TASK_HEALTH)
+    parser.add_argument(
+        "--forward-evidence-bar-contract",
+        type=Path,
+        default=DEFAULT_FORWARD_EVIDENCE_BAR_CONTRACT,
+    )
+    parser.add_argument(
+        "--scan-task-health", type=Path, default=DEFAULT_SCAN_TASK_HEALTH
+    )
     parser.add_argument("--filtered-audit", type=Path, default=DEFAULT_FILTERED_AUDIT)
-    parser.add_argument("--source-scan-picks", type=Path, default=DEFAULT_SOURCE_SCAN_PICKS)
-    parser.add_argument("--underlying-daily-source-rows", type=Path, default=DEFAULT_UNDERLYING_DAILY_SOURCE_ROWS)
-    parser.add_argument("--matched-rows-log", type=Path, default=DEFAULT_MATCHED_ROWS_LOG)
+    parser.add_argument(
+        "--source-scan-picks", type=Path, default=DEFAULT_SOURCE_SCAN_PICKS
+    )
+    parser.add_argument(
+        "--underlying-daily-source-rows",
+        type=Path,
+        default=DEFAULT_UNDERLYING_DAILY_SOURCE_ROWS,
+    )
+    parser.add_argument(
+        "--matched-rows-log", type=Path, default=DEFAULT_MATCHED_ROWS_LOG
+    )
     parser.add_argument("--tracking-start-date", default=None)
     parser.add_argument("--tracking-start-at-utc", default=None)
     parser.add_argument("--previous-tracker-dir", type=Path, default=None)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
-    parser.add_argument("--candidate-rows-jsonl", type=Path, default=DEFAULT_CANDIDATES_JSONL)
+    parser.add_argument(
+        "--candidate-rows-jsonl", type=Path, default=DEFAULT_CANDIDATES_JSONL
+    )
     parser.add_argument("--docs-report", type=Path, default=DEFAULT_DOCS_REPORT)
     parser.add_argument("--no-write", action="store_true")
     parser.add_argument("--json", action="store_true", dest="json_output")

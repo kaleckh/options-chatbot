@@ -22,6 +22,10 @@ Before changing code or docs in this repo:
 
 The computer-wide graph is a pointer/provenance layer only. For this repo, living docs, generated readbacks, code, exact evidence artifacts, gateboard state, and the local `data/agent-control/` runtime graph remain authoritative.
 
+Within an agreed CEO goal, the Prime agent has full local implementation authority over the scoped workspace. It may directly edit code, tests, docs, scripts, config, control-plane logic, and strategy/scanner/data workflows, and it may delegate bounded work without per-worker approval. Worker permission/autonomy labels such as `context_only`, `read_only_workers`, and `code_docs` constrain the dependent worker or control-plane action; they do not make the whole CEO session read-only.
+
+Trading and release gates remain action-specific and independent of implementation authority. Evidence mutation, production scanner activation, proof or promotion decisions, broker or live-capital action, protected-holdout use, cohort append, and stop/sizing changes still require their explicit scope and current authoritative gates. A blocked dependent gate does not freeze unrelated in-scope implementation, and memory never broadens the agreed goal.
+
 For large, resumed, CEO-style, audit, or worker/subagent work, run `npm run memory:bootstrap` before planning. For focused recovery, run:
 
 ```bash
@@ -36,8 +40,15 @@ Agent memory read paths:
 - `npm run memory:dream-run`: run the automated dreaming loop now; it extracts explicit session lessons/open questions, auto-accepts only low-risk evidence-backed orchestration memory, auto-rejects everything else, and writes an audit trail.
 - `npm run memory:dream-audit`: inspect the latest automated dreaming run and current dream/memory health.
 - `npm run memory:operator-dashboard`: audit startup compliance, retrieval index health, dream automation, event outbox, and research provenance counts.
+- `npm run memory:backup`, `npm run memory:restore-check`, and `npm run memory:doctor`: create and validate portable runtime-memory bundles and audit ledger, event-mirror, session, lifecycle, and retrieval health. Schema-v5 restore requires every declared member, exact tenant identity, and DB/session-sidecar parity; current outbox rows use canonical v2 hashes while declared legacy bundles retain bounded audit compatibility. `memory repair-event-mirror` is a dry run unless `--apply` is supplied after backup and review.
 - `npm run memory:research-priorities`: inspect research-only provenance priorities such as zero-candidate episodes; this cannot authorize trading or evidence changes.
 - `npm run memory:audit`, `npm run memory:repair-authority`, `npm run memory:review-dreams`, and `npm run verify:memory`: check lifecycle health before final handoff on meaningful memory work and backfill legacy authority metadata when audit reports it.
+
+Schema-v5 observed evidence cannot self-assert trust through ordinary metadata. A reserved attestation is written only by trusted writers and must cross-check either the durable session/outbox record or the authoritative artifact source and hash. Required freshness always includes the code-owned `PROJECT_SEED_FILES` set, even if expectation rows are missing or deleted.
+
+Living-history class expectations are stable: WORKLOG entries remain episodes and DECISIONS entries remain decisions, with activation recorded through hash-chained events. Schema setup serializes and retries WAL initialization; ghost cleanup is transactional. Gateboard source-artifact nodes derive from one coherent gateboard byte snapshot, hash validated `available=true` artifacts at seed time, and preserve `available=false` as an explicit unavailable declaration rather than fabricated provenance.
+
+Schema v5 is code- and test-frozen at 119 agent-control tests plus 17 memory-graph tests, 136 total, with root-level reproduction. Live migration, session repair, ghost cleanup, final living-history ingest/bootstrap, doctor, audit, retrieval, dashboard, eval, outbox/mirror/anchor checks, backup restore, and dream audit are green. The Windows tasks `\ProjectsMemoryDreaming`, `\OptionsMemoryDreaming`, and `\OptionsMemoryMaintenance` have observed `LastTaskResult=0`; `\OptionsMemoryDreaming` keeps its 45-minute execution limit. See `docs/memory-graph-v5-upgrade-audit-2026-07-10.md` and `docs/NEXT_STEPS.md`.
 
 Agent memory write paths:
 

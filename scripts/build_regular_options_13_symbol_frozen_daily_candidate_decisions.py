@@ -8,6 +8,7 @@ from collections import Counter, defaultdict
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Sequence
+from zoneinfo import ZoneInfo
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,8 +43,8 @@ DEFAULT_HISTORICAL_SCANNER_REPLAY_ADAPTER = (
 BLOCKER = "missing_historical_scanner_replay_adapter"
 INPUT_BLOCKER = "missing_historical_scanner_point_in_time_inputs"
 MISSING_COMMAND = (
-    "missing local read-only command: historical frozen scanner replay adapter accepting "
-    "candidate_generation_date, as_of_date, lane_id, symbol, and no_write"
+    "unavailable end-to-end no-write production scanner replay: signatures and historical provider support exist, "
+    "but candidate_generation_date, as_of_date, lane_id, symbol decisions are not emitted by the production scanner"
 )
 ACCEPTED_STATUSES = {"selected_candidate", "explicit_no_pick"}
 FALSE_FLAGS = {
@@ -83,6 +84,8 @@ FORBIDDEN_ACTIONS = [
     "invent_selected_or_no_pick_rows",
 ]
 DEFAULT_CANDIDATE_MATERIALIZATION_BASIS = "deterministic_local_pit_candidate_materializer_v1"
+ENTRY_START_MINUTE = 10 * 60 + 10
+EASTERN = ZoneInfo("America/New_York")
 
 
 def _source_non_parity(source: dict[str, Any] | None) -> dict[str, Any]:
@@ -104,6 +107,30 @@ def _utc_now_iso() -> str:
 
 def _utc_stamp() -> str:
     return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _et_minute_to_utc_iso(day: date, minute_et: int = ENTRY_START_MINUTE) -> str:
+    hour, minute = divmod(int(minute_et), 60)
+    localized = datetime(day.year, day.month, day.day, hour, minute, tzinfo=EASTERN)
+    return localized.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _latest_utc_timestamp(*values: Any) -> str | None:
+    parsed: list[datetime] = []
+    for value in values:
+        text = str(value or "").strip()
+        if not text:
+            continue
+        try:
+            item = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if item.tzinfo is None:
+            item = item.replace(tzinfo=UTC)
+        parsed.append(item.astimezone(UTC))
+    if not parsed:
+        return None
+    return max(parsed).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _rel(path: Path) -> str:
@@ -165,9 +192,20 @@ def _scanner_surface() -> dict[str, Any]:
     }
     run_has_date = bool(historical_param_names.intersection(run_params))
     scan_has_date = bool(historical_param_names.intersection(scan_params))
-    adapter_available = bool(run_has_date and scan_has_date)
+    signature_support_available = bool(run_has_date and scan_has_date)
+    try:
+        scanner_source = (ROOT / "options_chatbot.py").read_text(encoding="utf8")
+    except OSError:
+        scanner_source = ""
+    observed_no_write_empty_short_circuit = bool(
+        "no_write_scan_blocks_provider_fetches" in scanner_source and "return []" in scanner_source
+    )
+    adapter_available = False
     return {
         "adapter_available": adapter_available,
+        "signature_support_available": signature_support_available,
+        "end_to_end_no_write_scanner_replay_available": False,
+        "observed_no_write_empty_short_circuit": observed_no_write_empty_short_circuit,
         "inspected_callables": [
             {
                 "path": "supervised_scan.py",
@@ -182,8 +220,8 @@ def _scanner_surface() -> dict[str, Any]:
                 "historical_date_parameter_available": scan_has_date,
             },
         ],
-        "decision": "historical_replay_adapter_available" if adapter_available else BLOCKER,
-        "missing_command": None if adapter_available else MISSING_COMMAND,
+        "decision": "end_to_end_no_write_scanner_replay_unavailable",
+        "missing_command": MISSING_COMMAND,
     }
 
 
@@ -322,13 +360,17 @@ def _build_rows(
                 status = _normalize_status(source_row.get("status") or source_row.get("decision"))
                 row_blockers.extend(str(item) for item in _as_list(source_row.get("blockers")))
                 source_proof_safe = source_row.get("proof_safe") is True
+                source_research_materializer_safe = bool(
+                    source_proof_safe or source_row.get("research_materializer_safe") is True
+                )
                 if source_integrity_blockers:
                     status = "blocked_source_artifact_not_exact_frozen_daily_decision_source"
                     source_proof_safe = False
+                    source_research_materializer_safe = False
                 elif status not in ACCEPTED_STATUSES and not status.startswith("blocked_"):
                     status = "blocked_unsupported_daily_candidate_decision_status"
                     row_blockers.append("unsupported_daily_candidate_decision_status")
-                elif status in ACCEPTED_STATUSES and not source_proof_safe:
+                elif status in ACCEPTED_STATUSES and not source_research_materializer_safe:
                     status = "blocked_daily_candidate_decision_not_proof_safe"
                     row_blockers.append("daily_candidate_decision_not_proof_safe")
             else:
@@ -343,7 +385,29 @@ def _build_rows(
                     status = f"blocked_{BLOCKER}"
                     row_blockers.extend([BLOCKER, INPUT_BLOCKER])
                 source_proof_safe = False
+                source_research_materializer_safe = False
 
+            fallback_timestamp = _et_minute_to_utc_iso(current_date)
+            source_signal = _as_dict(source_row.get("signal_evidence")) if source_row else {}
+            entry_quote_timestamp = _latest_utc_timestamp(
+                source_row.get("entry_quote_timestamp_utc") if source_row else None,
+                source_row.get("entry_quote_as_of_utc") if source_row else None,
+                source_row.get("long_entry_quote_timestamp_utc") if source_row else None,
+                source_row.get("long_entry_quote_as_of_utc") if source_row else None,
+                source_row.get("short_entry_quote_timestamp_utc") if source_row else None,
+                source_row.get("short_entry_quote_as_of_utc") if source_row else None,
+            )
+            known_at = (
+                str(source_row.get("known_at") or source_signal.get("known_at_utc") or "")
+                if source_row
+                else ""
+            ) or fallback_timestamp
+            tradable_after = (
+                str(source_row.get("tradable_after") or "") if source_row else ""
+            ) or entry_quote_timestamp or fallback_timestamp
+            decision_timestamp = (
+                str(source_row.get("decision_timestamp_utc") or "") if source_row else ""
+            ) or tradable_after
             row = {
                 "row_id": f"{REPORT_ID}:{current_date.isoformat()}:{lane}:{symbol}",
                 "date": current_date.isoformat(),
@@ -358,9 +422,12 @@ def _build_rows(
                 "selected_candidate": status == "selected_candidate",
                 "explicit_no_pick": status == "explicit_no_pick",
                 "proof_safe": bool(status in ACCEPTED_STATUSES and source_proof_safe),
-                "known_at": f"{current_date.isoformat()}T00:00:00Z",
-                "tradable_after": f"{current_date.isoformat()}T13:30:00Z",
-                "decision_timestamp_utc": f"{current_date.isoformat()}T00:00:00Z",
+                "research_materializer_safe": bool(
+                    status in ACCEPTED_STATUSES and source_research_materializer_safe
+                ),
+                "known_at": known_at,
+                "tradable_after": tradable_after,
+                "decision_timestamp_utc": decision_timestamp,
                 "as_of_date": as_of.isoformat(),
                 "read_only": True,
                 "no_write": True,
@@ -378,6 +445,9 @@ def _build_rows(
                     "missing_command": scanner_surface.get("missing_command"),
                     "source_row_present": bool(source_row),
                     "proof_safe": bool(status in ACCEPTED_STATUSES and source_proof_safe),
+                    "research_materializer_safe": bool(
+                        status in ACCEPTED_STATUSES and source_research_materializer_safe
+                    ),
                     **non_parity,
                 },
                 "blockers": sorted(dict.fromkeys(row_blockers)),
@@ -397,6 +467,7 @@ def _build_rows(
                     "quote_source",
                     "exact_priced",
                     "pnl_pct",
+                    "gross_pnl_pct",
                     "net_pnl_pct",
                     "contract_multiplier",
                     "fee_per_contract_leg_usd",
@@ -424,10 +495,36 @@ def _build_rows(
                     "long_entry_ask",
                     "short_entry_bid",
                     "short_entry_ask",
+                    "entry_quote_minute_et",
+                    "entry_quote_as_of_utc",
+                    "entry_quote_timestamp_utc",
+                    "long_entry_quote_minute_et",
+                    "short_entry_quote_minute_et",
+                    "long_entry_quote_as_of_utc",
+                    "short_entry_quote_as_of_utc",
+                    "long_entry_quote_timestamp_utc",
+                    "short_entry_quote_timestamp_utc",
                     "long_exit_bid",
                     "long_exit_ask",
                     "short_exit_bid",
                     "short_exit_ask",
+                    "exit_quote_minute_et",
+                    "exit_quote_as_of_utc",
+                    "exit_quote_timestamp_utc",
+                    "long_exit_quote_minute_et",
+                    "short_exit_quote_minute_et",
+                    "long_exit_quote_as_of_utc",
+                    "short_exit_quote_as_of_utc",
+                    "long_exit_quote_timestamp_utc",
+                    "short_exit_quote_timestamp_utc",
+                    "policy_exit_target_date",
+                    "exit_calendar_observable_through_date",
+                    "exit_calendar_latest_available_date",
+                    "exit_right_censored",
+                    "exit_right_censor_reason",
+                    "exit_evidence_blocker",
+                    "exit_price_lineage_status",
+                    "exit_price_lineage",
                     "signal_evidence",
                     "no_pick_reason",
                 ):
@@ -447,9 +544,16 @@ def _build_rows(
                         "selected_candidate": status == "selected_candidate",
                         "explicit_no_pick": status == "explicit_no_pick",
                         "proof_safe": bool(status in ACCEPTED_STATUSES and source_proof_safe),
+                        "research_materializer_safe": bool(
+                            status in ACCEPTED_STATUSES and source_research_materializer_safe
+                        ),
                         "blockers": sorted(dict.fromkeys(row_blockers)),
                     }
                 )
+                if row.get("net_pnl_pct_after_fees") not in (None, ""):
+                    if row.get("net_pnl_pct") != row.get("net_pnl_pct_after_fees"):
+                        row["legacy_net_pnl_pct"] = row.get("net_pnl_pct")
+                    row["net_pnl_pct"] = row.get("net_pnl_pct_after_fees")
             rows.append(row)
             blockers.extend(row_blockers)
             if row["selected_candidate"]:
@@ -503,8 +607,6 @@ def build_report(
         raise ValueError("start-date, end-date, and as-of-date must be valid YYYY-MM-DD values with start <= end")
     if frozen_universe != ALLOWED_UNIVERSE:
         raise ValueError("universe must exactly match the frozen 13-symbol universe")
-    no_write = True
-
     cohort, cohort_meta = _load_json(forward_cohort_path)
     feature, feature_meta = _load_json(feature_store_path)
     source: dict[str, Any] | None = None
@@ -516,7 +618,7 @@ def build_report(
     pairs = _cohort_pairs(cohort, ALLOWED_UNIVERSE)
     scanner_surface = _scanner_surface()
     source_integrity = _source_integrity(source=source, source_meta=source_meta, pairs=pairs)
-    daily_rows, selected, blockers = _build_rows(
+    daily_rows, selected, materializer_blockers = _build_rows(
         market_dates=dates,
         pairs=pairs,
         as_of=as_of,
@@ -526,20 +628,26 @@ def build_report(
         source_integrity=source_integrity,
     )
     if cohort_meta.get("status") != "loaded":
-        blockers.append("forward_cohort_preregistration_not_loaded")
+        materializer_blockers.append("forward_cohort_preregistration_not_loaded")
     if feature_meta.get("status") != "loaded":
-        blockers.append("feature_store_not_loaded")
+        materializer_blockers.append("feature_store_not_loaded")
     if not dates:
-        blockers.append("market_date_denominator_missing")
+        materializer_blockers.append("market_date_denominator_missing")
     if not pairs:
-        blockers.append("forward_cohort_lane_symbol_pairs_missing")
+        materializer_blockers.append("forward_cohort_lane_symbol_pairs_missing")
     requested_months = _month_range(start, end)
     coverage = _coverage(daily_rows, requested_months)
     if coverage["calendar_months_covered_count"] < len(requested_months):
-        blockers.append(
+        materializer_blockers.append(
             f"candidate_generation_months_{coverage['calendar_months_covered_count']}_below_requested_{len(requested_months)}"
         )
-    blockers = sorted(dict.fromkeys(blockers))
+    materializer_blockers = sorted(dict.fromkeys(materializer_blockers))
+    source_blockers = [str(item) for item in _as_list(_as_dict(source).get("blockers"))]
+    proof_or_nomination_blockers = [
+        str(item) for item in _as_list(_as_dict(source).get("proof_or_nomination_blockers"))
+    ]
+    blockers = sorted(dict.fromkeys([*materializer_blockers, *source_blockers, *proof_or_nomination_blockers]))
+    research_materializer_ready = not materializer_blockers
     status_counts = Counter(str(row.get("status")) for row in daily_rows)
     month_diagnostics = [
         {
@@ -568,7 +676,10 @@ def build_report(
         "schema_version": 1,
         "read_only": True,
         "research_only": True,
-        "no_write": True,
+        "no_write": bool(no_write),
+        "source_data_no_write": True,
+        "report_artifact_write_requested": not bool(no_write),
+        "report_artifact_write_performed": False,
         **FALSE_FLAGS,
         "scope": "read_only_frozen_daily_candidate_no_pick_blocker_materializer",
         "allowed_universe": list(ALLOWED_UNIVERSE),
@@ -586,10 +697,20 @@ def build_report(
             "source_daily_decisions": source_meta,
         },
         "scanner_replay_surface": scanner_surface,
-            "source_integrity": source_integrity,
+        "source_integrity": source_integrity,
         "candidate_materialization_basis": _source_non_parity(source).get("candidate_materialization_basis"),
+        "research_materializer_status": (
+            "research_materializer_ready" if research_materializer_ready else "blocked_research_materializer"
+        ),
+        "research_materializer_ready": research_materializer_ready,
+        "research_materializer_blockers": materializer_blockers,
         "scanner_parity": _source_non_parity(source).get("scanner_parity"),
         "production_scanner_replay": _source_non_parity(source).get("production_scanner_replay"),
+        "production_parity_mismatches": _as_list(_as_dict(source).get("production_parity_mismatches")),
+        "historical_selection_conditioning": _as_dict(
+            _as_dict(source).get("historical_selection_conditioning")
+        ),
+        "proof_or_nomination_blockers": sorted(dict.fromkeys(proof_or_nomination_blockers)),
         "source_artifact_inventory": [
             {
                 "artifact": "existing_scanner_surface",
@@ -601,8 +722,12 @@ def build_report(
             }
         ],
         "calendar_coverage": {
-            "status": "calendar_coverage_proven" if not blockers else "calendar_coverage_not_proven",
-            "coverage_basis": "daily_selected_or_explicit_no_pick_rows_only",
+            "status": (
+                "research_materializer_calendar_coverage_proven"
+                if research_materializer_ready
+                else "research_materializer_calendar_coverage_blocked"
+            ),
+            "coverage_basis": "research_materializer_safe_daily_selected_or_explicit_no_pick_rows_only",
             **coverage,
         },
         "coverage": coverage,
@@ -633,12 +758,13 @@ def build_report(
                 "observed": "current scanner fetches current/latest histories and current market regime without candidate_generation_date/as_of_date contract",
             },
         ]
-        if blockers
+        if materializer_blockers
         else [],
         "proof_policy": {
             "readback_is": "read-only frozen daily candidate/no-pick/blocker source materializer",
             "readback_is_not": "profitability proof, fresh forward proof, quote import, evidence mutation, live validation, auto-track, broker permission, proof-bar change, scanner policy change, or promotion",
-            "pass_condition": "each frozen market-date/lane/symbol row is selected_candidate or explicit_no_pick from a proof-safe point-in-time daily scanner replay source",
+            "pass_condition": "each frozen market-date/lane/symbol row is selected_candidate or explicit_no_pick from a research-materializer-safe point-in-time source",
+            "proof_separation": "research rows may flow while proof_safe and production_scanner_replay remain false and nomination blockers remain global",
         },
         "forbidden_actions": FORBIDDEN_ACTIONS,
     }
@@ -693,6 +819,9 @@ def write_outputs(
     output_dir: Path = DEFAULT_OUTPUT_DIR,
     docs_report: Path = DEFAULT_DOCS_REPORT,
 ) -> dict[str, str]:
+    report["no_write"] = False
+    report["report_artifact_write_requested"] = True
+    report["report_artifact_write_performed"] = True
     output_dir.mkdir(parents=True, exist_ok=True)
     docs_report.parent.mkdir(parents=True, exist_ok=True)
     stamp = _utc_stamp()

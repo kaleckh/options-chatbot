@@ -134,6 +134,18 @@ npm run verify
 npm run verify:python:full
 ```
 
+Browser UI checks are repository-pinned to Playwright and run against a read-only mocked API surface by default. The runner starts the Next frontend on `127.0.0.1:3100`, exercises desktop and mobile navigation, and checks serious/critical accessibility violations without touching trading or evidence stores.
+
+```bash
+npm run playwright:install  # one-time Chromium, Firefox, and WebKit install
+npm run test:e2e:chromium   # fastest browser smoke pass
+npm run test:e2e            # full cross-browser pass
+npm run test:e2e:ui         # interactive Playwright runner
+npm run verify:frontend     # lint, types, frontend unit tests, build, and Playwright
+```
+
+Set `PLAYWRIGHT_BASE_URL` when the smoke suite should target an already-running frontend instead of starting its own server.
+
 Research and support scripts:
 
 ```bash

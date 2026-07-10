@@ -12,6 +12,7 @@ from scripts.evaluate_regular_options_autoresearch import (
     build_scoreboard,
     evaluator_config_hash,
     format_score_line,
+    _net_pnl_pct_value,
     search_effort_snapshot,
     selection_adjusted_bar,
 )
@@ -121,6 +122,19 @@ def _report_with_selected_trades(values_by_branch: dict[str, list[float]]) -> di
 
 
 class RegularOptionsAutoresearchEvaluatorTests(unittest.TestCase):
+    def test_bootstrap_value_prefers_fee_adjusted_net_return(self):
+        self.assertEqual(
+            _net_pnl_pct_value(
+                {
+                    "pnl_pct": 12.0,
+                    "gross_pnl_pct": 12.0,
+                    "net_pnl_pct": 11.0,
+                    "net_pnl_pct_after_fees": 9.5,
+                }
+            ),
+            9.5,
+        )
+
     def test_score_is_zero_when_lane_a_zero_bid_replay_fails(self):
         scoreboard = build_scoreboard(
             _report(side_aware_pf=0.85, side_aware_unpriced=11),

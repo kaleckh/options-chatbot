@@ -7,8 +7,8 @@ Scheduler runtime telemetry status: `scheduler_runtime_failed`.
 - Task name: `\OptionsStrictForward30Collector`.
 - Scheduled task state: `Enabled`.
 - Windows task state: `Running`.
-- Next run time: `7/6/2026 7:35:00 AM`.
-- Last run time: `7/3/2026 2:05:01 PM`.
+- Next run time: `7/10/2026 11:35:00 AM`.
+- Last run time: `7/10/2026 11:05:01 AM`.
 - Last result: `267009`.
 - Number of missed runs: ``.
 - Task to run: `C:\Users\kalec\options-chatbot\scripts\run_strict_forward_30_auto_window_collector.bat`.

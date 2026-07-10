@@ -27,9 +27,9 @@ This report is generated from `scripts/build_regular_options_fresh_evidence_loop
 ## Provenance
 
 - Host: `KAESDEVICE`.
-- Commit SHA: `966870aa581417952837c28423da632acfa3e1be`.
-- Branch: `main`.
-- Run ID: `regular_options_fresh_evidence_loop:KAESDEVICE:966870aa5814:2026-07-03T21:38:39Z`.
+- Commit SHA: `6a1ac1edb98a11b5e6a211538740a4ac004870be`.
+- Branch: `codex/fable-planning-baseline-20260704`.
+- Run ID: `regular_options_fresh_evidence_loop:KAESDEVICE:6a1ac1edb98a:2026-07-07T21:40:42Z`.
 
 ## Evidence Boundary
 

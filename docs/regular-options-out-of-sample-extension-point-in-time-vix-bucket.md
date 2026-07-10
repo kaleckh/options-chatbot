@@ -4,12 +4,12 @@ This report is generated from `scripts/build_regular_options_point_in_time_vix_b
 
 ## Summary
 
-- Status: `blocked_point_in_time_vix_bucket_validation`.
-- Point-in-time VIX low/mid bucket available: `false`.
-- Source rows: `505`.
+- Status: `point_in_time_vix_bucket_ready`.
+- Point-in-time VIX low/mid bucket available: `true`.
+- Source rows: `1044`.
 - Requested dates: `1044`.
-- Covered dates: `505`.
-- Coverage: `48.3716`.
+- Covered dates: `1044`.
+- Coverage: `100.0`.
 - Late known-at rows: `0`.
 - Leakage rejects: `0`.
 - Threshold source: `direct_vix_daily_close_import_policy_v1`.
@@ -20,7 +20,7 @@ For daily close VIX, bucket_date_et candidate entries may use only rows whose kn
 
 ## Blockers
 
-- `vix_bucket_date_coverage_incomplete`
+- None.
 
 ## Rejected Rows
 

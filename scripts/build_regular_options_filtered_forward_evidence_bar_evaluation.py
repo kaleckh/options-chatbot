@@ -12,15 +12,24 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts import build_regular_options_filtered_forward_paper_shadow_tracker as tracker  # noqa: E402
+from scripts import (  # noqa: E402
+    build_regular_options_filtered_forward_paper_shadow_tracker as tracker,
+)
 
 
 REPORT_ID = "regular_options_filtered_forward_evidence_bar_evaluation"
 DEFAULT_MATCHED_ROWS_LOG = tracker.DEFAULT_MATCHED_ROWS_LOG
 DEFAULT_POLICY_CONTRACT = tracker.DEFAULT_POLICY_CONTRACT
 DEFAULT_FORWARD_EVIDENCE_BAR_CONTRACT = tracker.DEFAULT_FORWARD_EVIDENCE_BAR_CONTRACT
-DEFAULT_OUTPUT_DIR = ROOT / "data" / "forward-tracking" / "regular-options-filtered-forward-evidence-bar-evaluation"
-DEFAULT_DOCS_REPORT = ROOT / "docs" / "regular-options-filtered-forward-evidence-bar-evaluation.md"
+DEFAULT_OUTPUT_DIR = (
+    ROOT
+    / "data"
+    / "forward-tracking"
+    / "regular-options-filtered-forward-evidence-bar-evaluation"
+)
+DEFAULT_DOCS_REPORT = (
+    ROOT / "docs" / "regular-options-filtered-forward-evidence-bar-evaluation.md"
+)
 
 
 def _utc_now_iso() -> str:
@@ -58,15 +67,31 @@ def _load_json(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     try:
         payload = json.loads(path.read_text(encoding="utf8"))
     except json.JSONDecodeError as exc:
-        return {}, {"path": _rel(path), "exists": True, "status": "invalid_json", "error": str(exc)}
+        return {}, {
+            "path": _rel(path),
+            "exists": True,
+            "status": "invalid_json",
+            "error": str(exc),
+        }
     if not isinstance(payload, dict):
         return {}, {"path": _rel(path), "exists": True, "status": "invalid_payload"}
-    return payload, {"path": _rel(path), "exists": True, "status": "loaded", "sha256": _file_hash(path)}
+    return payload, {
+        "path": _rel(path),
+        "exists": True,
+        "status": "loaded",
+        "sha256": _file_hash(path),
+    }
 
 
 def _load_jsonl(path: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     if not path.exists():
-        return [], {"path": _rel(path), "exists": False, "status": "missing", "row_count": 0, "bad_row_count": 0}
+        return [], {
+            "path": _rel(path),
+            "exists": False,
+            "status": "missing",
+            "row_count": 0,
+            "bad_row_count": 0,
+        }
     rows: list[dict[str, Any]] = []
     bad = 0
     for raw in path.read_text(encoding="utf8").splitlines():
@@ -81,19 +106,40 @@ def _load_jsonl(path: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
             rows.append(parsed)
         else:
             bad += 1
-    return rows, {"path": _rel(path), "exists": True, "status": "loaded" if bad == 0 else "malformed", "row_count": len(rows), "bad_row_count": bad, "sha256": _file_hash(path)}
+    return rows, {
+        "path": _rel(path),
+        "exists": True,
+        "status": "loaded" if bad == 0 else "malformed",
+        "row_count": len(rows),
+        "bad_row_count": bad,
+        "sha256": _file_hash(path),
+    }
 
 
-def _policy_hash_checks(policy_contract: dict[str, Any], policy_meta: dict[str, Any], bar_contract: dict[str, Any]) -> dict[str, Any]:
+def _policy_hash_checks(
+    policy_contract: dict[str, Any],
+    policy_meta: dict[str, Any],
+    bar_contract: dict[str, Any],
+) -> dict[str, Any]:
     expected_conditions = str(policy_contract.get("conditions_sha256") or "")
-    computed_conditions = tracker._conditions_sha256(tracker._as_list(policy_contract.get("conditions"))) if policy_contract.get("conditions") else ""
+    computed_conditions = (
+        tracker._conditions_sha256(tracker._as_list(policy_contract.get("conditions")))
+        if policy_contract.get("conditions")
+        else ""
+    )
     source_policy = tracker._as_dict(bar_contract.get("source_policy_contract"))
     expected_policy_sha = str(source_policy.get("sha256") or "")
     actual_policy_sha = str(policy_meta.get("sha256") or "")
     return {
         "policy_contract_loaded": policy_meta.get("status") == "loaded",
-        "policy_conditions_hash_match": bool(expected_conditions and expected_conditions == computed_conditions),
-        "bar_source_policy_sha_match": bool(expected_policy_sha and actual_policy_sha and expected_policy_sha == actual_policy_sha),
+        "policy_conditions_hash_match": bool(
+            expected_conditions and expected_conditions == computed_conditions
+        ),
+        "bar_source_policy_sha_match": bool(
+            expected_policy_sha
+            and actual_policy_sha
+            and expected_policy_sha == actual_policy_sha
+        ),
         "expected_conditions_sha256": expected_conditions,
         "computed_conditions_sha256": computed_conditions,
         "expected_policy_contract_sha256": expected_policy_sha,
@@ -113,15 +159,22 @@ def build_report(
     policy_contract, policy_meta = _load_json(policy_contract_path)
     bar_contract, bar_meta = _load_json(forward_evidence_bar_contract_path)
     current_rows = tracker._merge_lifecycle_rows(rows)
-    progress = tracker._forward_evidence_bar_progress(current_rows, bar_contract=bar_contract, bar_meta=bar_meta)
+    progress = tracker._forward_evidence_bar_progress(
+        rows, bar_contract=bar_contract, bar_meta=bar_meta
+    )
+    validated_completed_ids = tracker._validated_completed_candidate_ids(rows)
     hash_checks = _policy_hash_checks(policy_contract, policy_meta, bar_contract)
     duplicate_identities = tracker._matched_log_duplicate_daily_signal_identities(rows)
-    matched_log_identity_schema_current = tracker._matched_log_has_current_identity_schema(rows)
+    matched_log_identity_schema_current = (
+        tracker._matched_log_has_current_identity_schema(rows)
+    )
     blockers: list[str] = []
     if rows_meta.get("status") != "loaded":
         blockers.append("matched_rows_log_not_loaded")
     if rows and not matched_log_identity_schema_current:
-        blockers.append("matched_rows_log_nonempty_before_daily_signal_identity_upgrade")
+        blockers.append(
+            "matched_rows_log_nonempty_before_daily_signal_identity_upgrade"
+        )
     if duplicate_identities:
         blockers.append("duplicate_ticker_date_direction_matched_rows")
     if bar_meta.get("status") != "loaded":
@@ -155,7 +208,7 @@ def build_report(
         "duplicate_daily_signal_identity_count": len(duplicate_identities),
         "duplicate_daily_signal_identities": duplicate_identities,
         "current_lifecycle_row_count": len(current_rows),
-        "completed_candidate_ids": [str(row.get("candidate_id")) for row in current_rows if tracker._is_completed_forward_row(row)],
+        "completed_candidate_ids": sorted(validated_completed_ids),
         "forward_evidence_bar": progress,
         "blockers": blockers,
         "approval_authority": False,
@@ -206,7 +259,12 @@ def render_markdown(report: dict[str, Any]) -> str:
     )
 
 
-def write_outputs(report: dict[str, Any], *, output_dir: Path = DEFAULT_OUTPUT_DIR, docs_report: Path = DEFAULT_DOCS_REPORT) -> dict[str, str]:
+def write_outputs(
+    report: dict[str, Any],
+    *,
+    output_dir: Path = DEFAULT_OUTPUT_DIR,
+    docs_report: Path = DEFAULT_DOCS_REPORT,
+) -> dict[str, str]:
     output_dir.mkdir(parents=True, exist_ok=True)
     docs_report.parent.mkdir(parents=True, exist_ok=True)
     stamp = _utc_stamp()
@@ -233,10 +291,18 @@ def write_outputs(report: dict[str, Any], *, output_dir: Path = DEFAULT_OUTPUT_D
 
 
 def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Evaluate the filtered forward evidence bar from completed matched-row log entries.")
-    parser.add_argument("--matched-rows-log", type=Path, default=DEFAULT_MATCHED_ROWS_LOG)
+    parser = argparse.ArgumentParser(
+        description="Evaluate the filtered forward evidence bar from completed matched-row log entries."
+    )
+    parser.add_argument(
+        "--matched-rows-log", type=Path, default=DEFAULT_MATCHED_ROWS_LOG
+    )
     parser.add_argument("--policy-contract", type=Path, default=DEFAULT_POLICY_CONTRACT)
-    parser.add_argument("--forward-evidence-bar-contract", type=Path, default=DEFAULT_FORWARD_EVIDENCE_BAR_CONTRACT)
+    parser.add_argument(
+        "--forward-evidence-bar-contract",
+        type=Path,
+        default=DEFAULT_FORWARD_EVIDENCE_BAR_CONTRACT,
+    )
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--docs-report", type=Path, default=DEFAULT_DOCS_REPORT)
     parser.add_argument("--no-write", action="store_true")

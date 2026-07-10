@@ -163,11 +163,20 @@ def _profit_factor(values: Sequence[float]) -> float | None:
 
 def _normalize_trade(row: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
     entry_date = _date_only(row.get("entry_date") or row.get("date"))
-    pnl = _safe_float(row.get("net_pnl_pct", row.get("pnl_pct")))
+    fee_adjusted_pnl = _safe_float(row.get("net_pnl_pct_after_fees"))
+    canonical_net_pnl = fee_adjusted_pnl
+    if canonical_net_pnl is None:
+        canonical_net_pnl = _safe_float(row.get("net_pnl_pct"))
+    if canonical_net_pnl is None:
+        canonical_net_pnl = _safe_float(row.get("pnl_pct"))
+    source_pnl = _safe_float(row.get("pnl_pct"))
+    gross_pnl = _safe_float(row.get("gross_pnl_pct"))
+    if gross_pnl is None:
+        gross_pnl = source_pnl
     net_pnl_usd = _safe_float(row.get("net_pnl_usd"))
     if entry_date is None:
         return None, "missing_or_invalid_entry_date"
-    if pnl is None:
+    if canonical_net_pnl is None:
         return None, "missing_or_invalid_pnl_pct"
     exact = (
         bool(row.get("exact_priced"))
@@ -184,11 +193,17 @@ def _normalize_trade(row: dict[str, Any]) -> tuple[dict[str, Any] | None, str | 
         "lane_id": _norm(row.get("lane_id")) or "unknown",
         "lane_family": _norm(row.get("lane_family")) or _norm(row.get("family")) or "unknown",
         "direction": _norm(row.get("direction")) or "unknown",
-        "pnl_pct": pnl,
+        "pnl_pct": source_pnl,
+        "gross_pnl_pct": gross_pnl,
+        "net_pnl_pct": canonical_net_pnl,
+        "net_pnl_pct_after_fees": fee_adjusted_pnl,
         "net_pnl_usd": net_pnl_usd,
         "proof_grade": _norm(row.get("proof_grade")),
         "source_result_path": _norm(row.get("source_result_path")),
         "dedupe_key": _norm(row.get("dedupe_key")),
+        "long_contract_symbol": _norm(row.get("long_contract_symbol")),
+        "short_contract_symbol": _norm(row.get("short_contract_symbol")),
+        "expiry": _norm(row.get("expiry"))[:10],
         "portfolio_eligible": bool(row.get("portfolio_eligible", True)),
     }, None
 
@@ -204,6 +219,121 @@ def normalize_trades(rows: Iterable[dict[str, Any]]) -> tuple[list[dict[str, Any
         accepted.append(normalized)
     accepted.sort(key=lambda item: (item["entry_date"], item["ticker"], item["direction"], item["lane_id"]))
     return accepted, rejected
+
+
+def _canonical_net_pnl_pct(row: dict[str, Any]) -> float | None:
+    for field in ("net_pnl_pct_after_fees", "net_pnl_pct", "pnl_pct"):
+        value = _safe_float(row.get(field))
+        if value is not None:
+            return value
+    return None
+
+
+def _allocation_identity(row: dict[str, Any]) -> tuple[str, str, str]:
+    return (
+        _norm(row.get("entry_date"))[:10],
+        _norm(row.get("ticker")).upper(),
+        _norm(row.get("direction")).lower(),
+    )
+
+
+def _allocation_scenario_metrics(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    values = [value for row in rows if (value := _canonical_net_pnl_pct(row)) is not None]
+    return {
+        "trade_count": len(rows),
+        "priced_trade_count": len(values),
+        "total_net_pnl_pct_points": round(sum(values), 4) if values else None,
+        "avg_net_pnl_pct": round(sum(values) / len(values), 4) if values else None,
+        "profit_factor": _round_optional(_profit_factor(values), 4),
+    }
+
+
+def _allocation_policy_audit(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    grouped: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        grouped[_allocation_identity(row)].append(dict(row))
+    collisions = {
+        key: group
+        for key, group in grouped.items()
+        if len({_norm(row.get("lane_id")) for row in group if _norm(row.get("lane_id"))}) > 1
+    }
+    collision_keys = set(collisions)
+    noncollision_rows = [dict(row) for row in rows if _allocation_identity(row) not in collision_keys]
+
+    def scenario(selector: Any) -> list[dict[str, Any]]:
+        selected = list(noncollision_rows)
+        for key in sorted(collisions):
+            selected.append(dict(selector(collisions[key])))
+        return sorted(
+            selected,
+            key=lambda row: (
+                _norm(row.get("entry_date")),
+                _norm(row.get("ticker")),
+                _norm(row.get("lane_id")),
+            ),
+        )
+
+    lexical_rows = scenario(
+        lambda group: sorted(group, key=lambda row: (_norm(row.get("lane_id")), _norm(row.get("dedupe_key"))))[0]
+    )
+    minimum_rows = scenario(lambda group: min(group, key=lambda row: _canonical_net_pnl_pct(row) or 0.0))
+    maximum_rows = scenario(lambda group: max(group, key=lambda row: _canonical_net_pnl_pct(row) or 0.0))
+    snapshots = []
+    retained_by_lane: Counter[str] = Counter()
+    discarded_by_lane: Counter[str] = Counter()
+    for key in sorted(collisions)[:100]:
+        group = collisions[key]
+        retained = sorted(group, key=lambda row: (_norm(row.get("lane_id")), _norm(row.get("dedupe_key"))))[0]
+        retained_by_lane[_norm(retained.get("lane_id")) or "unknown"] += 1
+        for row in group:
+            if row is not retained:
+                discarded_by_lane[_norm(row.get("lane_id")) or "unknown"] += 1
+        snapshots.append(
+            {
+                "allocation_identity": list(key),
+                "row_count": len(group),
+                "lane_ids": sorted({_norm(row.get("lane_id")) for row in group}),
+                "lexical_retained_lane_id": retained.get("lane_id"),
+                "contract_variants": [
+                    {
+                        "lane_id": _norm(row.get("lane_id")),
+                        "expiry": _norm(row.get("expiry"))[:10],
+                        "long_contract_symbol": _norm(row.get("long_contract_symbol")),
+                        "short_contract_symbol": _norm(row.get("short_contract_symbol")),
+                        "dedupe_key": _norm(row.get("dedupe_key")),
+                    }
+                    for row in sorted(
+                        group,
+                        key=lambda item: (
+                            _norm(item.get("lane_id")),
+                            _norm(item.get("expiry")),
+                            _norm(item.get("long_contract_symbol")),
+                            _norm(item.get("short_contract_symbol")),
+                        ),
+                    )
+                ],
+                "net_pnl_pct_values": sorted(
+                    value for row in group if (value := _canonical_net_pnl_pct(row)) is not None
+                ),
+            }
+        )
+    return {
+        "status": "cross_lane_allocation_policy_missing" if collisions else "no_cross_lane_allocation_collisions",
+        "allocation_policy_defined": False,
+        "combined_portfolio_unbiased": not collisions,
+        "collision_group_count": len(collisions),
+        "collision_row_count": sum(len(group) for group in collisions.values()),
+        "lexical_retained_lane_counts": dict(sorted(retained_by_lane.items())),
+        "lexical_discarded_lane_counts": dict(sorted(discarded_by_lane.items())),
+        "sensitivity": {
+            "as_counted_with_duplicates": _allocation_scenario_metrics(rows),
+            "lexical_one_per_opportunity": _allocation_scenario_metrics(lexical_rows),
+            "minimum_pnl_one_per_opportunity": _allocation_scenario_metrics(minimum_rows),
+            "maximum_pnl_one_per_opportunity": _allocation_scenario_metrics(maximum_rows),
+        },
+        "collision_snapshots": snapshots,
+        "blockers": ["cross_lane_allocation_policy_missing"] if collisions else [],
+    }
 
 
 def chronological_split_rows(
@@ -252,7 +382,7 @@ def _metrics_for_values(values: list[float], *, branch_id: str, bootstrap_draws:
 
 
 def _metrics_for_rows(rows: Sequence[dict[str, Any]], *, branch_id: str, bootstrap_draws: int) -> dict[str, Any]:
-    values = [float(row["pnl_pct"]) for row in rows]
+    values = [value for row in rows if (value := _canonical_net_pnl_pct(row)) is not None]
     metrics = _metrics_for_values(values, branch_id=branch_id, bootstrap_draws=bootstrap_draws)
     metrics["first_entry_date"] = rows[0]["entry_date"] if rows else None
     metrics["latest_entry_date"] = rows[-1]["entry_date"] if rows else None
@@ -294,7 +424,9 @@ def _risk_metrics_for_rows(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
     values: list[float] = []
 
     for row in ordered:
-        pnl = float(row["pnl_pct"])
+        pnl = _canonical_net_pnl_pct(row)
+        if pnl is None:
+            continue
         values.append(pnl)
         cumulative += pnl
         entry_date = str(row.get("entry_date") or "")
@@ -378,6 +510,9 @@ def _exclusion_snapshot(row: dict[str, Any], rule: dict[str, Any]) -> dict[str, 
         "lane_family": row.get("lane_family"),
         "direction": row.get("direction"),
         "pnl_pct": row.get("pnl_pct"),
+        "gross_pnl_pct": row.get("gross_pnl_pct"),
+        "net_pnl_pct": row.get("net_pnl_pct"),
+        "net_pnl_pct_after_fees": row.get("net_pnl_pct_after_fees"),
         "dedupe_key": row.get("dedupe_key"),
     }
 
@@ -502,7 +637,10 @@ def _ablation_check(
 
 
 def _winner_fragility_check(rows: Sequence[dict[str, Any]], *, remove_count: int = 5) -> dict[str, Any]:
-    values = sorted([float(row["pnl_pct"]) for row in rows], reverse=True)
+    values = sorted(
+        [value for row in rows if (value := _canonical_net_pnl_pct(row)) is not None],
+        reverse=True,
+    )
     if len(values) <= remove_count:
         return {
             "status": "not_evaluable_too_few_rows",
@@ -624,6 +762,8 @@ def _candidate_blockers(
     quality_gate: dict[str, Any],
     feature_store_gate: dict[str, Any],
     source_scope_exclusions: Sequence[dict[str, Any]],
+    allocation_policy_audit: dict[str, Any],
+    source_proof_or_nomination_blockers: Sequence[str],
 ) -> list[str]:
     total_n = _safe_int(split_metrics["combined"]["exact_trade_count"])
     validation_n = _safe_int(split_metrics["validation"]["exact_trade_count"])
@@ -656,6 +796,8 @@ def _candidate_blockers(
         )
     if total_n == 0 and source_scope_exclusions:
         blockers.append("all_candidate_rows_excluded_by_source_quality_scope_policy")
+    blockers.extend(str(item) for item in _as_list(allocation_policy_audit.get("blockers")))
+    blockers.extend(str(item) for item in source_proof_or_nomination_blockers if str(item))
     return sorted(set(blockers))
 
 
@@ -691,6 +833,23 @@ def _candidate_report(
     split_metrics["combined"] = combined
     ablation = _ablation_check(split_metrics["final_holdout"], baseline_report, baseline_meta)
     winner = _winner_fragility_check(scoped_rows)
+    allocation_policy = (
+        _allocation_policy_audit(scoped_rows)
+        if candidate_type == "combined"
+        else {
+            "status": "not_applicable_single_lane_candidate",
+            "allocation_policy_defined": False,
+            "combined_portfolio_unbiased": True,
+            "collision_group_count": 0,
+            "collision_row_count": 0,
+            "sensitivity": {},
+            "collision_snapshots": [],
+            "blockers": [],
+        }
+    )
+    source_nomination_blockers = [
+        str(item) for item in _as_list(source_report.get("proof_or_nomination_blockers")) if str(item)
+    ]
     blockers = _candidate_blockers(
         split_metrics=split_metrics,
         variants_searched=variants_searched,
@@ -700,6 +859,8 @@ def _candidate_report(
         quality_gate=quality_gate,
         feature_store_gate=feature_store_gate,
         source_scope_exclusions=scope_exclusions,
+        allocation_policy_audit=allocation_policy,
+        source_proof_or_nomination_blockers=source_nomination_blockers,
     )
     return {
         "candidate_id": candidate_id,
@@ -724,6 +885,9 @@ def _candidate_report(
         ),
         "source_quality_exclusions": scope_exclusions,
         "feature_store_gate": feature_store_gate,
+        "allocation_policy_audit": allocation_policy,
+        "combined_portfolio_unbiased": allocation_policy.get("combined_portfolio_unbiased"),
+        "source_proof_or_nomination_blockers": source_nomination_blockers,
         "read_only": True,
     }
 
@@ -791,6 +955,10 @@ def build_report(
         if rows
     ]
     ready = [candidate for candidate in candidates if candidate.get("historical_nomination_ready")]
+    combined_candidate = next(
+        (candidate for candidate in candidates if candidate.get("candidate_id") == "combined_portfolio"),
+        {},
+    )
     if source_meta.get("status") != "loaded":
         status = "blocked_missing_source_report"
     elif not trades:
@@ -861,7 +1029,14 @@ def build_report(
             if candidates and all(candidate.get("source_quality_gate", {}).get("passed") for candidate in candidates)
             else "source_quality_gate_blocked",
             "promotion_ready": False,
+            "combined_allocation_collision_group_count": _as_dict(
+                combined_candidate.get("allocation_policy_audit")
+            ).get("collision_group_count"),
+            "combined_portfolio_unbiased": combined_candidate.get("combined_portfolio_unbiased"),
         },
+        "source_proof_or_nomination_blockers": _as_list(source.get("proof_or_nomination_blockers")),
+        "production_parity_mismatches": _as_list(source.get("production_parity_mismatches")),
+        "historical_selection_conditioning": _as_dict(source.get("historical_selection_conditioning")),
         "source_quality_scope_policy": _source_quality_policy_summary(
             source_quality_policy,
             source_quality_policy_meta,

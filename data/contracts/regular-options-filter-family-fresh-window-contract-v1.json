@@ -1,0 +1,58 @@
+{
+  "report_id": "regular_options_filter_family_fresh_window_contract",
+  "contract_id": "regular_options_filter_family_fresh_window_v1",
+  "schema_version": 1,
+  "created_at_utc": "2026-07-07T01:15:00Z",
+  "status": "fresh_window_contract_registered_before_any_window_data_import",
+  "authority": "none_research_only_not_forward_proof",
+  "parent_contracts": [
+    "data/contracts/regular-options-refreeze-filter-family-research-contract-v1.json",
+    "data/contracts/regular-options-filter-family-preregistration-draft-v1.json"
+  ],
+  "operator_approval": "Kale approved the 2018-2021 fresh-window falsification lane in-session 2026-07-06 (Fable CLI); this contract records the split before import",
+  "window": {
+    "requested_start_date": "2018-01-01",
+    "requested_end_date": "2021-12-31",
+    "lookback_start_date": "2017-10-01",
+    "never_previously_used_for_selection_or_evaluation": true
+  },
+  "split_rule": {
+    "family_train": {"start_month": "2018-01", "end_month": "2020-06"},
+    "family_validation": {"start_month": "2020-07", "end_month": "2021-12"},
+    "split_fixed_before_import": true,
+    "policy": "score all preregistered family members on family_train; select at most top_k=3 by the pre-declared criterion; score ONLY those on family_validation exactly once; append both windows to the consumption registry at evaluation time"
+  },
+  "pre_declared_selection_criterion": {
+    "primary": "percent_cluster_pf_lb_5pct",
+    "secondary": "usd_cluster_pf_lb_5pct",
+    "cluster_key": "ticker:ISO-week",
+    "bootstrap_draws": 10000,
+    "minimums": {"exact_trade_count": 60, "distinct_ticker_week_clusters": 20, "distinct_months_with_rows": 12},
+    "validation_pass_bar": {"percent_cluster_pf_lb_5pct_must_be_gt": 1.0, "usd_cluster_pf_lb_5pct_must_be_gt": 1.0, "total_net_pnl_usd_must_be_gt": 0.0}
+  },
+  "fee_model_source": "data/contracts/regular-options-out-of-sample-extension-v1.json fee_model (unchanged)",
+  "proof_set": {"symbols": ["SPY", "QQQ", "IWM", "DIA", "AAPL", "GOOGL", "UNH", "LLY", "JNJ", "XOM", "CVX", "COP", "NEM"], "symbol_count": 13},
+  "quote_import_plan": {
+    "entry_minute": "10:10:00 ET single minute, DTE 5-35, both rights",
+    "exit_minute": "15:55:00 ET single minute, DTE 5-60, both rights",
+    "storage_note": "single-minute imports only; the 2026-07-06 disk incident rules out full-window minute imports",
+    "import_blocked_until": "options_history.db prune+VACUUM maintenance completes"
+  },
+  "interpretation": {
+    "passing_verdict": "family_member_survives_falsification_earns_new_preregistered_forward_bar",
+    "failure_verdict": "directional_momentum_family_falsified_redirect_to_vrp_calendar_event_playbooks",
+    "neither_outcome_authorizes_trading": true,
+    "pre_registered_expectation": "most_or_all_family_members_fail (operator informed prior under 50/50)"
+  },
+  "prohibited_actions": [
+    "do_not_change_split_or_criterion_after_import",
+    "do_not_score_families_on_any_consumed_window",
+    "do_not_change_production_scanner_policy_from_this_contract",
+    "do_not_change_current_frozen_policy_or_forward_evidence_bar",
+    "do_not_consume_protected_holdout",
+    "do_not_enable_live_validation_or_auto_track",
+    "do_not_submit_broker_orders",
+    "do_not_promote_any_lane",
+    "do_not_treat_historical_results_as_forward_proof"
+  ]
+}

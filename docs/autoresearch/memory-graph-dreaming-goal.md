@@ -34,11 +34,13 @@ No review can prove the absence of all possible bugs. The acceptable completion 
 - Dream-origin memory must be visibly marked with `origin=dreaming`, `proposal_origin=dream`, `non_authoritative=true`, `accepted_by`, `accepted_at`, and `source_sha256`.
 - A dream acceptance is a memory-review action only. It must not authorize trading, evidence mutation, broker action, scanner policy changes, proof-bar changes, stop/sizing changes, promotion, live validation, or holdout use.
 - Session capture must refuse secrets, credentials, auth files, browser state, private tool DBs, broker/account data, and broad generated trading/evidence stores.
+- Session IDs are immutable: matching content hashes are idempotent and changed duplicates fail. A durable session-sidecar outbox must make failed JSONL delivery retryable and reconcilable without duplicating the session event. Dream acceptance must reparse and rehash its source, reject stored/source divergence, and allow observed claims only from same-tenant reviewed, provenanced, integrity-bearing evidence of an allowed kind. Evidence trust must use the reserved trusted-writer attestation and cross-check a durable session/outbox record or authoritative artifact source/hash; arbitrary metadata cannot self-attest.
 - Hashes are useful only when they guard a write or preserve provenance. If a source changed, reread and re-evaluate before writing.
+- Backup manifests must be relocatable relative-member bundles. Schema-v5 restore requires every expected member declared present, exact tenant identity, and DB/session-sidecar parity. Current outbox rows use canonical v2 hashes and order; declared legacy-v1 bundles retain bounded audit compatibility. Migration, event writes, mirror repair, and snapshot backup must serialize, and repair must archive the original before rebuilding from the validated DB outbox.
 - Add reject/list/audit paths so stale dream proposals do not accumulate as tempting context. Add archive only if the control-plane implementation documents and verifies it.
 - Verify the full loop with tests and a real bootstrap/audit command before calling the task complete.
 - Make the memory graph obviously usable by future agents, not just technically present. Startup docs should say when to run bootstrap/context, how to write back reviewed worker reports, when to use `memory remember`, and how to review dreams.
-- All operating memory should be machine-labeled as orchestration-only and explicitly not authorization for trading, evidence mutation, broker action, promotion, live validation, scanner policy, proof bars, stop/sizing, or protected holdout.
+- All operating memory and graph-query output should be forced to orchestration-only nonauthorization. Unsafe raw node/edge metadata must be quarantined, and accepted dream lessons must respect pathway filtering in focused context packs.
 - Accepted dream lessons and constraints should appear in normal context packs so agents benefit without remembering a special `origin=dreaming` query.
 - Provide agent-facing aliases or shortcuts for bootstrap, focused context, audit, eval, dream review, and reviewed report writeback.
 
@@ -70,7 +72,7 @@ When validating an existing memory graph, spawn the smallest useful set of indep
    - Run `verify-memory-graph.ps1`.
    - Check schema, node/edge/alias/hash coherence, provenance rows, and authority boundaries.
 2. Repo runtime CLI auditor:
-   - Inspect `scripts/agent_control.py`, `tests/test_agent_control.py`, `package.json`, and `docs/agent-control-plane.md`.
+   - Inspect the `scripts/agent_control.py` compatibility shim, the current schema-v5 `scripts/agent_control/legacy.py` implementation, package re-exports, `tests/test_agent_control.py`, `package.json`, and `docs/agent-control-plane.md`. Real module extraction remains maintainability debt until completed and tested.
    - Test bootstrap, focused context packs, graph query, memory audit/eval, reviewed report writeback, session logging, dream review, dream lifecycle, SHA guards, path refusal, and metadata semantics.
 3. End-to-end behavior auditor:
    - Run the live operator path: bootstrap -> dream list -> dream-origin graph query -> hash-guarded session ingest -> session graph query -> memory audit.
@@ -92,7 +94,7 @@ Required coverage:
 
 - Computer-wide graph files: `MEMORY_GRAPH.md`, `SCHEMA.md`, `projects\<target-project>.md`, `graph\nodes.jsonl`, `graph\edges.jsonl`, `graph\aliases.jsonl`, `graph\hashes.jsonl`, `transcripts\INDEX.md`, `dreams\INDEX.md`, `dreams\end-to-end-memory-graph-prompt.md`, `scripts\hash-memory-target.ps1`, and `scripts\verify-memory-graph.ps1`.
 - Repo-local docs and runtime state: `AGENTS.md`, `docs\agent-control-plane.md`, `docs\autoresearch\memory-graph-dreaming-goal.md`, `docs\PROJECT_CONTEXT.md`, `docs\DECISIONS.md`, `docs\WORKLOG.md`, `docs\NEXT_STEPS.md`, `data\agent-control\agent_control.db`, `events.jsonl`, and `sessions.jsonl`.
-- Runtime commands: `bootstrap`, `checkpoint latest/write`, `graph query`, `context pack`, `memory remember/supersede/audit/eval`, `session log`, `dream propose/accept/reject/list`, and available package aliases.
+- Runtime commands: `bootstrap`, tenant-scoped `checkpoint latest/write`, `graph query`, `context pack` with safe-default/opt-in repo-index behavior, `memory remember/supersede/audit/eval/restore-check/repair-event-mirror`, claimed task report/writeback, `session log`, `dream propose/accept/reject/list`, and available package aliases.
 
 Each subagent report must include:
 
@@ -152,7 +154,9 @@ C:\Users\kalec\options-chatbot\data\agent-control\sessions.jsonl
 - Store accepted dream entries through the existing operating-memory path.
 - Keep proposed dreams as proposal nodes until accepted.
 - Add a memory audit command that flags stale or inconsistent memory.
-- Add deterministic tests for session logging, hash mismatch, safe-path refusal, dream accept, dream reject, observed-without-evidence rejection, bootstrap recovery, and authority boundaries.
+- Require audit to exit nonzero for issues, verify graph/retrieval parity, always include canonical `PROJECT_SEED_FILES` freshness independently of expectation rows, quarantine unsafe node/edge metadata, and classify missing tier-3 repo mirrors as nonfatal.
+- Keep raw graph remember create-only, tenant-scope task/checkpoint/context/audit state, pathway-filter accepted dream lessons, close claims/runs on report or terminal transitions, and validate proof-gate labels as non-authoritative orchestration context.
+- Add deterministic tests for strict declared-member/tenant/session-parity restore, canonical-v2 and legacy-v1 outbox audit, serialized migration/event/repair/backup paths, durable session reconciliation, reserved-attestation evidence cross-checks, source-reparsed dreaming, canonical-seed freshness independent of expectation rows, bootstrap recovery, and authority boundaries.
 - Add package/script aliases for common memory operations.
 - Update living docs and worklog after meaningful changes.
 
@@ -160,7 +164,7 @@ C:\Users\kalec\options-chatbot\data\agent-control\sessions.jsonl
 
 - Run `npm run agent:control -- bootstrap --prompt-only` before planning.
 - Treat the gateboard and generated readbacks as current operating evidence.
-- Keep autonomy at `read_only_workers` unless the user explicitly approves a higher-risk path and repo gates pass.
+- An agreed CEO goal permits local `code_docs` implementation. Treat `context_only`, `read_only_workers`, and `code_docs` as trading-fail-closed; evidence/broker/live modes require the dependent user scope and current authoritative gates.
 - Any missing, stale, contradictory, or dream-derived trading-sensitive claim forces `observe_only`.
 - Never let memory graph status clear evidence, proof, promotion, broker, live, holdout, stop, sizing, or scanner-policy gates.
 

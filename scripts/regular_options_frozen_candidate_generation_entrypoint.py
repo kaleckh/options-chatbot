@@ -7,6 +7,7 @@ from collections import Counter, defaultdict
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, Sequence
+from zoneinfo import ZoneInfo
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -85,6 +86,9 @@ FORBIDDEN_ACTIONS = [
     "historical_rows_as_forward_proof",
 ]
 DEFAULT_CANDIDATE_MATERIALIZATION_BASIS = "deterministic_local_pit_candidate_materializer_v1"
+TRUSTED_DAILY_SOURCE_REPORT_ID = "regular_options_13_symbol_frozen_daily_candidate_decisions"
+ENTRY_START_MINUTE = 10 * 60 + 10
+EASTERN = ZoneInfo("America/New_York")
 
 
 def _source_non_parity(source: dict[str, Any]) -> dict[str, Any]:
@@ -105,6 +109,30 @@ def _utc_now_iso() -> str:
 
 def _utc_stamp() -> str:
     return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _et_minute_to_utc_iso(day: date, minute_et: int = ENTRY_START_MINUTE) -> str:
+    hour, minute = divmod(int(minute_et), 60)
+    localized = datetime(day.year, day.month, day.day, hour, minute, tzinfo=EASTERN)
+    return localized.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _latest_utc_timestamp(*values: Any) -> str | None:
+    parsed: list[datetime] = []
+    for value in values:
+        text = str(value or "").strip()
+        if not text:
+            continue
+        try:
+            item = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if item.tzinfo is None:
+            item = item.replace(tzinfo=UTC)
+        parsed.append(item.astimezone(UTC))
+    if not parsed:
+        return None
+    return max(parsed).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _rel(path: Path) -> str:
@@ -148,6 +176,55 @@ def _source_daily_rows(source: dict[str, Any]) -> list[dict[str, Any]]:
     return []
 
 
+def _source_boundary_blockers(
+    source: dict[str, Any],
+    *,
+    start: date,
+    end: date,
+    as_of: date,
+) -> list[str]:
+    blockers: list[str] = []
+    if str(source.get("report_id") or "") != TRUSTED_DAILY_SOURCE_REPORT_ID:
+        blockers.append("source_daily_report_identity_untrusted")
+    if source.get("schema_version") != 1:
+        blockers.append("source_daily_report_schema_version_untrusted")
+    if str(source.get("status") or "") not in {
+        "frozen_daily_candidate_decisions_ready",
+        "blocked_frozen_daily_candidate_decisions",
+    }:
+        blockers.append("source_daily_report_status_untrusted")
+    if source.get("research_materializer_ready") is not True:
+        blockers.append("source_daily_report_research_materializer_not_ready")
+    if str(source.get("research_materializer_status") or "") != "research_materializer_ready":
+        blockers.append("source_daily_report_research_materializer_status_not_ready")
+    if (
+        source.get("read_only") is not True
+        or source.get("research_only") is not True
+        or source.get("source_data_no_write") is not True
+    ):
+        blockers.append("source_daily_report_read_only_boundary_missing")
+    if str(source.get("candidate_materialization_basis") or "") != DEFAULT_CANDIDATE_MATERIALIZATION_BASIS:
+        blockers.append("source_daily_report_materialization_basis_untrusted")
+    disclosure_types = {
+        "scanner_parity": bool,
+        "production_scanner_replay": bool,
+        "production_parity_mismatches": list,
+        "historical_selection_conditioning": dict,
+        "proof_or_nomination_blockers": list,
+    }
+    for field, expected_type in disclosure_types.items():
+        if field not in source or not isinstance(source.get(field), expected_type):
+            blockers.append(f"source_daily_report_disclosure_missing_or_invalid:{field}")
+    requested_window = _as_dict(source.get("requested_window"))
+    if (
+        requested_window.get("window_start") != start.isoformat()
+        or requested_window.get("window_end") != end.isoformat()
+        or requested_window.get("as_of_date") != as_of.isoformat()
+    ):
+        blockers.append("source_daily_report_requested_window_mismatch")
+    return sorted(dict.fromkeys(blockers))
+
+
 def _normalize_daily_rows(
     *,
     source: dict[str, Any],
@@ -163,6 +240,7 @@ def _normalize_daily_rows(
     expected = {(day.isoformat(), pair["lane"], pair["underlying"]): pair for day in market_dates for pair in pairs}
     source_rows = _source_daily_rows(source)
     non_parity = _source_non_parity(source)
+    source_boundary_blockers = _source_boundary_blockers(source, start=start, end=end, as_of=as_of)
     source_universe = _candidate_universe(source)
     exact_source = bool(source_universe.get("frozen_universe_exact_13_symbols"))
     outside_rows = [
@@ -175,6 +253,7 @@ def _normalize_daily_rows(
             by_key[key] = row
 
     blockers: list[str] = []
+    blockers.extend(source_boundary_blockers)
     if source_meta.get("status") != "loaded":
         blockers.append("source_candidate_generation_artifact_not_loaded")
     if not exact_source:
@@ -187,8 +266,6 @@ def _normalize_daily_rows(
         blockers.append("feature_store_market_dates_missing")
     if not pairs:
         blockers.append("forward_cohort_lane_symbol_pairs_missing")
-    blockers.extend(str(item) for item in _as_list(source.get("blockers")))
-
     daily_rows: list[dict[str, Any]] = []
     selected: list[dict[str, Any]] = []
     for key, pair in sorted(expected.items()):
@@ -200,6 +277,7 @@ def _normalize_daily_rows(
             status = "blocked_missing_daily_candidate_generation_diagnostics"
         else:
             status = _row_status(source_row)
+            row_blockers.extend(source_boundary_blockers)
             if status.startswith("blocked_"):
                 row_blockers.extend(str(item) for item in _as_list(source_row.get("blockers")))
             elif status not in ACCEPTED_DAILY_STATUSES:
@@ -208,9 +286,60 @@ def _normalize_daily_rows(
             elif _as_list(source_row.get("blockers")):
                 row_blockers.extend(str(item) for item in _as_list(source_row.get("blockers")))
                 status = "blocked_daily_candidate_generation_integrity"
+            if status in ACCEPTED_DAILY_STATUSES:
+                if source_row.get("research_materializer_safe") is not True:
+                    row_blockers.append("source_daily_row_research_materializer_safe_not_explicit_true")
+                if not isinstance(source_row.get("proof_safe"), bool):
+                    row_blockers.append("source_daily_row_proof_safe_not_explicit_boolean")
+                if source_row.get("read_only") is not True or source_row.get("no_write") is not True:
+                    row_blockers.append("source_daily_row_read_only_boundary_missing")
+                signal = _as_dict(source_row.get("signal_evidence"))
+                explicit_timestamps = {
+                    "known_at": source_row.get("known_at") or signal.get("known_at_utc"),
+                    "tradable_after": source_row.get("tradable_after"),
+                    "decision_timestamp_utc": source_row.get("decision_timestamp_utc"),
+                }
+                for field, value in explicit_timestamps.items():
+                    if not str(value or "").strip():
+                        row_blockers.append(f"source_daily_row_explicit_timestamp_missing:{field}")
+                if status == "selected_candidate" and _latest_utc_timestamp(
+                    source_row.get("entry_quote_timestamp_utc"),
+                    source_row.get("entry_quote_as_of_utc"),
+                    source_row.get("long_entry_quote_timestamp_utc"),
+                    source_row.get("long_entry_quote_as_of_utc"),
+                    source_row.get("short_entry_quote_timestamp_utc"),
+                    source_row.get("short_entry_quote_as_of_utc"),
+                ) is None:
+                    row_blockers.append("source_daily_selected_row_entry_quote_timestamp_missing")
+                if row_blockers:
+                    status = "blocked_daily_candidate_generation_integrity"
 
         row_id = f"{REPORT_ID}:{day}:{lane}:{symbol}"
         daily = dict(source_row) if source_row is not None else {}
+        signal = _as_dict(source_row.get("signal_evidence")) if source_row is not None else {}
+        known_at = (
+            str(source_row.get("known_at") or signal.get("known_at_utc") or "").strip()
+            if source_row is not None
+            else ""
+        ) or None
+        tradable_after = (
+            str(source_row.get("tradable_after") or "").strip() if source_row is not None else ""
+        ) or None
+        decision_timestamp = (
+            str(source_row.get("decision_timestamp_utc") or "").strip() if source_row is not None else ""
+        ) or None
+        source_research_safe = bool(
+            source_row is not None
+            and source_row.get("research_materializer_safe") is True
+            and status in ACCEPTED_DAILY_STATUSES
+            and not row_blockers
+        )
+        source_proof_safe = bool(
+            source_row is not None
+            and source_row.get("proof_safe") is True
+            and status in ACCEPTED_DAILY_STATUSES
+            and not row_blockers
+        )
         daily.update({
             "row_id": row_id,
             "date": day,
@@ -224,9 +353,11 @@ def _normalize_daily_rows(
             "status": status,
             "selected_candidate": status == "selected_candidate",
             "explicit_no_pick": status == "explicit_no_pick",
-            "known_at": f"{day}T00:00:00Z",
-            "tradable_after": f"{day}T13:30:00Z",
-            "decision_timestamp_utc": f"{day}T00:00:00Z",
+            "proof_safe": source_proof_safe,
+            "research_materializer_safe": source_research_safe,
+            "known_at": known_at,
+            "tradable_after": tradable_after,
+            "decision_timestamp_utc": decision_timestamp,
             "as_of_date": as_of.isoformat(),
             "read_only": True,
             "no_write": True,
@@ -234,6 +365,10 @@ def _normalize_daily_rows(
             "source_artifact_path": source_meta.get("path"),
             "blockers": sorted(dict.fromkeys(row_blockers)),
         })
+        if daily.get("net_pnl_pct_after_fees") not in (None, ""):
+            if daily.get("net_pnl_pct") != daily.get("net_pnl_pct_after_fees"):
+                daily["legacy_net_pnl_pct"] = daily.get("net_pnl_pct")
+            daily["net_pnl_pct"] = daily.get("net_pnl_pct_after_fees")
         daily_rows.append(daily)
         if daily["selected_candidate"]:
             selected.append(daily)
@@ -285,9 +420,6 @@ def build_report(
         raise ValueError("start-date, end-date, and as-of-date must be valid YYYY-MM-DD values with start <= end")
     if frozen_universe != ALLOWED_UNIVERSE:
         raise ValueError("universe must exactly match the frozen 13-symbol universe")
-    if not no_write:
-        raise ValueError("--no-write is required")
-
     source, source_meta = _load_json(source_candidate_generation_path)
     feature, feature_meta = _load_json(feature_store_path)
     cohort, cohort_meta = _load_json(forward_cohort_path)
@@ -302,16 +434,20 @@ def build_report(
         as_of=as_of,
     )
     coverage = _coverage(daily_rows, requested_months)
-    blockers = list(integrity_blockers)
+    materializer_blockers = list(integrity_blockers)
     if feature_meta.get("status") != "loaded":
-        blockers.append("feature_store_not_loaded")
+        materializer_blockers.append("feature_store_not_loaded")
     if cohort_meta.get("status") != "loaded":
-        blockers.append("forward_cohort_contract_not_loaded")
+        materializer_blockers.append("forward_cohort_contract_not_loaded")
     if coverage["candidate_generation_months_covered_count"] < len(requested_months):
-        blockers.append(
+        materializer_blockers.append(
             f"candidate_generation_months_{coverage['candidate_generation_months_covered_count']}_below_requested_{len(requested_months)}"
         )
-    blockers = sorted(dict.fromkeys(blockers))
+    materializer_blockers = sorted(dict.fromkeys(materializer_blockers))
+    source_blockers = [str(item) for item in _as_list(source.get("blockers"))]
+    proof_or_nomination_blockers = [str(item) for item in _as_list(source.get("proof_or_nomination_blockers"))]
+    blockers = sorted(dict.fromkeys([*materializer_blockers, *source_blockers, *proof_or_nomination_blockers]))
+    research_materializer_ready = not materializer_blockers
     status_counts = Counter(str(row.get("status")) for row in daily_rows)
     report = {
         "report_id": REPORT_ID,
@@ -320,7 +456,10 @@ def build_report(
         "schema_version": 1,
         "read_only": True,
         "research_only": True,
-        "no_write": True,
+        "no_write": bool(no_write),
+        "source_data_no_write": True,
+        "report_artifact_write_requested": not bool(no_write),
+        "report_artifact_write_performed": False,
         **FALSE_FLAGS,
         "scope": "read_only_no_write_frozen_13_symbol_candidate_generation_entrypoint",
         "inputs": {
@@ -339,7 +478,20 @@ def build_report(
         "allowed_universe": list(ALLOWED_UNIVERSE),
         "outside_universe_row_count": outside_count,
         **_source_non_parity(source),
+        "research_materializer_status": (
+            "research_materializer_ready" if research_materializer_ready else "blocked_research_materializer"
+        ),
+        "research_materializer_ready": research_materializer_ready,
+        "research_materializer_blockers": materializer_blockers,
+        "production_parity_mismatches": _as_list(source.get("production_parity_mismatches")),
+        "historical_selection_conditioning": _as_dict(source.get("historical_selection_conditioning")),
+        "proof_or_nomination_blockers": sorted(dict.fromkeys(proof_or_nomination_blockers)),
         "calendar_coverage": {
+            "status": (
+                "research_materializer_calendar_coverage_proven"
+                if research_materializer_ready
+                else "research_materializer_calendar_coverage_blocked"
+            ),
             "covered_months": coverage["candidate_generation_months_covered"],
             "calendar_months_covered": coverage["candidate_generation_months_covered"],
             "calendar_months_covered_count": coverage["candidate_generation_months_covered_count"],
@@ -362,6 +514,7 @@ def build_report(
             "readback_is": "read-only reusable frozen 13-symbol daily candidate/no-pick entrypoint",
             "readback_is_not": "profitability proof, fresh forward proof, scanner release, quote import, evidence mutation, live validation, auto-track, broker permission, protected-holdout consumption, proof-bar change, or promotion",
             "pass_condition": "every requested market-date lane/symbol row is selected_candidate or explicit_no_pick from an exact frozen 13-symbol source",
+            "proof_separation": "research-materializer-safe rows remain visible while global production-parity and nomination blockers stay enforced",
         },
         "forbidden_actions": FORBIDDEN_ACTIONS,
     }
@@ -417,6 +570,9 @@ def write_outputs(
     output_dir: Path = DEFAULT_OUTPUT_DIR,
     docs_report: Path = DEFAULT_DOCS_REPORT,
 ) -> dict[str, str]:
+    report["no_write"] = False
+    report["report_artifact_write_requested"] = True
+    report["report_artifact_write_performed"] = True
     output_dir.mkdir(parents=True, exist_ok=True)
     docs_report.parent.mkdir(parents=True, exist_ok=True)
     stamp = _utc_stamp()
@@ -480,7 +636,7 @@ def main(argv: list[str] | None = None) -> int:
         universe=_parse_universe(args.universe),
         no_write=args.no_write,
     )
-    if args.no_write:
+    if not args.no_write:
         write_outputs(report, output_dir=args.output_dir, docs_report=args.docs_report)
     if args.json_output:
         print(json.dumps(report, indent=2, sort_keys=True))

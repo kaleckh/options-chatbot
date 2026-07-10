@@ -4,29 +4,29 @@ This generated artifact validates a point-in-time earnings calendar source for t
 
 ## Summary
 
-- Status: `blocked_point_in_time_earnings_calendar`.
+- Status: `point_in_time_earnings_calendar_ready`.
 - Window: `2022-01-01` through `2024-05-31` plus max DTE `45`.
-- Accepted events: `74`.
-- Covered equity symbols: `0` / `9`.
+- Accepted events: `103`.
+- Covered equity symbols: `9` / `9`.
 - Rejected rows: `0`.
 
 ## Blockers
 
-- `point_in_time_earnings_calendar_symbol_coverage_incomplete`
+- None.
 
 ## Symbol Coverage
 
 | Symbol | Events | Coverage Start | Coverage End | Covers Window |
 |---|---:|---|---|---:|
-| `AAPL` | `8` | `2024-06-01` | `2026-07-15` | `false` |
-| `COP` | `8` | `2024-06-01` | `2026-07-15` | `false` |
-| `CVX` | `9` | `2024-06-01` | `2026-07-15` | `false` |
-| `GOOGL` | `8` | `2024-06-01` | `2026-07-15` | `false` |
-| `JNJ` | `8` | `2024-06-01` | `2026-07-15` | `false` |
-| `LLY` | `9` | `2024-06-01` | `2026-07-15` | `false` |
-| `NEM` | `8` | `2024-06-01` | `2026-07-15` | `false` |
-| `UNH` | `8` | `2024-06-01` | `2026-07-15` | `false` |
-| `XOM` | `8` | `2024-06-01` | `2026-07-15` | `false` |
+| `AAPL` | `11` | `2021-10-01` | `2024-07-31` | `true` |
+| `COP` | `11` | `2021-10-01` | `2024-07-31` | `true` |
+| `CVX` | `13` | `2021-10-01` | `2024-07-31` | `true` |
+| `GOOGL` | `5` | `2021-10-01` | `2024-07-31` | `true` |
+| `JNJ` | `14` | `2021-10-01` | `2024-07-31` | `true` |
+| `LLY` | `14` | `2021-10-01` | `2024-07-31` | `true` |
+| `NEM` | `12` | `2021-10-01` | `2024-07-31` | `true` |
+| `UNH` | `12` | `2021-10-01` | `2024-07-31` | `true` |
+| `XOM` | `11` | `2021-10-01` | `2024-07-31` | `true` |
 
 ## Boundary
 

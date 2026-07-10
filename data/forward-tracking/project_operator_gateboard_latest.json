@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-07-03T21:38:40Z",
+  "generated_at_utc": "2026-07-07T21:40:43Z",
   "generated_by": "scripts/build_project_operator_gateboard.py",
   "no_chase_manifest": {
     "live_policy_change": false,
@@ -222,7 +222,7 @@
         "scheduled_scan_heartbeat_status=fresh",
         "days_since_last_scheduled_scan=0",
         "last_scheduled_scan_host=KAESDEVICE",
-        "last_scheduled_scan_commit=966870aa581417952837c28423da632acfa3e1be",
+        "last_scheduled_scan_commit=6a1ac1edb98a11b5e6a211538740a4ac004870be",
         "ai_commodity_verified=False",
         "ai_commodity_shared_quote_dates=3/100"
       ],
@@ -264,15 +264,15 @@
   },
   "runtime_use": false,
   "scheduled_scan_health": {
-    "as_of_utc": "2026-07-03T21:38:40Z",
+    "as_of_utc": "2026-07-07T21:40:43Z",
     "blocker": null,
     "days_since_last_scheduled_scan": 0,
     "heartbeat_available": true,
     "heartbeat_path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\scheduled_scan_heartbeat_latest.json",
-    "last_commit_sha": "966870aa581417952837c28423da632acfa3e1be",
+    "last_commit_sha": "6a1ac1edb98a11b5e6a211538740a4ac004870be",
     "last_host": "KAESDEVICE",
-    "last_run_at_utc": "2026-07-03T17:45:06Z",
-    "last_status": "skipped_market_closed",
+    "last_run_at_utc": "2026-07-07T20:02:28Z",
+    "last_status": "completed",
     "report_id": "scheduled_scan_heartbeat_health",
     "stale_market_day_limit": 2,
     "state": "pass",
@@ -298,7 +298,7 @@
     "filtered_forward_paper_shadow_tracker": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-07-03T21:38:35Z",
+      "generated_at_utc": "2026-07-07T21:40:35Z",
       "path": "data/forward-tracking/regular-options-filtered-forward-paper-shadow/latest.json",
       "report_id": "regular_options_filtered_forward_paper_shadow_tracker",
       "status": "filtered_forward_paper_shadow_tracking_active"
@@ -306,7 +306,7 @@
     "fresh_evidence_loop": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-07-03T21:38:39Z",
+      "generated_at_utc": "2026-07-07T21:40:42Z",
       "path": "data/forward-tracking/regular_options_fresh_evidence_loop_latest.json",
       "report_id": "regular_options_fresh_evidence_loop",
       "status": "fresh_evidence_loop_readback"
@@ -346,7 +346,7 @@
     "paper_shortlist": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-07-03T21:38:37Z",
+      "generated_at_utc": "2026-07-07T21:40:40Z",
       "path": "data/profitability-lab/regular-options-paper-shortlist/latest.json",
       "report_id": null,
       "status": "paper_shortlist_readback"
@@ -362,7 +362,7 @@
     "scheduled_scan_heartbeat": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-07-03T17:45:06Z",
+      "generated_at_utc": "2026-07-07T20:02:28Z",
       "path": "data/forward-tracking/scheduled_scan_heartbeat_latest.json",
       "status": "fresh"
     },

@@ -4,13 +4,13 @@ This report is generated from `scripts/build_regular_options_point_in_time_marke
 
 ## Summary
 
-- Status: `blocked_point_in_time_market_regime_inputs`.
+- Status: `point_in_time_market_regime_inputs_ready`.
 - Accepted profitability: `false`.
 - Requested dates: `541`.
-- Covered dates: `0`.
-- Covered months: `0` / `29`.
-- Date coverage: `0.0`.
-- Confirmation counts: `{"breadth_confirmed": 0, "qqq_momentum_confirmed": 287, "spy_momentum_confirmed": 285}`.
+- Covered dates: `541`.
+- Covered months: `29` / `29`.
+- Date coverage: `100.0`.
+- Confirmation counts: `{"breadth_confirmed": 268, "qqq_momentum_confirmed": 287, "spy_momentum_confirmed": 285}`.
 
 ## Formula Policy
 
@@ -44,93 +44,9 @@ This report is generated from `scripts/build_regular_options_point_in_time_marke
     "status_value": "feature_store_built"
   },
   "market_data_db": {
-    "adjustment_mode": "adjusted",
-    "error": null,
     "exists": true,
     "path": "market_data.db",
-    "rejected_row_counts": {},
-    "source": "alpaca_sip",
-    "status": "loaded",
-    "symbols": {
-      "AAPL": {
-        "first_bar_date": "2020-05-26",
-        "latest_bar_date": "2024-05-31",
-        "latest_fetched_at_utc": "2026-06-05T07:29:41Z",
-        "row_count": 1012
-      },
-      "COP": {
-        "first_bar_date": "2020-05-26",
-        "latest_bar_date": "2024-05-31",
-        "latest_fetched_at_utc": "2026-06-05T07:29:56Z",
-        "row_count": 1012
-      },
-      "CVX": {
-        "first_bar_date": "2020-05-26",
-        "latest_bar_date": "2024-05-31",
-        "latest_fetched_at_utc": "2026-06-05T07:29:54Z",
-        "row_count": 1012
-      },
-      "DIA": {
-        "first_bar_date": "2020-05-26",
-        "latest_bar_date": "2024-05-31",
-        "latest_fetched_at_utc": "2026-06-05T07:30:30Z",
-        "row_count": 1012
-      },
-      "GOOGL": {
-        "first_bar_date": "2020-05-26",
-        "latest_bar_date": "2024-05-31",
-        "latest_fetched_at_utc": "2026-06-05T07:30:18Z",
-        "row_count": 1012
-      },
-      "IWM": {
-        "first_bar_date": "2020-05-26",
-        "latest_bar_date": "2024-05-31",
-        "latest_fetched_at_utc": "2026-06-05T07:30:29Z",
-        "row_count": 1012
-      },
-      "JNJ": {
-        "first_bar_date": "2020-05-26",
-        "latest_bar_date": "2024-05-31",
-        "latest_fetched_at_utc": "2026-06-05T07:29:52Z",
-        "row_count": 1012
-      },
-      "LLY": {
-        "first_bar_date": "2020-05-26",
-        "latest_bar_date": "2024-05-31",
-        "latest_fetched_at_utc": "2026-06-05T07:29:52Z",
-        "row_count": 1012
-      },
-      "NEM": {
-        "first_bar_date": "2020-05-26",
-        "latest_bar_date": "2024-05-31",
-        "latest_fetched_at_utc": "2026-06-05T07:30:05Z",
-        "row_count": 1012
-      },
-      "QQQ": {
-        "first_bar_date": "2020-05-26",
-        "latest_bar_date": "2024-05-31",
-        "latest_fetched_at_utc": "2026-06-05T08:25:55Z",
-        "row_count": 1012
-      },
-      "SPY": {
-        "first_bar_date": "2020-05-26",
-        "latest_bar_date": "2024-05-31",
-        "latest_fetched_at_utc": "2026-06-05T08:25:54Z",
-        "row_count": 1012
-      },
-      "UNH": {
-        "first_bar_date": "2020-05-26",
-        "latest_bar_date": "2024-05-31",
-        "latest_fetched_at_utc": "2026-06-05T07:29:51Z",
-        "row_count": 1012
-      },
-      "XOM": {
-        "first_bar_date": "2020-05-26",
-        "latest_bar_date": "2024-05-31",
-        "latest_fetched_at_utc": "2026-06-05T07:29:54Z",
-        "row_count": 1012
-      }
-    }
+    "status": "not_used_source_rows_preferred"
   },
   "missing_key_symbols": [],
   "missing_non_key_symbols": [],
@@ -139,23 +55,134 @@ This report is generated from `scripts/build_regular_options_point_in_time_marke
     "adjustment_mode": "adjusted",
     "source": "alpaca_sip"
   },
-  "source_mode": "historical_prior_bar_reconstruction",
+  "source_mode": "point_in_time_verified_daily_history_source_rows",
   "underlying_source_rows": {
+    "coverage_ready": true,
+    "default_source_rows_path": false,
+    "duplicate_symbol_input_date_count": 0,
     "error": null,
-    "exists": false,
+    "exists": true,
+    "malformed_line_count": 0,
+    "min_date_coverage_required_pct": 90.0,
+    "min_symbol_date_coverage_pct": 100.0,
     "path": "data/profitability-lab/regular-options-out-of-sample-extension/underlying-daily-history/source_rows.jsonl",
-    "status": "missing"
+    "per_symbol_coverage": {
+      "AAPL": {
+        "coverage_pct": 100.0,
+        "coverage_ready": true,
+        "covered_date_count": 541,
+        "requested_date_count": 541
+      },
+      "COP": {
+        "coverage_pct": 100.0,
+        "coverage_ready": true,
+        "covered_date_count": 541,
+        "requested_date_count": 541
+      },
+      "CVX": {
+        "coverage_pct": 100.0,
+        "coverage_ready": true,
+        "covered_date_count": 541,
+        "requested_date_count": 541
+      },
+      "DIA": {
+        "coverage_pct": 100.0,
+        "coverage_ready": true,
+        "covered_date_count": 541,
+        "requested_date_count": 541
+      },
+      "GOOGL": {
+        "coverage_pct": 100.0,
+        "coverage_ready": true,
+        "covered_date_count": 541,
+        "requested_date_count": 541
+      },
+      "IWM": {
+        "coverage_pct": 100.0,
+        "coverage_ready": true,
+        "covered_date_count": 541,
+        "requested_date_count": 541
+      },
+      "JNJ": {
+        "coverage_pct": 100.0,
+        "coverage_ready": true,
+        "covered_date_count": 541,
+        "requested_date_count": 541
+      },
+      "LLY": {
+        "coverage_pct": 100.0,
+        "coverage_ready": true,
+        "covered_date_count": 541,
+        "requested_date_count": 541
+      },
+      "NEM": {
+        "coverage_pct": 100.0,
+        "coverage_ready": true,
+        "covered_date_count": 541,
+        "requested_date_count": 541
+      },
+      "QQQ": {
+        "coverage_pct": 100.0,
+        "coverage_ready": true,
+        "covered_date_count": 541,
+        "requested_date_count": 541
+      },
+      "SPY": {
+        "coverage_pct": 100.0,
+        "coverage_ready": true,
+        "covered_date_count": 541,
+        "requested_date_count": 541
+      },
+      "UNH": {
+        "coverage_pct": 100.0,
+        "coverage_ready": true,
+        "covered_date_count": 541,
+        "requested_date_count": 541
+      },
+      "XOM": {
+        "coverage_pct": 100.0,
+        "coverage_ready": true,
+        "covered_date_count": 541,
+        "requested_date_count": 541
+      }
+    },
+    "reject_count": 0,
+    "reject_counts": {},
+    "rejected_rows": [],
+    "row_count": 7033,
+    "source_family": "point_in_time_underlying_daily_ohlcv_adjusted_v1",
+    "source_import_report_binding": {
+      "bound": true,
+      "expected_source_file_hash": "34a1ec7749d11e49451ef66aefa65594e79eaa5dfa5b36e04cd9a2d3919ec1a8",
+      "expected_source_row_count": 7033,
+      "expected_source_rows_path": "data/profitability-lab/regular-options-out-of-sample-extension/underlying-daily-history/source_rows.jsonl",
+      "observed_source_file_hashes": [
+        "34a1ec7749d11e49451ef66aefa65594e79eaa5dfa5b36e04cd9a2d3919ec1a8"
+      ],
+      "observed_source_row_count": 7033,
+      "path": "data/profitability-lab/regular-options-out-of-sample-extension/underlying-daily-source-import/latest.json",
+      "report": {
+        "error": null,
+        "exists": true,
+        "generated_at_utc": "2026-07-06T05:28:32Z",
+        "path": "data/profitability-lab/regular-options-out-of-sample-extension/underlying-daily-source-import/latest.json",
+        "report_id": "regular_options_underlying_daily_history_source_import",
+        "required": false,
+        "status": "loaded",
+        "status_value": "underlying_daily_history_source_import_materialized"
+      },
+      "status": "bound"
+    },
+    "source_mode": "point_in_time_verified_daily_history_source_rows",
+    "status": "loaded_ready",
+    "valid_row_count": 7033
   }
 }
 ```
 
 ## Blockers
 
-- `missing_or_invalid_verified_underlying_source_rows`
-- `market_regime_inputs_using_historical_reconstruction`
-- `point_in_time_market_regime_row_validation_failed`
-- `insufficient_month_coverage`
-- `insufficient_date_coverage`
+- None.
 
 ## Forbidden Actions
 

@@ -214,10 +214,14 @@ def _rolling_metrics(
             "reason": "invalid_20_trading_day_reference_close",
             "reference_bar_date_et": usable[-21]["bar_date"],
         }
+    close_5 = _rolling_metric_close(usable[-6])
     sma_values = [_rolling_metric_close(row) for row in usable[-50:]]
+    sma20_values = [_rolling_metric_close(row) for row in usable[-20:]]
     return {
         "prior_20_trading_day_return_pct": round(((prior_close / close_20) - 1.0) * 100.0, 6),
+        "prior_5_trading_day_return_pct": round(((prior_close / close_5) - 1.0) * 100.0, 6) if close_5 > 0 else None,
         "prior_50_trading_day_sma": round(sum(sma_values) / len(sma_values), 6),
+        "prior_20_trading_day_sma": round(sum(sma20_values) / len(sma20_values), 6),
         "rolling_metric_prior_row_count": len(usable),
         "rolling_metric_price_basis": "close",
     }, None
@@ -335,6 +339,7 @@ def build_report(
                 target_universe=symbols,
                 target_start_date=target_start_date,
                 target_end_date=target_end_date,
+                lookback_start_date=lookback_start_date,
                 requested_dates=requested_dates,
             )
         except (OSError, ValueError) as exc:

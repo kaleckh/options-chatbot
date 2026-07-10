@@ -318,6 +318,7 @@ def validate_future_source_rows(
     target_universe: Sequence[str] = TARGET_UNIVERSE,
     target_start_date: str = TARGET_START_DATE,
     target_end_date: str = TARGET_END_DATE,
+    lookback_start_date: str = LOOKBACK_START_DATE,
     requested_dates: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     allowed = set(target_universe)
@@ -370,7 +371,7 @@ def validate_future_source_rows(
         marker_values = " ".join(str(row.get(field) or "").strip().lower() for field in UNTRUSTED_MARKER_FIELDS)
         if any(marker in marker_values for marker in UNTRUSTED_SOURCE_MARKERS):
             reasons.append("stale_manual_synthetic_or_source_mark_only_row")
-        if bar_date and not (date.fromisoformat(LOOKBACK_START_DATE) <= bar_date <= target_end):
+        if bar_date and not (date.fromisoformat(lookback_start_date) <= bar_date <= target_end):
             reasons.append("outside_required_lookback_or_target_window")
         if bar_date:
             for field, leakage_date in _leakage_reference_dates(row):

@@ -67,6 +67,16 @@ class LivingDocsHygieneTests(unittest.TestCase):
         self.assertRegex(worklog, r"(?m)^##\s+\d{4}-\d{2}-\d{2}$")
         self.assertIn("Durable decision:", decisions)
 
+    def test_startup_memory_stays_within_explicit_byte_budgets(self):
+        memory_total = 0
+        for relative_path, budget in hygiene.LIVING_MEMORY_BYTE_BUDGETS.items():
+            size = (ROOT / relative_path).stat().st_size
+            memory_total += size
+            self.assertLessEqual(size, budget, relative_path)
+        self.assertLessEqual(memory_total, hygiene.LIVING_MEMORY_TOTAL_BYTE_BUDGET)
+        startup_total = sum((ROOT / path).stat().st_size for path in hygiene.STARTUP_CONTEXT_PATHS)
+        self.assertLessEqual(startup_total, hygiene.STARTUP_CONTEXT_TOTAL_BYTE_BUDGET)
+
 
 if __name__ == "__main__":
     unittest.main()

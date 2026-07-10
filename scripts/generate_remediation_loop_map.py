@@ -6,6 +6,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+if __package__:
+    from .archive_project_memory import project_memory_corpus_paths
+else:
+    from archive_project_memory import project_memory_corpus_paths
+
 
 ROOT = Path(__file__).resolve().parents[1]
 GENERATOR = "scripts/generate_remediation_loop_map.py"
@@ -618,6 +623,13 @@ def _path_exists(relative_path: str, *, allow_outputs: bool = False) -> bool:
     return path.exists()
 
 
+def _worklog_corpus_text() -> str:
+    return "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in project_memory_corpus_paths(root=ROOT, logical_path="docs/WORKLOG.md")
+    )
+
+
 def _validate_points(points: list[dict[str, Any]], *, allow_output_paths: bool = False) -> list[str]:
     errors: list[str] = []
     numbers = [point["point"] for point in points]
@@ -626,7 +638,7 @@ def _validate_points(points: list[dict[str, Any]], *, allow_output_paths: bool =
     if numbers != list(range(1, TOTAL_POINTS + 1)):
         errors.append(f"Point numbers must be unique, consecutive, and sorted 1..{TOTAL_POINTS}: {numbers}")
 
-    worklog = (ROOT / "docs" / "WORKLOG.md").read_text(encoding="utf-8")
+    worklog = _worklog_corpus_text()
     valid_statuses = {"completed", "in_progress", "planned"}
 
     for point in points:

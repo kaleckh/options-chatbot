@@ -7,8 +7,8 @@
 - Post-freeze filter-matched rows: `0`.
 - Zero-run windows: `52` / `482`; fraction `0.107884`.
 - Zero-run trigger schedule: `ready`; monotonicity `passed`.
-- First <=0.05 trigger if zero-run continues: `2026-07-20` at `24` market days; fraction `0.048832`.
-- First <=0.01 confirmation if zero-run continues: `2026-08-12` at `41` market days; fraction `0.008811`.
+- First <=0.05 trigger if zero-run continues: `2026-07-22` at `24` market days; fraction `0.048832`.
+- First <=0.01 confirmation if zero-run continues: `2026-08-14` at `41` market days; fraction `0.008811`.
 - Row-conditioned zero-window statistic: `historical_row_rich_zero_windows_exist`; descriptive only `True`.
 - Minimum historical distance below frozen threshold: `0.023566`.
 - Session-time overlap with materializer entry window: `14` / `341` distinct times.
@@ -17,8 +17,8 @@
 
 | Threshold | Window Market Days | Projected Date If Zero Continues | Historical Zero Fraction |
 |---|---:|---|---:|
-| `<=0.05` | 24 | `2026-07-20` | 0.048832 |
-| `<=0.01` | 41 | `2026-08-12` | 0.008811 |
+| `<=0.05` | 24 | `2026-07-22` | 0.048832 |
+| `<=0.01` | 41 | `2026-08-14` | 0.008811 |
 
 These are descriptive overlapping-window fractions, not p-values or independent significance tests.
 

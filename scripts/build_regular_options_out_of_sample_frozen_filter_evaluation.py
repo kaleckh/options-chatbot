@@ -142,7 +142,9 @@ def _target_months(contract: dict[str, Any]) -> list[str]:
 
 def _materializer_covered_months(materializer: dict[str, Any]) -> list[str]:
     coverage = _as_dict(materializer.get("calendar_coverage") or materializer.get("coverage"))
-    for key in ("calendar_months_covered", "covered_months", "requested_months_covered"):
+    # candidate_generation_months_covered is the engine artifact's key; the
+    # source-surface artifact uses calendar_months_covered for the same calendar.
+    for key in ("calendar_months_covered", "covered_months", "requested_months_covered", "candidate_generation_months_covered"):
         months = [str(item) for item in _as_list(coverage.get(key)) if str(item)]
         if months:
             return sorted(set(months))

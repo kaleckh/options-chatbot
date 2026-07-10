@@ -8,13 +8,13 @@ Status: `candidate_review_waiting_for_scheduler_health`.
 - Append allowed by validation: `false`.
 - Append ready rows: `0`.
 - Append rejected rows: `0`.
-- Capture status: `market_window_not_confirmed_no_capture_started`.
-- Capture freshness: `collector_nested_capture_fresh_for_candidate_review`.
-- Collector status: `waiting_for_valid_market_window`.
+- Capture status: `no_phase2_natural_selections_no_append`.
+- Capture freshness: `capture_latest_fresh_for_candidate_review`.
+- Collector status: `collector_attempts_exhausted_waiting_for_more_rows`.
 - Scheduler status: `scheduler_runtime_blocked`.
 - Scheduler freshness: `scheduler_health_fresh_for_candidate_review`.
-- Scan-task health status: `scan_tasks_ready_for_next_market_window`.
-- Scan-task health freshness: `scan_task_health_fresh_for_candidate_review`.
+- Scan-task health status: `scan_task_runtime_blocked`.
+- Scan-task health freshness: `scan_task_health_not_ready`.
 - Throughput status: `blocked_no_same_day_phase2_natural_selections`.
 - Candidate-starvation evidence status: `raw_symbol_drop_reasons_recorded`.
 - Zero-candidate diagnostics status: `zero_candidate_diagnosis_ready_symbol_drop_reasons_recorded`.

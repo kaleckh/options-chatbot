@@ -6,18 +6,18 @@ This generated artifact materializes the frozen 13-symbol candidate-generation e
 
 - Status: `blocked_frozen_13_symbol_candidate_generation_engine`.
 - Decision: `blocked_frozen_candidate_generation_entrypoint_incomplete`.
-- Window: `2024-06-01` through `2026-07-02` as of `2026-07-02`.
-- Daily diagnostics rows: `7280`.
-- Candidate-generation months covered: `0` / `26`.
-- Train months covered: `0`.
-- Audit months covered: `0`.
+- Window: `2024-06-01` through `2026-05-31` as of `2026-06-04`.
+- Daily diagnostics rows: `6986`.
+- Candidate-generation months covered: `23` / `24`.
+- Train months covered: `19`.
+- Audit months covered: `4`.
 - Latest audit exact trades: `0`.
 - Latest audit exact-trade scope: `strict_calendar_coverage_only`.
-- Partial selected-row exact trades: `0`.
+- Partial selected-row exact trades: `2840`.
 - Candidate materialization basis: `deterministic_local_pit_candidate_materializer_v1`.
 - Scanner parity: `False`.
 - Production scanner replay: `False`.
-- Prior source-surface months covered: `0`.
+- Prior source-surface months covered: `23`.
 - Prior denominator all rows blocked: `True`.
 - Accepted profitability: `False`.
 
@@ -25,18 +25,16 @@ This generated artifact materializes the frozen 13-symbol candidate-generation e
 
 | Status | Count |
 |---|---:|
-| `blocked_missing_historical_scanner_point_in_time_inputs` | `7280` |
+| `blocked_missing_historical_scanner_point_in_time_inputs` | `70` |
+| `explicit_no_pick` | `3944` |
+| `selected_candidate` | `2972` |
 
 ## Blockers
 
 - `blocked_daily_candidate_generation_coverage`
 - `blocked_train_or_audit_month_coverage`
-- `candidate_generation_months_0_below_requested_26`
-- `missing_historical_entry_underlying_price_surface`
-- `missing_historical_option_chain_selection_surface`
-- `missing_historical_scanner_point_in_time_inputs`
+- `candidate_generation_months_23_below_requested_24`
 - `missing_lane_specific_point_in_time_feature_inputs`
-- `missing_point_in_time_earnings_calendar_source`
 - `strict_latest_audit_exact_trades_0_below_30`
 
 ## Boundary

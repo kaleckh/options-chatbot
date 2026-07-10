@@ -1,3 +1,4 @@
+import hashlib
 import json
 import tempfile
 import unittest
@@ -6,6 +7,7 @@ from pathlib import Path
 
 from scripts import agent_control
 from scripts import generate_agent_memory_graph as memory_graph
+from scripts.archive_project_memory import ACKNOWLEDGEMENT, capture_project_memory_baseline
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -328,6 +330,22 @@ class AgentControlRetrievalTierTests(unittest.TestCase):
             self.assertEqual(result["relevant_repo_files"], [])
             self.assertNotIn("source=repo_file", result["prompt_context"])
 
+    def test_context_pack_can_opt_into_goal_aware_repo_index(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "agent_control.db"
+            self._seed_fixture_nodes(db_path)
+
+            result = agent_control.build_context_pack(
+                db_path=db_path,
+                goal="agent_control.py",
+                tenant_id=agent_control.DEFAULT_TENANT_ID,
+                include_repo_index=True,
+                include_prompt_context=True,
+            )
+
+            self.assertIn("repo_file:scripts/agent_control.py", [node["id"] for node in result["relevant_repo_files"]])
+            self.assertIn("repo_file:scripts/agent_control.py", result["prompt_context"])
+
     def test_golden_query_harness_uses_real_query_path(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -599,6 +617,107 @@ class AgentControlLivingHistoryIngestTests(unittest.TestCase):
             )
             self.assertTrue(tenant_a_query["retrieval"]["seed_explanations"])
             self.assertTrue(tenant_b_query["retrieval"]["seed_explanations"])
+
+    def test_archived_corpus_preserves_compacted_entries_and_freshness(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp) / "repo"
+            db_path = Path(tmp) / "agent_control.db"
+            self._write_history_repo(repo_root)
+            for relative in ("PROJECT_CONTEXT.md", "NEXT_STEPS.md", "index.md"):
+                (repo_root / "docs" / relative).write_text(f"# {relative}\n", encoding="utf-8")
+            capture_project_memory_baseline(
+                root=repo_root,
+                capture_date="2026-07-10",
+                acknowledgement=ACKNOWLEDGEMENT,
+            )
+
+            first = agent_control.ingest_living_history(db_path=db_path, repo_root=repo_root)
+            with closing(agent_control.connect(db_path)) as conn:
+                before_ids = {
+                    str(row["id"])
+                    for row in conn.execute(
+                        """
+                        SELECT id FROM graph_nodes
+                        WHERE json_extract(metadata_json, '$.source_type') = ?
+                        """,
+                        (agent_control.LIVING_HISTORY_SOURCE_TYPE,),
+                    ).fetchall()
+                }
+
+            (repo_root / "docs" / "WORKLOG.md").write_text(
+                "# Worklog\n\n## 2026-07-10 (current window)\n\n- Compact live handoff.\n",
+                encoding="utf-8",
+            )
+            (repo_root / "docs" / "DECISIONS.md").write_text(
+                "# Decisions\n\n## 2026-07-10: Compact Memory\n\n"
+                "Durable decision: archives preserve historical entries.\n",
+                encoding="utf-8",
+            )
+            second = agent_control.ingest_living_history(db_path=db_path, repo_root=repo_root)
+            freshness = agent_control.refresh_retrieval_freshness(db_path=db_path, repo_root=repo_root)
+
+            with closing(agent_control.connect(db_path)) as conn:
+                rows = conn.execute(
+                    """
+                    SELECT n.id, n.metadata_json, d.freshness_status
+                    FROM graph_nodes n
+                    JOIN retrieval_documents d ON d.source_node_id = n.id
+                    WHERE json_extract(n.metadata_json, '$.source_type') = ?
+                    """,
+                    (agent_control.LIVING_HISTORY_SOURCE_TYPE,),
+                ).fetchall()
+            after_ids = {str(row["id"]) for row in rows}
+            metadata_rows = [json.loads(row["metadata_json"]) for row in rows]
+
+            self.assertGreater(first["nodes_created"], 0)
+            self.assertEqual(second["nodes_pruned"], 0)
+            self.assertTrue(before_ids.issubset(after_ids))
+            self.assertTrue(any(item.get("source_heading") == "2026-07-10" for item in metadata_rows))
+            self.assertTrue(any(item.get("archived_source_present") is True for item in metadata_rows))
+            self.assertTrue(
+                any(
+                    any(path.startswith("docs/archive/project-memory/2026-07-10/") for path in item["source_physical_paths"])
+                    for item in metadata_rows
+                )
+            )
+            self.assertEqual(freshness["stale"], 0)
+            self.assertTrue(all(row["freshness_status"] == "current" for row in rows))
+            self.assertTrue(agent_control._repo_index_skip("docs/archive/project-memory/2026-07-10/WORKLOG.md"))
+
+    def test_invalid_archive_aborts_before_pruning(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp) / "repo"
+            db_path = Path(tmp) / "agent_control.db"
+            self._write_history_repo(repo_root)
+            for relative in ("PROJECT_CONTEXT.md", "NEXT_STEPS.md", "index.md"):
+                (repo_root / "docs" / relative).write_text(f"# {relative}\n", encoding="utf-8")
+            capture_project_memory_baseline(
+                root=repo_root,
+                capture_date="2026-07-10",
+                acknowledgement=ACKNOWLEDGEMENT,
+            )
+            agent_control.ingest_living_history(db_path=db_path, repo_root=repo_root)
+            manifest_path = repo_root / "docs" / "archive" / "project-memory" / "2026-07-10" / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            worklog = next(item for item in manifest["files"] if item["logical_path"] == "docs/WORKLOG.md")
+            worklog["living_history_ingest"] = False
+            unsigned = {key: value for key, value in manifest.items() if key != "manifest_sha256"}
+            canonical = json.dumps(unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+            manifest["manifest_sha256"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+            manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            with self.assertRaises(agent_control.AgentControlError):
+                agent_control.ingest_living_history(db_path=db_path, repo_root=repo_root)
+
+            with closing(agent_control.connect(db_path)) as conn:
+                remaining = conn.execute(
+                    """
+                    SELECT count(*) FROM graph_nodes
+                    WHERE json_extract(metadata_json, '$.source_type') = ?
+                    """,
+                    (agent_control.LIVING_HISTORY_SOURCE_TYPE,),
+                ).fetchone()[0]
+            self.assertGreater(remaining, 0)
 
 
 if __name__ == "__main__":

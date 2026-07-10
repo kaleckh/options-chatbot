@@ -10,7 +10,7 @@ This generated artifact is the canonical filtered historical simulated-forward a
 - Filter source mode: `frozen_contract`.
 - Filter: `train_ranked_top_8_tickers__signal_evidence_prior_20_trading_day_return_pct_gte_10.9906`.
 - Conditions: ticker in NEM,JNJ,GOOGL,AAPL,IWM,CVX,SPY,QQQ; signal_evidence.prior_20_trading_day_return_pct gte 10.990605.
-- Dedupe: `2851` rows before dedupe, `2680` rows after dedupe, `171` duplicates removed.
+- Dedupe: `2840` rows before dedupe, `2671` rows after dedupe, `169` duplicates removed.
 - Audit confidence label: `selection_conditioned_positive`.
 - Bootstrap draws: `10000`.
 
@@ -18,7 +18,7 @@ This generated artifact is the canonical filtered historical simulated-forward a
 
 | Window | Rows | Clusters | Avg % | PF | IID PF LB 5% | Cluster PF LB 5% | Net USD | USD PF | USD Cluster PF LB 5% | Confidence Label |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| Train | 237 | 95 | 12.06 | 1.4289 | 1.12 | 0.93 | 5688.8 | 1.3256 | 0.8 | `underpowered` |
+| Train | 232 | 92 | 12.54 | 1.4567 | 1.13 | 0.94 | 3823.8 | 1.2218 | 0.73 | `underpowered` |
 | Simulated forward audit | 57 | 21 | 30.87 | 2.511 | 1.52 | 1.15 | 14599.8 | 4.2739 | 1.89 | `selection_conditioned_positive` |
 
 ## Selection And Regime Disclosure

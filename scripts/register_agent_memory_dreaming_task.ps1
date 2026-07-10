@@ -19,7 +19,7 @@ $trigger = New-ScheduledTaskTrigger -Daily -At $triggerTime
 $settings = New-ScheduledTaskSettingsSet `
     -StartWhenAvailable `
     -MultipleInstances IgnoreNew `
-    -ExecutionTimeLimit (New-TimeSpan -Minutes 20)
+    -ExecutionTimeLimit (New-TimeSpan -Minutes 45)
 
 Register-ScheduledTask `
     -TaskName $TaskName `

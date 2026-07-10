@@ -1,17 +1,17 @@
 {
   "artifacts": {
     "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-candidate-outcome-ledger.md",
-    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_20260703T213840Z.json",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_20260707T214042Z.json",
     "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.json",
     "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.md",
-    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_20260703T213840Z.md"
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_20260707T214042Z.md"
   },
-  "generated_at_utc": "2026-07-03T21:38:40Z",
+  "generated_at_utc": "2026-07-07T21:40:42Z",
   "inputs": {
     "filtered_forward_paper_shadow_tracker": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-07-03T21:38:35Z",
+      "generated_at_utc": "2026-07-07T21:40:35Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular-options-filtered-forward-paper-shadow\\latest.json",
       "required": false,
       "status": "loaded"
@@ -19,7 +19,7 @@
     "fresh_evidence_loop": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-07-03T21:38:39Z",
+      "generated_at_utc": "2026-07-07T21:40:42Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fresh_evidence_loop_latest.json",
       "required": true,
       "status": "loaded"
@@ -35,7 +35,7 @@
     "paper_shortlist": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-07-03T21:38:37Z",
+      "generated_at_utc": "2026-07-07T21:40:40Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-paper-shortlist\\latest.json",
       "required": false,
       "status": "loaded"

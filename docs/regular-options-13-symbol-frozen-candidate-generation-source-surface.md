@@ -5,51 +5,45 @@ This generated artifact attempts to materialize a frozen 13-symbol candidate-gen
 ## Summary
 
 - Status: `blocked_13_symbol_frozen_candidate_generation_source_surface`.
-- Requested window: `2024-06-01` through `2026-07-02` as of `2026-07-02`.
+- Requested window: `2024-06-01` through `2026-05-31` as of `2026-06-04`.
 - Source exact 13-symbol: `True`.
-- Covered months: `0` / `26`.
-- Selected rows: `0`.
+- Covered months: `23` / `24`.
+- Selected rows: `2972`.
 
 ## Month Diagnostics
 
 | Month | Attempted | Proven | Explicit No-Pick | Selected | Outside Universe | Coverable | Blockers |
 |---|---:|---:|---:|---:|---:|---:|---|
-| `2024-06` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2024-07` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2024-08` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2024-09` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2024-10` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2024-11` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2024-12` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2025-01` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2025-02` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2025-03` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2025-04` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2025-05` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2025-06` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2025-07` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2025-08` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2025-09` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2025-10` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2025-11` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2025-12` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2026-01` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2026-02` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2026-03` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2026-04` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2026-05` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2026-06` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
-| `2026-07` | False | False | False | 0 | 0 | False | candidate_generation_months_0_below_requested_26, missing_daily_candidate_generation_diagnostics, missing_historical_entry_underlying_price_surface, missing_historical_option_chain_selection_surface, missing_historical_scanner_point_in_time_inputs, missing_lane_specific_point_in_time_feature_inputs, missing_point_in_time_earnings_calendar_source |
+| `2024-06` | True | True | False | 98 | 0 | True | candidate_generation_months_23_below_requested_24, missing_lane_specific_point_in_time_feature_inputs |
+| `2024-07` | True | True | False | 163 | 0 | True | candidate_generation_months_23_below_requested_24, missing_lane_specific_point_in_time_feature_inputs |
+| `2024-08` | True | True | False | 107 | 0 | True | candidate_generation_months_23_below_requested_24, missing_lane_specific_point_in_time_feature_inputs |
+| `2024-09` | True | True | False | 97 | 0 | True | candidate_generation_months_23_below_requested_24, missing_lane_specific_point_in_time_feature_inputs |
+| `2024-10` | True | True | False | 187 | 0 | True | candidate_generation_months_23_below_requested_24, missing_lane_specific_point_in_time_feature_inputs |
+| `2024-11` | True | True | False | 123 | 0 | True | candidate_generation_months_23_below_requested_24, missing_lane_specific_point_in_time_feature_inputs |
+| `2024-12` | True | True | False | 84 | 0 | True | candidate_generation_months_23_below_requested_24, missing_lane_specific_point_in_time_feature_inputs |
+| `2025-01` | True | True | False | 67 | 0 | True | candidate_generation_months_23_below_requested_24, missing_lane_specific_point_in_time_feature_inputs |
+| `2025-02` | True | True | False | 94 | 0 | True | candidate_generation_months_23_below_requested_24, missing_lane_specific_point_in_time_feature_inputs |
+| `2025-03` | True | True | False | 66 | 0 | True | candidate_generation_months_23_below_requested_24, missing_lane_specific_point_in_time_feature_inputs |
+| `2025-04` | True | True | False | 32 | 0 | True | candidate_generation_months_23_below_requested_24, missing_lane_specific_point_in_time_feature_inputs |
+| `2025-05` | False | False | False | 78 | 0 | False | candidate_generation_months_23_below_requested_24, missing_daily_candidate_generation_diagnostics, missing_lane_specific_point_in_time_feature_inputs |
+| `2025-06` | True | True | False | 148 | 0 | True | candidate_generation_months_23_below_requested_24, missing_lane_specific_point_in_time_feature_inputs |
+| `2025-07` | True | True | False | 238 | 0 | True | candidate_generation_months_23_below_requested_24, missing_lane_specific_point_in_time_feature_inputs |
+| `2025-08` | True | True | False | 158 | 0 | True | candidate_generation_months_23_below_requested_24, missing_lane_specific_point_in_time_feature_inputs |
+| `2025-09` | True | True | False | 211 | 0 | True | candidate_generation_months_23_below_requested_24, missing_lane_specific_point_in_time_feature_inputs |
+| `2025-10` | True | True | False | 186 | 0 | True | candidate_generation_months_23_below_requested_24, missing_lane_specific_point_in_time_feature_inputs |
+| `2025-11` | True | True | False | 100 | 0 | True | candidate_generation_months_23_below_requested_24, missing_lane_specific_point_in_time_feature_inputs |
+| `2025-12` | True | True | False | 144 | 0 | True | candidate_generation_months_23_below_requested_24, missing_lane_specific_point_in_time_feature_inputs |
+| `2026-01` | True | True | False | 132 | 0 | True | candidate_generation_months_23_below_requested_24, missing_lane_specific_point_in_time_feature_inputs |
+| `2026-02` | True | True | False | 105 | 0 | True | candidate_generation_months_23_below_requested_24, missing_lane_specific_point_in_time_feature_inputs |
+| `2026-03` | True | True | False | 69 | 0 | True | candidate_generation_months_23_below_requested_24, missing_lane_specific_point_in_time_feature_inputs |
+| `2026-04` | True | True | False | 127 | 0 | True | candidate_generation_months_23_below_requested_24, missing_lane_specific_point_in_time_feature_inputs |
+| `2026-05` | True | True | False | 158 | 0 | True | candidate_generation_months_23_below_requested_24, missing_lane_specific_point_in_time_feature_inputs |
 
 ## Blockers
 
-- `candidate_generation_months_0_below_requested_26`
+- `candidate_generation_months_23_below_requested_24`
 - `missing_daily_candidate_generation_diagnostics`
-- `missing_historical_entry_underlying_price_surface`
-- `missing_historical_option_chain_selection_surface`
-- `missing_historical_scanner_point_in_time_inputs`
 - `missing_lane_specific_point_in_time_feature_inputs`
-- `missing_point_in_time_earnings_calendar_source`
 
 ## Boundary
 

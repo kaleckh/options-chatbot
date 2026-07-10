@@ -1,0 +1,69 @@
+{
+  "report_id": "regular_options_filter_family_preregistration_draft",
+  "contract_id": "regular_options_filter_family_preregistration_draft_v1",
+  "schema_version": 1,
+  "created_at_utc": "2026-07-07T00:30:00Z",
+  "status": "draft_family_definitions_pending_window_contract_and_operator_approval",
+  "authority": "none_design_only_research_only_not_forward_proof",
+  "parent_contract": "data/contracts/regular-options-refreeze-filter-family-research-contract-v1.json",
+  "activation_record": "docs/DECISIONS.md 2026-07-05 operator activation entry",
+  "grounding": {
+    "production_gate_source": "options_chatbot.py lines 6289-6320 (read 2026-07-06)",
+    "pullback_uptrend_gate": "bullish = price > sma50 AND ret20 > 2.0 AND -4.0 < ret5 < 0.25",
+    "plain_momentum_gate": "bullish = ret5 > entry_momentum_pct AND price > sma20; bearish mirrored (entry_momentum_pct: 0.50 equities, 0.30 indexes)",
+    "drop_evidence": "2,398 scheduled Phase 2 drops over 77 sessions, 0 returned picks; momentum drop key 1,710 (71.3%); bullish_pullback_observation accounts for 2,242 drops",
+    "timing_evidence": "scheduled-session time overlap with the 10:10 materializer entry minute is 14/341 distinct times; one SPY 2026-06-16 parity divergence row",
+    "falsified_predecessor": "frozen filter (top-8 tickers + prior-20d return >= 10.99%) failed OOS 2022-01..2024-05: percent/USD cluster PF LB 0.22/0.14, net P&L -18,210 USD over 200 rows"
+  },
+  "families": [
+    {
+      "family_id": "F1a_ret20_threshold",
+      "hypothesis": "the ret20 > 2.0 term is the dominant starving term of the pullback_uptrend gate and a lower/adaptive threshold admits candidates without destroying edge",
+      "parameter": "ret20_min",
+      "grid": [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0],
+      "held_fixed": "price > sma50; -4.0 < ret5 < 0.25"
+    },
+    {
+      "family_id": "F1b_ret5_pullback_band",
+      "hypothesis": "the ret5 pullback band (-4.0, 0.25) is too narrow for the current volatility regime",
+      "parameter": "ret5_band",
+      "grid": [[-6.0, 0.25], [-4.0, 0.25], [-4.0, 1.0], [-2.0, 1.0], [-6.0, 2.0]],
+      "held_fixed": "price > sma50; ret20 > 2.0"
+    },
+    {
+      "family_id": "F1c_trend_term",
+      "hypothesis": "the trend anchor (sma50 vs sma20 vs none) changes candidate admission materially",
+      "parameter": "trend_anchor",
+      "grid": ["price_gt_sma50", "price_gt_sma20", "none"],
+      "held_fixed": "ret20 > 2.0; -4.0 < ret5 < 0.25"
+    },
+    {
+      "family_id": "F2_session_time_alignment",
+      "hypothesis": "aligning scheduled-scan emission time to the 10:10 ET materializer entry minute changes candidate admission and match rate",
+      "parameter": "emission_window_minutes_around_610",
+      "grid": [0, 15, 30, 60],
+      "held_fixed": "gate logic unchanged within each family member"
+    }
+  ],
+  "pre_evaluation_diagnostic_allowed": "descriptive term-level failure tally over already-logged drop payloads (signal_details carries ret5/ret20/price/sma20/sma50 per drop); counts only, no profitability scoring, no window consumption",
+  "evaluation_requirements": [
+    "separate_preregistered_fresh_window_contract_required_before_any_family_scoring (candidate window 2018-01..2021-12, never used for selection anywhere in this repo)",
+    "fresh_window_must_be_split_family_train_vs_family_validation_before_import",
+    "one_shot_scoring_per_family_member_with_registry_consumption",
+    "consumed_windows_prohibited: 2026-02..2026-05 audit, 2022-01..2024-05 oos, protected forward holdout",
+    "current_frozen_policy_and_forward_evidence_bar_unchanged",
+    "operator_approval_token_required_for_window_import_and_for_any_refreeze"
+  ],
+  "prohibited_actions": [
+    "do_not_score_families_on_consumed_windows",
+    "do_not_change_production_scanner_policy_from_this_draft",
+    "do_not_change_filters_thresholds_stops_sizing_proof_bars",
+    "do_not_import_quotes_from_this_draft",
+    "do_not_mutate_evidence_stores",
+    "do_not_consume_protected_holdout",
+    "do_not_enable_live_validation_or_auto_track",
+    "do_not_submit_broker_orders",
+    "do_not_promote_any_lane",
+    "do_not_treat_design_artifacts_or_diagnostics_as_forward_proof"
+  ]
+}

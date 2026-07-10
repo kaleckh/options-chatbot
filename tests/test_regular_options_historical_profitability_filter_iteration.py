@@ -55,6 +55,19 @@ def _row(
 
 
 class RegularOptionsHistoricalProfitabilityFilterIterationTests(unittest.TestCase):
+    def test_pnl_value_prefers_fee_adjusted_net_return(self) -> None:
+        self.assertEqual(
+            iteration._pnl_value(
+                {
+                    "pnl_pct": 12.0,
+                    "gross_pnl_pct": 12.0,
+                    "net_pnl_pct": 11.0,
+                    "net_pnl_pct_after_fees": 9.5,
+                }
+            ),
+            9.5,
+        )
+
     def _profitable_cluster_rows(self, month: str, *, cluster_count: int, prefix: str) -> list[dict]:
         rows = []
         for i in range(cluster_count):
@@ -221,6 +234,10 @@ class RegularOptionsHistoricalProfitabilityFilterIterationTests(unittest.TestCas
         self.assertEqual(report["source_summary"]["accepted_exact_candidate_rows_before_dedupe"], 3)
         self.assertEqual(report["source_summary"]["deduped_row_count"], 2)
         self.assertEqual(report["source_summary"]["duplicate_rows_removed"], 1)
+        self.assertFalse(report["selection_permitted"])
+        self.assertEqual(report["status"], "blocked_cross_lane_allocation_policy_missing")
+        self.assertIn("cross_lane_allocation_policy_missing", report["blockers"])
+        self.assertEqual(report["allocation_policy"]["collision_group_count"], 1)
 
     def test_write_outputs_creates_latest_and_docs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -2,45 +2,49 @@
   "accepted_profitability": false,
   "artifacts": {
     "docs_report": "docs/regular-options-strict-forward-30-completion-monitor.md",
-    "json": "data/forward-tracking/regular_options_strict_forward_30_completion_monitor_20260703T200505Z.json",
+    "json": "data/forward-tracking/regular_options_strict_forward_30_completion_monitor_20260710T171824Z.json",
     "latest_json": "data/forward-tracking/regular_options_strict_forward_30_completion_monitor_latest.json",
     "latest_markdown": "data/forward-tracking/regular_options_strict_forward_30_completion_monitor_latest.md",
-    "markdown": "data/forward-tracking/regular_options_strict_forward_30_completion_monitor_20260703T200505Z.md"
+    "markdown": "data/forward-tracking/regular_options_strict_forward_30_completion_monitor_20260710T171824Z.md"
   },
   "bootstrap_pf_lower_bound_5pct_usd": null,
   "candidate_review_source_status": "loaded",
   "candidate_review_status": "candidate_review_waiting_for_scheduler_health",
   "cohort_log_state": "cohort_log_missing_blocker",
   "collector_source_status": "loaded",
-  "collector_status": "waiting_for_valid_market_window",
-  "dependency_blockers": [],
+  "collector_status": "collector_attempts_exhausted_waiting_for_more_rows",
+  "dependency_blockers": [
+    "scan_task_health_not_ready:scan_task_runtime_blocked"
+  ],
   "dependency_freshness": {
-    "blockers": [],
+    "blockers": [
+      "scan_task_health_not_ready:scan_task_runtime_blocked"
+    ],
     "candidate_review_capture_freshness": {
       "blockers": [],
-      "capture_latest_generated_at_utc": "2026-07-02T19:35:02Z",
-      "collector_generated_at_utc": "2026-07-03T20:05:03Z",
-      "collector_nested_capture_generated_at_utc": "2026-07-03T20:05:03Z",
-      "effective_capture_source": "collector_nested_capture_report",
+      "capture_latest_generated_at_utc": "2026-07-10T17:05:03Z",
+      "collector_generated_at_utc": "2026-07-10T17:05:03Z",
+      "collector_nested_capture_generated_at_utc": "2026-07-10T17:05:03Z",
+      "effective_capture_source": "capture_latest",
       "fresh": true,
-      "status": "collector_nested_capture_fresh_for_candidate_review"
+      "status": "capture_latest_fresh_for_candidate_review"
     },
-    "candidate_review_generated_at_utc": "2026-07-03T20:05:04Z",
+    "candidate_review_generated_at_utc": "2026-07-10T17:18:23Z",
     "candidate_review_scheduler_freshness": {
       "blockers": [],
-      "collector_generated_at_utc": "2026-07-03T20:05:03Z",
+      "collector_generated_at_utc": "2026-07-10T17:05:03Z",
       "fresh": true,
-      "scheduler_generated_at_utc": "2026-07-03T20:05:04Z",
+      "scheduler_generated_at_utc": "2026-07-10T17:18:23Z",
       "status": "scheduler_health_fresh_for_candidate_review"
     },
-    "collector_generated_at_utc": "2026-07-03T20:05:03Z",
-    "exit_completion_stager_generated_at_utc": "2026-07-03T20:05:05Z",
-    "exit_evidence_plan_generated_at_utc": "2026-07-03T20:05:04Z",
-    "fresh": true,
-    "lifecycle_audit_generated_at_utc": "2026-07-03T20:05:05Z",
-    "scan_task_health_generated_at_utc": "2026-07-03T20:05:04Z",
-    "scheduler_generated_at_utc": "2026-07-03T20:05:04Z",
-    "status": "completion_monitor_dependencies_fresh"
+    "collector_generated_at_utc": "2026-07-10T17:05:03Z",
+    "exit_completion_stager_generated_at_utc": "2026-07-10T17:18:24Z",
+    "exit_evidence_plan_generated_at_utc": "2026-07-10T17:18:24Z",
+    "fresh": false,
+    "lifecycle_audit_generated_at_utc": "2026-07-10T17:18:24Z",
+    "scan_task_health_generated_at_utc": "2026-07-10T17:18:23Z",
+    "scheduler_generated_at_utc": "2026-07-10T17:18:23Z",
+    "status": "completion_monitor_dependencies_stale_or_missing"
   },
   "exact_completed_forward_pnl_count": 0,
   "exact_entry_captured_count": 0,
@@ -48,7 +52,7 @@
   "exit_completion_stager_status": "exit_completion_waiting_for_open_forward_rows",
   "exit_evidence_plan_source_status": "loaded",
   "exit_evidence_plan_status": "exit_evidence_plan_waiting_for_open_forward_rows",
-  "generated_at_utc": "2026-07-03T20:05:05Z",
+  "generated_at_utc": "2026-07-10T17:18:24Z",
   "hard_fail_states": [],
   "lifecycle_audit_source_status": "loaded",
   "lifecycle_audit_status": "lifecycle_waiting_for_first_entry_row",
@@ -319,7 +323,7 @@
       "preferred_completed_rows": 50,
       "preferred_review_packet_ready": false
     },
-    "generated_at_utc": "2026-07-03T20:05:05Z",
+    "generated_at_utc": "2026-07-10T17:18:24Z",
     "hard_fail_states": [],
     "is_trade_recommendation": false,
     "leave_one_trade_out_pf_lower_bound": null,
@@ -522,7 +526,7 @@
   "required_rows": 30,
   "safety_violations": [],
   "scan_task_health_source_status": "loaded",
-  "scan_task_health_status": "scan_tasks_ready_for_next_market_window",
+  "scan_task_health_status": "scan_task_runtime_blocked",
   "scheduler_blockers": [
     "scheduler_runtime_blocking:scheduler_runtime_failed"
   ],
@@ -541,7 +545,7 @@
     },
     "collector_latest": {
       "path": "data/forward-tracking/regular_options_strict_forward_30_market_window_collector_latest.json",
-      "report_status": "waiting_for_valid_market_window",
+      "report_status": "collector_attempts_exhausted_waiting_for_more_rows",
       "status": "loaded"
     },
     "exit_completion_stager_latest": {
@@ -560,7 +564,7 @@
       "status": "loaded"
     },
     "phase2_report": {
-      "generated_at_utc": "2026-07-03T20:05:05Z",
+      "generated_at_utc": "2026-07-10T17:18:24Z",
       "path": null,
       "proposed_report_exists": false,
       "proposed_report_path": "data/forward-tracking/phase2_regular_options_forward_paper_shadow_report_latest.json",
@@ -570,7 +574,7 @@
     },
     "scan_task_health_latest": {
       "path": "data/forward-tracking/regular_options_strict_forward_scan_task_health_latest.json",
-      "report_status": "scan_tasks_ready_for_next_market_window",
+      "report_status": "scan_task_runtime_blocked",
       "status": "loaded"
     },
     "scheduler_health_latest": {
@@ -579,7 +583,7 @@
       "status": "loaded"
     }
   },
-  "status": "completion_monitor_scheduler_blocked",
+  "status": "completion_monitor_dependency_freshness_blocked",
   "stressed_pf_lower_bound": null,
   "strict_forward_rows": 0,
   "strict_profit_factor_usd": null,

@@ -128,12 +128,110 @@ def _dedupe_summary(before_count: int, after_count: int) -> dict[str, int]:
     }
 
 
+def _allocation_policy_audit(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    grouped: dict[tuple[str, str, str], list[tuple[int, dict[str, Any]]]] = defaultdict(list)
+    for index, row in enumerate(rows):
+        copied = dict(row)
+        key = (
+            str(copied.get("entry_date") or "")[:10],
+            _ticker_value(copied),
+            str(copied.get("direction") or "").strip(),
+        )
+        grouped[key].append((index, copied))
+
+    snapshots: list[dict[str, Any]] = []
+    retained_lanes: Counter[str] = Counter()
+    discarded_lanes: Counter[str] = Counter()
+    lexical_values: list[float] = []
+    minimum_values: list[float] = []
+    maximum_values: list[float] = []
+    collision_group_count = 0
+    collision_row_count = 0
+    rows_removed = 0
+    for key, indexed_rows in sorted(grouped.items()):
+        lanes = {
+            str(row.get("lane_id") or row.get("lane") or "unknown")
+            for _index, row in indexed_rows
+        }
+        if len(indexed_rows) <= 1 or len(lanes) <= 1:
+            continue
+        collision_group_count += 1
+        ordered = sorted(
+            indexed_rows,
+            key=lambda item: (
+                str(item[1].get("lane_id") or item[1].get("lane") or ""),
+                str(item[1].get("long_contract_symbol") or ""),
+                item[0],
+            ),
+        )
+        retained = ordered[0][1]
+        alternatives = [item[1] for item in ordered]
+        retained_lane = str(retained.get("lane_id") or retained.get("lane") or "unknown")
+        retained_lanes[retained_lane] += 1
+        for discarded in alternatives[1:]:
+            discarded_lanes[str(discarded.get("lane_id") or discarded.get("lane") or "unknown")] += 1
+        values = [value for item in alternatives if (value := _trade_value(item)) is not None]
+        retained_value = _trade_value(retained)
+        if retained_value is not None:
+            lexical_values.append(retained_value)
+        if values:
+            minimum_values.append(min(values))
+            maximum_values.append(max(values))
+        collision_row_count += len(alternatives)
+        rows_removed += len(alternatives) - 1
+        if len(snapshots) < 100:
+            snapshots.append(
+                {
+                    "entry_date": key[0],
+                    "ticker": key[1],
+                    "direction": key[2],
+                    "lane_ids": sorted(lanes),
+                    "row_count": len(alternatives),
+                    "lexical_retained_lane_id": retained_lane,
+                    "lexical_retained_net_pnl_pct": retained_value,
+                    "alternative_net_pnl_pct_values": values,
+                    "net_pnl_pct_range": round(max(values) - min(values), 4) if values else None,
+                }
+            )
+
+    return {
+        "status": "blocked_missing_cross_lane_allocation_policy" if collision_group_count else "no_cross_lane_collisions",
+        "allocation_policy_approved": False if collision_group_count else None,
+        "combined_portfolio_unbiased": not collision_group_count,
+        "dedupe_rule": "lexical_lane_then_contract_diagnostic_only",
+        "required_policy": "predeclared capital-allocation rule for same-date same-ticker same-direction cross-lane collisions",
+        "blocker": "cross_lane_allocation_policy_missing" if collision_group_count else None,
+        "collision_group_count": collision_group_count,
+        "collision_row_count": collision_row_count,
+        "rows_removed_by_lexical_dedupe": rows_removed,
+        "affected_lane_ids": sorted(set(retained_lanes) | set(discarded_lanes)),
+        "lexical_retained_lane_counts": dict(sorted(retained_lanes.items())),
+        "lexical_discarded_lane_counts": dict(sorted(discarded_lanes.items())),
+        "sensitivity": {
+            "collision_groups_with_pnl": len(lexical_values),
+            "lexical_retained_net_pnl_pct_points": round(sum(lexical_values), 4) if lexical_values else None,
+            "minimum_choice_net_pnl_pct_points": round(sum(minimum_values), 4) if minimum_values else None,
+            "maximum_choice_net_pnl_pct_points": round(sum(maximum_values), 4) if maximum_values else None,
+            "max_minus_min_net_pnl_pct_points": (
+                round(sum(maximum_values) - sum(minimum_values), 4)
+                if minimum_values and maximum_values
+                else None
+            ),
+        },
+        "collision_snapshots": snapshots,
+    }
+
+
 def _bootstrap_dict(metrics: dict[str, Any], key: str = "bootstrap_cluster") -> dict[str, Any]:
     return _as_dict(metrics.get(key) or metrics.get("bootstrap_cluster") or metrics.get("bootstrap_iid") or metrics.get("bootstrap"))
 
 
 def _trade_value(row: dict[str, Any]) -> float | None:
-    return _safe_float(row.get("pnl_pct"))
+    for field in ("net_pnl_pct_after_fees", "net_pnl_pct", "pnl_pct"):
+        value = _safe_float(row.get(field))
+        if value is not None:
+            return value
+    return None
 
 
 def _trade_usd_value(row: dict[str, Any]) -> float | None:
@@ -321,6 +419,7 @@ def build_report(
         policy=policy,
         policy_meta=policy_meta,
     )
+    allocation_policy = _allocation_policy_audit(source_quality_scoped_rows)
     scoped_rows = _dedupe_rows(source_quality_scoped_rows)
     selected_months = sorted({_month_key(row) for row in scoped_rows if _month_key(row)})
     months, month_coverage_basis = _coverage_months(source_report, selected_months)
@@ -342,6 +441,8 @@ def build_report(
     audit_metrics = _metrics(audit_rows, branch_id=f"{REPORT_ID}:audit", bootstrap_draws=bootstrap_draws)
     combined_metrics = _metrics(scoped_rows, branch_id=f"{REPORT_ID}:combined", bootstrap_draws=bootstrap_draws)
     blockers = _audit_blockers(split=split, train_metrics=train_metrics, audit_metrics=audit_metrics)
+    if allocation_policy.get("collision_group_count"):
+        blockers.append("cross_lane_allocation_policy_missing")
     blockers.extend(str(item) for item in _as_list(source_report.get("blockers")))
     blockers = sorted(dict.fromkeys(blockers))
     status = "historical_simulated_forward_audit_passed" if not blockers else "blocked_historical_simulated_forward_audit"
@@ -400,6 +501,7 @@ def build_report(
             "audit_zero_selection_months": audit_zero_selection_months,
             "by_lane": dict(sorted(by_lane.items())),
         },
+        "allocation_policy": allocation_policy,
         "split": split,
         "metrics": {
             "combined": combined_metrics,
@@ -445,6 +547,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Requested split: `{_as_dict(report.get('requested_split')).get('train_months')}` train months + `{_as_dict(report.get('requested_split')).get('audit_months')}` simulated-forward audit months.",
         f"- Selected exact history: `{selected.get('available_entry_month_count')}` months, `{selected.get('accepted_exact_trade_count')}` accepted exact rows after source-quality scope.",
         f"- Dedupe: `{selected.get('accepted_exact_candidate_rows_before_dedupe')}` rows before dedupe, `{selected.get('deduped_row_count')}` rows after dedupe, `{selected.get('duplicate_rows_removed')}` duplicates removed.",
+        f"- Cross-lane allocation collisions: `{_as_dict(report.get('allocation_policy')).get('collision_group_count')}`; unbiased combined portfolio: `{_as_dict(report.get('allocation_policy')).get('combined_portfolio_unbiased')}`.",
         f"- Calendar months available for split: `{selected.get('calendar_months_available_for_split_count')}` via `{selected.get('month_coverage_basis')}`.",
         f"- Available selected months: `{', '.join(str(item) for item in _as_list(selected.get('available_entry_months'))) or 'none'}`.",
         f"- Train months used: `{', '.join(str(item) for item in _as_list(split.get('train_months'))) or 'none'}`.",

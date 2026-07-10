@@ -1,10 +1,10 @@
 {
   "artifacts": {
     "docs_report": "docs/regular-options-fresh-window-import-scheduler-health.md",
-    "json": "data/forward-tracking/regular_options_fresh_window_import_scheduler_health_20260703T234541Z.json",
+    "json": "data/forward-tracking/regular_options_fresh_window_import_scheduler_health_20260707T233027Z.json",
     "latest_json": "data/forward-tracking/regular_options_fresh_window_import_scheduler_health_latest.json",
     "latest_markdown": "data/forward-tracking/regular_options_fresh_window_import_scheduler_health_latest.md",
-    "markdown": "data/forward-tracking/regular_options_fresh_window_import_scheduler_health_20260703T234541Z.md"
+    "markdown": "data/forward-tracking/regular_options_fresh_window_import_scheduler_health_20260707T233027Z.md"
   },
   "batch_file": {
     "exists": true,
@@ -38,7 +38,7 @@
       "FRI"
     ]
   },
-  "generated_at_utc": "2026-07-03T23:45:41Z",
+  "generated_at_utc": "2026-07-07T23:30:27Z",
   "query_returncode": 0,
   "query_stderr": [],
   "report_id": "regular_options_fresh_window_import_scheduler_health",
@@ -52,15 +52,15 @@
     ],
     "fields": {
       "last_result": "267009",
-      "last_run_time": "7/3/2026 5:30:00 PM",
-      "next_run_time": "7/6/2026 5:30:00 PM",
+      "last_run_time": "7/7/2026 5:30:00 PM",
+      "next_run_time": "7/8/2026 5:30:00 PM",
       "number_of_missed_runs": ""
     },
     "parsed": {
       "last_result_code": 267009,
       "last_run_time_is_never_run_sentinel": false,
-      "last_run_time_local": "2026-07-03T17:30:00",
-      "next_run_time_local": "2026-07-06T17:30:00",
+      "last_run_time_local": "2026-07-07T17:30:00",
+      "next_run_time_local": "2026-07-08T17:30:00",
       "number_of_missed_runs": null
     },
     "runtime_blocking": true,
@@ -87,10 +87,10 @@
     "HostName": "KAESDEVICE",
     "Idle Time": "Disabled",
     "Last Result": "267009",
-    "Last Run Time": "7/3/2026 5:30:00 PM",
+    "Last Run Time": "7/7/2026 5:30:00 PM",
     "Logon Mode": "Interactive only",
     "Months": "Every 1 week(s)",
-    "Next Run Time": "7/6/2026 5:30:00 PM",
+    "Next Run Time": "7/8/2026 5:30:00 PM",
     "Power Management": "Stop On Battery Mode, No Start On Batteries",
     "Repeat: Every": "Disabled",
     "Repeat: Stop If Still Running": "Disabled",

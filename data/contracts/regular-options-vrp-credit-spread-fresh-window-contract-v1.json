@@ -1,0 +1,76 @@
+{
+  "report_id": "regular_options_vrp_credit_spread_fresh_window_contract",
+  "contract_id": "regular_options_vrp_credit_spread_fresh_window_v1",
+  "schema_version": 1,
+  "created_at_utc": "2026-07-08T14:10:00Z",
+  "status": "registered_before_any_vrp_scoring_on_this_window",
+  "authority": "none_research_only_not_forward_proof",
+  "operator_authorization": "docs/DECISIONS.md 2026-07-08 end-to-end mandate; DECISIONS 2026-07-07 names defined_risk_index_vrp_credit_spread as priority candidate",
+  "playbook_binding": {
+    "concept": "low_mid_vix_index_put_credit_spread_vrp_v1",
+    "source": "docs/regular-options-preregistered-vrp-credit-spread-playbook.md (frozen geometry adopted unchanged except entry-timestamp binding below)",
+    "universe": ["SPY", "QQQ", "IWM", "DIA"],
+    "structure": "defined_risk_put_credit_spreads_only",
+    "geometry": {
+      "dte_range": [21, 45],
+      "short_put": "prefer_abs_delta_closest_to_0.20_between_0.15_and_0.25_else_3_to_7_pct_otm",
+      "long_put": "prefer_5_point_width_else_nearest_available_lower_put_with_width_between_3_and_10_points",
+      "min_entry_credit_pct_width": 0.2,
+      "max_leg_bid_ask_width_pct_mid": 0.25,
+      "profit_take_credit_fraction": 0.5,
+      "loss_cut_credit_multiple": 2.0,
+      "time_exit_dte": 7
+    },
+    "pricing": {
+      "entry_credit": "short_put_bid - long_put_ask",
+      "exit_debit": "short_put_ask - long_put_bid",
+      "net_pnl_usd": "(entry_credit - exit_debit) * 100 - fees",
+      "fees": "4 legs x 0.65 USD per round trip",
+      "max_loss_usd": "(spread_width - entry_credit) * 100 + fees"
+    }
+  },
+  "design_decisions_made_at_registration": [
+    "entry_timestamp_binds_to_15:55:00_ET_quote_surface: the 10:10 import covers DTE 5-35 only while the playbook requires 21-45; the 15:55 surface covers DTE 5-60 and matches the close-basis convention of the PUT/WPUT index literature",
+    "exit_monitoring_uses_daily_15:55_quotes: profit-take/loss-cut/time-exit evaluated once daily at 15:55 with side-aware exit debit",
+    "monthly_tenor_bias_note: literature (verified 3-0) shows weekly rolling underperformed monthly; the 21-45 DTE band with 7-DTE time exit is the frozen compromise already in the playbook",
+    "entry_cadence: one candidate per underlying per entry-regime day; overlapping positions in the same underlying are not stacked (first-open blocks new entries until exit)"
+  ],
+  "window": {
+    "requested_start_date": "2018-01-01",
+    "requested_end_date": "2021-12-31",
+    "split": "same as data/contracts/regular-options-filter-family-fresh-window-contract-v1.json: family_train 2018-01..2020-06, family_validation 2020-07..2021-12",
+    "train_scoring_allowed": true,
+    "validation_is_one_shot_registry_consuming": true,
+    "consumed_windows_prohibited": ["2022-01..2024-05", "2024-06..2026-01", "2026-02..2026-05", "protected forward holdout"]
+  },
+  "entry_regime": {
+    "vix_bucket": "low_or_mid point-in-time bucket required (frozen threshold policy contract)",
+    "crash_guard": "no entry when point-in-time market-regime inputs mark crash regime",
+    "all_inputs_point_in_time": true
+  },
+  "gates_for_validation_pass": {
+    "primary": "percent_cluster_pf_lb_5pct > 1.0",
+    "secondary": "usd_cluster_pf_lb_5pct > 1.0",
+    "total_net_pnl_usd": "> 0",
+    "minimums": {"exact_trade_count": 60, "distinct_ticker_week_clusters": 20, "distinct_months_with_rows": 12},
+    "tail_report_required": "max drawdown, worst month, skew/kurtosis of trade P&L — reported, not gated, per the literature's drawdown-profile caveat",
+    "cluster_key": "ticker:ISO-week",
+    "bootstrap_draws": 10000
+  },
+  "engine_requirement": "a credit-spread replay harness with side-aware entry credit, daily exit monitoring, assignment/expiration fail-closed handling, and full denominator statuses per the playbook; to be implemented research-only before any scoring",
+  "prohibited_actions": [
+    "do_not_change_geometry_or_gates_after_registration",
+    "do_not_score_on_consumed_windows",
+    "do_not_change_production_scanner_policy",
+    "do_not_enable_live_validation_auto_track_or_broker_orders",
+    "do_not_consume_protected_holdout",
+    "do_not_promote_any_lane",
+    "do_not_treat_historical_results_as_forward_proof"
+  ],
+  "interpretation": {
+    "passing_verdict": "vrp_family_survives_falsification_earns_preregistered_forward_suggestion_tracking_bar",
+    "failure_verdict": "vrp_credit_spread_family_falsified_on_fresh_window",
+    "neither_outcome_authorizes_trading": true,
+    "forward_bar_form_if_passed": "suggestion-tracking paper-shadow only (operator decision 2026-07-08: no broker or paper-API execution; take-all vs operator-picks dashboards)"
+  }
+}

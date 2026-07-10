@@ -1,21 +1,51 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 from functools import lru_cache
 
 
 AD_HOC_FULL_MARKET_CLOSURES = frozenset(
     {
+        # National Day of Mourning for President George H. W. Bush.
+        date(2018, 12, 5),
         # National Day of Mourning for President Jimmy Carter.
         date(2025, 1, 9),
     }
 )
 
 
+# NYSE/Nasdaq 13:00 ET closes inside the frozen 2018-2021 research window.
+# These are market sessions, but a 15:55 ET quote cannot exist on them.
+EARLY_CLOSE_SESSION_CLOSES_ET = {
+    date(2018, 7, 3): time(13, 0),
+    date(2018, 11, 23): time(13, 0),
+    date(2018, 12, 24): time(13, 0),
+    date(2019, 7, 3): time(13, 0),
+    date(2019, 11, 29): time(13, 0),
+    date(2019, 12, 24): time(13, 0),
+    date(2020, 11, 27): time(13, 0),
+    date(2020, 12, 24): time(13, 0),
+    date(2021, 11, 26): time(13, 0),
+}
+
+
 def observed_fixed_market_holiday(year: int, month: int, day: int) -> date:
     actual = date(year, month, day)
     if actual.weekday() == 5:
         return actual - timedelta(days=1)
+    if actual.weekday() == 6:
+        return actual + timedelta(days=1)
+    return actual
+
+
+def observed_new_year_market_holiday(year: int) -> date:
+    """Return the NYSE closure associated with January 1 of ``year``.
+
+    Unlike federal offices, the NYSE does not close on the preceding Friday
+    when New Year's Day falls on Saturday. Keeping that exception separate
+    prevents a false closure such as 2021-12-31 for New Year's Day 2022.
+    """
+    actual = date(year, 1, 1)
     if actual.weekday() == 6:
         return actual + timedelta(days=1)
     return actual
@@ -46,17 +76,17 @@ def western_easter_date(year: int) -> date:
     h = (19 * a + b - d - g + 15) % 30
     i = c // 4
     k = c % 4
-    l = (32 + 2 * e + 2 * i - h - k) % 7
-    m = (a + 11 * h + 22 * l) // 451
-    month = (h + l - 7 * m + 114) // 31
-    day = ((h + l - 7 * m + 114) % 31) + 1
+    weekday_offset = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * weekday_offset) // 451
+    month = (h + weekday_offset - 7 * m + 114) // 31
+    day = ((h + weekday_offset - 7 * m + 114) % 31) + 1
     return date(year, month, day)
 
 
 @lru_cache(maxsize=None)
 def us_equity_market_holidays(year: int) -> frozenset[date]:
     holidays = {
-        observed_fixed_market_holiday(year, 1, 1),
+        observed_new_year_market_holiday(year),
         nth_weekday_of_month(year, 1, 0, 3),
         nth_weekday_of_month(year, 2, 0, 3),
         western_easter_date(year) - timedelta(days=2),
@@ -81,6 +111,17 @@ def is_us_equity_market_day(value: date) -> bool:
         | set(us_equity_market_holidays(value.year + 1))
     )
     return value not in holidays
+
+
+def us_equity_market_close_time_et(value: date) -> time | None:
+    """Return the scheduled regular-session close in Eastern time."""
+    if not is_us_equity_market_day(value):
+        return None
+    return EARLY_CLOSE_SESSION_CLOSES_ET.get(value, time(16, 0))
+
+
+def is_us_equity_early_close(value: date) -> bool:
+    return value in EARLY_CLOSE_SESSION_CLOSES_ET and is_us_equity_market_day(value)
 
 
 def previous_market_day(value: date) -> date:

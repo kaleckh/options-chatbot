@@ -13,13 +13,14 @@ This generated artifact tracks whether the paid/local source surfaces needed for
 
 | Surface | Available | Coverage |
 |---|---:|---:|
+| `known_source_gaps` | `false` |  |
 | `feature_store_denominator` | `true` |  |
-| `market_regime_inputs` | `false` |  |
-| `underlying_daily_feature_source_rows` | `false` | `0.0%` |
-| `vix_bucket` | `false` |  |
-| `entry_underlying_price_surface` | `false` | `0.0%` |
-| `option_chain_selection_surface` | `false` | `0.0%` |
-| `earnings_calendar` | `false` |  |
+| `market_regime_inputs` | `true` |  |
+| `underlying_daily_feature_source_rows` | `true` | `100.0%` |
+| `vix_bucket` | `true` |  |
+| `entry_underlying_price_surface` | `true` | `99.9005%` |
+| `option_chain_selection_surface` | `true` | `100.0%` |
+| `earnings_calendar` | `true` |  |
 | `lane_specific_feature_inputs` | `false` |  |
 | `candidate_decision_replay_execution` | `false` |  |
 
@@ -27,13 +28,7 @@ This generated artifact tracks whether the paid/local source surfaces needed for
 
 - `missing_daily_candidate_generation_diagnostics`
 - `missing_historical_candidate_decision_replay_execution`
-- `missing_historical_entry_underlying_price_surface`
-- `missing_historical_option_chain_selection_surface`
 - `missing_lane_specific_point_in_time_feature_inputs`
-- `missing_point_in_time_earnings_calendar_source`
-- `missing_point_in_time_market_regime_inputs`
-- `missing_point_in_time_underlying_daily_feature_source_rows`
-- `missing_point_in_time_vix_source`
 
 ## Boundary
 

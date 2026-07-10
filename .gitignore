@@ -20,6 +20,7 @@ config.yaml
 .next/
 out/
 node_modules/
+.playwright/
 
 # Next.js build
 next-env.d.ts

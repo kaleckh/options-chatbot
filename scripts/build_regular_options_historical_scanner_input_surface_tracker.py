@@ -139,13 +139,16 @@ def _coverage_summary(
     covered_pairs: set[tuple[str, str]],
     requested_months: Sequence[str],
     symbols: Sequence[str],
+    documented_gap_pairs: set[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
+    gaps = (documented_gap_pairs or set()) & requested_pairs
+    required_pairs = requested_pairs - gaps
     covered = requested_pairs & covered_pairs
     missing = sorted(requested_pairs - covered_pairs)
     missing_by_symbol = Counter(symbol for _day, symbol in missing)
     covered_months: list[str] = []
     for month in requested_months:
-        month_pairs = {pair for pair in requested_pairs if pair[0].startswith(f"{month}-")}
+        month_pairs = {pair for pair in required_pairs if pair[0].startswith(f"{month}-")}
         if month_pairs and month_pairs <= covered_pairs:
             covered_months.append(month)
     pct = round((len(covered) / len(requested_pairs) * 100.0), 4) if requested_pairs else 0.0
@@ -161,7 +164,9 @@ def _coverage_summary(
         "missing_symbol_date_count": len(missing),
         "missing_symbol_date_examples": [f"{day}:{symbol}" for day, symbol in missing[:20]],
         "missing_by_symbol": dict(sorted(missing_by_symbol.items())),
-        "ready": bool(requested_pairs and requested_pairs <= covered_pairs),
+        "documented_source_gap_pair_count": len(gaps),
+        "documented_source_gap_examples": [f"{day}:{symbol}" for day, symbol in sorted(gaps)[:20]],
+        "ready": bool(requested_pairs and required_pairs <= covered_pairs),
     }
 
 
@@ -331,6 +336,7 @@ def build_report(
     window_end: str = DEFAULT_WINDOW_END,
     as_of_date: str = DEFAULT_AS_OF_DATE,
     universe: Sequence[str] = ALLOWED_UNIVERSE,
+    known_source_gaps_path: Path | None = None,
     generated_at_utc: str | None = None,
 ) -> dict[str, Any]:
     start = _parse_date(window_start)
@@ -351,6 +357,19 @@ def build_report(
     market_dates = _market_dates(feature_store, start, end)
     requested_months = _month_range(start, end)
     pairs = _requested_pairs(market_dates, symbols)
+
+    known_gaps_by_surface: dict[str, set[tuple[str, str]]] = {}
+    known_gaps_meta: dict[str, Any] = {"path": None, "status": "not_provided", "pair_count": 0}
+    if known_source_gaps_path is not None:
+        gaps_payload, known_gaps_meta = _load_json(known_source_gaps_path)
+        for entry in _as_list(gaps_payload.get("pairs")):
+            entry = entry if isinstance(entry, dict) else {}
+            surface_key = str(entry.get("surface") or "")
+            day = str(entry.get("date_et") or "")[:10]
+            symbol = str(entry.get("symbol") or "").upper()
+            if surface_key and day and symbol:
+                known_gaps_by_surface.setdefault(surface_key, set()).add((day, symbol))
+        known_gaps_meta["pair_count"] = sum(len(v) for v in known_gaps_by_surface.values())
 
     daily_pairs, daily_meta = _jsonl_pair_coverage(
         underlying_daily_source_rows_path,
@@ -418,12 +437,14 @@ def build_report(
         covered_pairs=minute_pairs,
         requested_months=requested_months,
         symbols=symbols,
+        documented_gap_pairs=known_gaps_by_surface.get("entry_underlying_price_surface"),
     )
     chain_summary = _coverage_summary(
         requested_pairs=pairs,
         covered_pairs=chain_pairs,
         requested_months=requested_months,
         symbols=symbols,
+        documented_gap_pairs=known_gaps_by_surface.get("option_chain_selection_surface"),
     )
     equity_pairs = {(day, symbol) for day, symbol in pairs if symbol not in ETF_OR_INDEX_SYMBOLS}
 
@@ -455,6 +476,11 @@ def build_report(
     blockers = sorted(dict.fromkeys(blockers))
 
     surface_readiness = {
+        "known_source_gaps": {
+            "meta": known_gaps_meta,
+            "policy": "documented provider gaps are subtracted from surface readiness only; they stay in missing counts, the window denominator, and per-row fail-closed behavior",
+            "pairs_by_surface": {key: sorted(f"{day}:{symbol}" for day, symbol in value) for key, value in known_gaps_by_surface.items()},
+        },
         "feature_store_denominator": {
             "available": feature_meta.get("status") == "loaded" and bool(market_dates),
             "meta": feature_meta,
@@ -667,6 +693,7 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--end-date", default=DEFAULT_WINDOW_END)
     parser.add_argument("--as-of-date", default=DEFAULT_AS_OF_DATE)
     parser.add_argument("--universe", default=",".join(ALLOWED_UNIVERSE))
+    parser.add_argument("--known-source-gaps", type=Path, default=None)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--docs-report", type=Path, default=DEFAULT_DOCS_REPORT)
     parser.add_argument("--no-write", action="store_true")
@@ -690,6 +717,7 @@ def main(argv: list[str] | None = None) -> int:
         window_end=args.end_date,
         as_of_date=args.as_of_date,
         universe=_parse_universe(args.universe),
+        known_source_gaps_path=args.known_source_gaps,
     )
     if not args.no_write:
         write_outputs(report, output_dir=args.output_dir, docs_report=args.docs_report)

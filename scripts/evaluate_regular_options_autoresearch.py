@@ -298,12 +298,14 @@ def _stress_floor(lanes: list[dict[str, Any]]) -> float:
 
 
 def _net_pnl_pct_value(trade: dict[str, Any]) -> float | None:
-    value = trade.get("net_pnl_pct", trade.get("pnl_pct"))
-    try:
-        parsed = float(value)
-    except (TypeError, ValueError):
-        return None
-    return parsed if math.isfinite(parsed) else None
+    for field in ("net_pnl_pct_after_fees", "net_pnl_pct", "pnl_pct"):
+        try:
+            parsed = float(trade.get(field))
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(parsed):
+            return parsed
+    return None
 
 
 def _profit_factor_point(values: list[float]) -> float | None:
@@ -490,7 +492,7 @@ def _bootstrap_confidence(report: dict[str, Any]) -> dict[str, Any]:
             "level": "trade_level_with_replacement",
             "draws": BOOTSTRAP_DRAWS,
             "seed": BOOTSTRAP_SEED,
-            "pnl_basis": "net_pnl_pct",
+            "pnl_basis": "net_pnl_pct_after_fees_then_net_pnl_pct_then_legacy_pnl_pct",
             "diagnostic_only": True,
         },
     }

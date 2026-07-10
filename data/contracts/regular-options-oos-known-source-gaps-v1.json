@@ -1,0 +1,23 @@
+{
+  "report_id": "regular_options_oos_known_source_gaps",
+  "contract_id": "regular_options_oos_known_source_gaps_v1",
+  "schema_version": 1,
+  "created_at_utc": "2026-07-06T21:30:00Z",
+  "window": {"start": "2022-01-01", "end": "2024-05-31"},
+  "policy": "Documented, probed provider gaps for the out-of-sample extension window. These pairs are subtracted from input-surface readiness gates only. They remain in missing counts and the window denominator, and downstream materializers still fail closed per-row on these symbol-dates. This contract does not relabel missing data as covered, change scanner policy, proof bars, evidence, or promotion.",
+  "pairs": [
+    {"symbol": "UNH", "date_et": "2022-03-08", "surface": "entry_underlying_price_surface", "reason": "alpaca_sip_and_iex_return_no_morning_minute_bars_for_nyse_listed_names_2022_03_08"},
+    {"symbol": "LLY", "date_et": "2022-03-08", "surface": "entry_underlying_price_surface", "reason": "alpaca_sip_and_iex_return_no_morning_minute_bars_for_nyse_listed_names_2022_03_08"},
+    {"symbol": "JNJ", "date_et": "2022-03-08", "surface": "entry_underlying_price_surface", "reason": "alpaca_sip_and_iex_return_no_morning_minute_bars_for_nyse_listed_names_2022_03_08"},
+    {"symbol": "XOM", "date_et": "2022-03-08", "surface": "entry_underlying_price_surface", "reason": "alpaca_sip_and_iex_return_no_morning_minute_bars_for_nyse_listed_names_2022_03_08"},
+    {"symbol": "CVX", "date_et": "2022-03-08", "surface": "entry_underlying_price_surface", "reason": "alpaca_sip_and_iex_return_no_morning_minute_bars_for_nyse_listed_names_2022_03_08"},
+    {"symbol": "COP", "date_et": "2022-03-08", "surface": "entry_underlying_price_surface", "reason": "alpaca_sip_and_iex_return_no_morning_minute_bars_for_nyse_listed_names_2022_03_08"},
+    {"symbol": "NEM", "date_et": "2022-03-08", "surface": "entry_underlying_price_surface", "reason": "alpaca_sip_and_iex_return_no_morning_minute_bars_for_nyse_listed_names_2022_03_08"}
+  ],
+  "probe_evidence": {
+    "probed_at_utc": "2026-07-06T21:20:00Z",
+    "alpaca_sip": "GET /v2/stocks/bars UNH 2022-03-08T14:30:00Z..16:00:00Z feed=sip returned 1 bar (14:30Z only); scoped re-import for the full 13-symbol universe returned bars for the 6 NASDAQ/ARCA-listed names and none for the 7 NYSE-listed names",
+    "alpaca_iex": "same request with feed=iex returned 0 bars",
+    "thetadata_stock": "GET /v3/stock/history/ohlc returned 403 stock-endpoint-not-entitled (options-only subscription)"
+  }
+}

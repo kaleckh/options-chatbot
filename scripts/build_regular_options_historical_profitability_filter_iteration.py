@@ -19,6 +19,7 @@ from scripts.build_regular_options_historical_simulated_forward_audit import (  
     DEFAULT_TRAIN_MONTHS,
     _bootstrap_dict,
     _cluster_key,
+    _allocation_policy_audit,
     _dedupe_rows,
     _dedupe_summary,
     _profit_factor,
@@ -188,7 +189,11 @@ def _month_key(row: dict[str, Any]) -> str:
 
 
 def _pnl_value(row: dict[str, Any]) -> float | None:
-    return _safe_float(row.get("net_pnl_pct", row.get("pnl_pct")))
+    for field in ("net_pnl_pct_after_fees", "net_pnl_pct", "pnl_pct"):
+        value = _safe_float(row.get(field))
+        if value is not None:
+            return value
+    return None
 
 
 def _field_value(row: dict[str, Any], field: str) -> Any:
@@ -464,13 +469,15 @@ def build_report(
     audit_report, audit_meta = _load_json(audit_report_path)
     consumption_registry, consumption_registry_meta = _load_consumption_registry(consumption_registry_path)
     rows_before_dedupe = _accepted_rows(raw_rows)
+    allocation_policy = _allocation_policy_audit(rows_before_dedupe)
     rows = _dedupe_rows(rows_before_dedupe)
     months = sorted({_month_key(row) for row in rows if _month_key(row)})
     split = _split_months(months, train_months=int(train_months), audit_months=int(audit_months))
     train_set = set(_as_list(split.get("train_months")))
     audit_set = set(_as_list(split.get("audit_months")))
     consumed_overlaps = _consumed_window_overlaps(consumption_registry, _as_list(split.get("audit_months")))
-    selection_permitted = not consumed_overlaps
+    allocation_policy_blocked = bool(allocation_policy.get("collision_group_count"))
+    selection_permitted = not consumed_overlaps and not allocation_policy_blocked
     train_rows = [row for row in rows if _month_key(row) in train_set]
     audit_rows = [row for row in rows if _month_key(row) in audit_set]
     specs = _candidate_specs(train_rows)
@@ -507,12 +514,17 @@ def build_report(
     if not split.get("sufficient_months_for_requested_split"):
         blockers.append("insufficient_months_for_requested_split")
     if not selection_permitted:
-        blockers.append("audit_window_already_consumed_for_selection")
+        if consumed_overlaps:
+            blockers.append("audit_window_already_consumed_for_selection")
+        if allocation_policy_blocked:
+            blockers.append("cross_lane_allocation_policy_missing")
     if not accepted_sorted:
         blockers.append("no_preregistered_train_selected_filter_passes_train_and_audit")
     status = (
         "blocked_audit_window_already_consumed_for_selection"
-        if not selection_permitted
+        if consumed_overlaps
+        else "blocked_cross_lane_allocation_policy_missing"
+        if allocation_policy_blocked
         else "historical_profitability_filter_iteration_candidate_found"
         if not blockers
         else "blocked_historical_profitability_filter_iteration"
@@ -551,6 +563,7 @@ def build_report(
         "split": split,
         "selection_permitted": selection_permitted,
         "consumed_audit_window_overlaps": consumed_overlaps,
+        "allocation_policy": allocation_policy,
         "source_summary": {
             "raw_selected_candidate_rows": len(raw_rows),
             "accepted_exact_candidate_rows": len(rows),
@@ -637,6 +650,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Selection permitted: `{report.get('selection_permitted')}`.",
         f"- Accepted exact rows: `{source.get('accepted_exact_candidate_rows')}`.",
         f"- Dedupe: `{source.get('accepted_exact_candidate_rows_before_dedupe')}` rows before dedupe, `{source.get('deduped_row_count')}` rows after dedupe, `{source.get('duplicate_rows_removed')}` duplicates removed.",
+        f"- Cross-lane allocation collisions: `{_as_dict(report.get('allocation_policy')).get('collision_group_count')}`; allocation policy approved: `{_as_dict(report.get('allocation_policy')).get('allocation_policy_approved')}`.",
         f"- Train months: `{', '.join(str(item) for item in _as_list(split.get('train_months')))}`.",
         f"- Audit months: `{', '.join(str(item) for item in _as_list(split.get('audit_months')))}`.",
         f"- Source audit status: `{source.get('audit_artifact_status')}`.",

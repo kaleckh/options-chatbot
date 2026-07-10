@@ -77,19 +77,44 @@ def _ticker_ciks(*, user_agent: str) -> dict[str, str]:
     return mapping
 
 
-def _recent_filings(submissions: dict[str, Any]) -> list[dict[str, Any]]:
-    recent = submissions.get("filings", {}).get("recent", {})
-    if not isinstance(recent, dict):
+def _columnar_filings(columnar: dict[str, Any]) -> list[dict[str, Any]]:
+    if not isinstance(columnar, dict):
         return []
-    keys = [key for key, value in recent.items() if isinstance(value, list)]
-    row_count = max((len(recent[key]) for key in keys), default=0)
+    keys = [key for key, value in columnar.items() if isinstance(value, list)]
+    row_count = max((len(columnar[key]) for key in keys), default=0)
     rows: list[dict[str, Any]] = []
     for index in range(row_count):
         row: dict[str, Any] = {}
         for key in keys:
-            values = recent.get(key) or []
+            values = columnar.get(key) or []
             row[key] = values[index] if index < len(values) else None
         rows.append(row)
+    return rows
+
+
+def _recent_filings(submissions: dict[str, Any]) -> list[dict[str, Any]]:
+    return _columnar_filings(submissions.get("filings", {}).get("recent", {}))
+
+
+def _all_filings(
+    submissions: dict[str, Any],
+    *,
+    user_agent: str,
+    coverage_start: str,
+    coverage_end: str,
+) -> list[dict[str, Any]]:
+    # EDGAR caps filings.recent at ~1000 rows; heavy filers page older filings
+    # into filings.files entries that must be fetched separately.
+    rows = _recent_filings(submissions)
+    for page in submissions.get("filings", {}).get("files", []) or []:
+        if not isinstance(page, dict) or not page.get("name"):
+            continue
+        page_from = str(page.get("filingFrom") or "")[:10]
+        page_to = str(page.get("filingTo") or "")[:10]
+        if (page_to and page_to < coverage_start) or (page_from and page_from > coverage_end):
+            continue
+        payload = _request_json(f"https://data.sec.gov/submissions/{page['name']}", user_agent=user_agent)
+        rows.extend(_columnar_filings(payload))
     return rows
 
 
@@ -128,7 +153,7 @@ def _source_rows_for_symbol(
     inspected_8k = 0
     matched_202 = 0
     out_of_window_202 = 0
-    for filing in _recent_filings(submissions):
+    for filing in _all_filings(submissions, user_agent=user_agent, coverage_start=coverage_start, coverage_end=coverage_end):
         form = str(filing.get("form") or "").upper()
         if form not in {"8-K", "8-K/A"}:
             continue

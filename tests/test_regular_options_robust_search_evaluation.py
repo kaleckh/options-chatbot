@@ -58,6 +58,25 @@ def _passing_source_rows() -> list[dict]:
 
 
 class RegularOptionsRobustSearchEvaluationTests(unittest.TestCase):
+    def test_normalize_trade_prefers_fee_adjusted_net_and_preserves_gross_fields(self) -> None:
+        source = {
+            **_trade("2026-01-02", 12.0),
+            "gross_pnl_pct": 12.0,
+            "net_pnl_pct": 11.0,
+            "net_pnl_pct_after_fees": 9.5,
+        }
+
+        normalized, reason = robust._normalize_trade(source)
+
+        self.assertIsNone(reason)
+        assert normalized is not None
+        self.assertEqual(normalized["pnl_pct"], 12.0)
+        self.assertEqual(normalized["gross_pnl_pct"], 12.0)
+        self.assertEqual(normalized["net_pnl_pct"], 9.5)
+        self.assertEqual(normalized["net_pnl_pct_after_fees"], 9.5)
+        metrics = robust._metrics_for_rows([normalized], branch_id="fee-adjusted", bootstrap_draws=10)
+        self.assertEqual(metrics["avg_pnl_pct"], 9.5)
+
     def test_chronological_split_keeps_same_entry_date_in_one_split(self) -> None:
         rows = [_trade("2026-01-01", 10.0), _trade("2026-01-01", -2.0), _trade("2026-01-02", 10.0)]
 
@@ -203,6 +222,83 @@ class RegularOptionsRobustSearchEvaluationTests(unittest.TestCase):
         self.assertFalse(combined["historical_nomination_ready"])
         self.assertIn("feature_store_shared_quote_dates_100_below_504", combined["blockers"])
         self.assertEqual(combined["feature_store_gate"]["status"], "feature_store_gate_blocked")
+
+    def test_combined_candidate_with_same_opportunity_different_contracts_cannot_nominate(self) -> None:
+        raw_rows = _passing_source_rows()
+        raw_rows.extend(
+            {
+                **row,
+                "lane_id": "beta",
+                "expiry": "2026-03-20",
+                "long_contract_symbol": "SPY260320C00510000",
+                "short_contract_symbol": "SPY260320C00520000",
+            }
+            for row in _passing_source_rows()
+        )
+        rows, rejected = robust.normalize_trades(raw_rows)
+        self.assertEqual(rejected, {})
+
+        candidate = robust._candidate_report(
+            candidate_id="combined_portfolio",
+            candidate_type="combined",
+            rows=rows,
+            variants_searched=1,
+            regime_check={"regime_robust": True, "blockers": []},
+            baseline_report={"baseline_metrics": {"profit_factor": 0.8, "avg_pnl_pct": -1.0}},
+            baseline_meta={"status": "loaded"},
+            source_report={"quality_gate": {"overall_status": "passed", "blockers": []}},
+            source_quality_policy={},
+            source_quality_policy_meta={"status": "missing"},
+            feature_store_gate={"passed": True, "blockers": []},
+            bootstrap_draws=200,
+        )
+
+        self.assertFalse(candidate["historical_nomination_ready"])
+        self.assertFalse(candidate["combined_portfolio_unbiased"])
+        self.assertIn("cross_lane_allocation_policy_missing", candidate["blockers"])
+        allocation = candidate["allocation_policy_audit"]
+        self.assertEqual(allocation["collision_group_count"], 100)
+        self.assertEqual(allocation["collision_row_count"], 400)
+        self.assertEqual(len(allocation["collision_snapshots"][0]["contract_variants"]), 4)
+        self.assertEqual(
+            {item["expiry"] for item in allocation["collision_snapshots"][0]["contract_variants"]},
+            {"", "2026-03-20"},
+        )
+        self.assertEqual(
+            allocation["sensitivity"]["as_counted_with_duplicates"]["trade_count"],
+            400,
+        )
+        self.assertEqual(
+            allocation["sensitivity"]["lexical_one_per_opportunity"]["trade_count"],
+            100,
+        )
+
+    def test_source_selection_conditioning_is_a_nomination_blocker_not_a_row_filter(self) -> None:
+        rows, rejected = robust.normalize_trades(_passing_source_rows())
+        self.assertEqual(rejected, {})
+        candidate = robust._candidate_report(
+            candidate_id="lane:alpha",
+            candidate_type="lane",
+            rows=rows,
+            variants_searched=1,
+            regime_check={"regime_robust": True, "blockers": []},
+            baseline_report={"baseline_metrics": {"profit_factor": 0.8, "avg_pnl_pct": -1.0}},
+            baseline_meta={"status": "loaded"},
+            source_report={
+                "quality_gate": {"overall_status": "passed", "blockers": []},
+                "proof_or_nomination_blockers": [
+                    "historical_universe_selection_conditioned_current_definition"
+                ],
+            },
+            source_quality_policy={},
+            source_quality_policy_meta={"status": "missing"},
+            feature_store_gate={"passed": True, "blockers": []},
+            bootstrap_draws=200,
+        )
+
+        self.assertEqual(candidate["split_metrics"]["combined"]["exact_trade_count"], 200)
+        self.assertFalse(candidate["historical_nomination_ready"])
+        self.assertIn("historical_universe_selection_conditioned_current_definition", candidate["blockers"])
 
     def test_ablation_uses_authoritative_profitability_metrics_first(self) -> None:
         final_metrics = {"profit_factor": 1.4, "avg_pnl_pct": 5.0}

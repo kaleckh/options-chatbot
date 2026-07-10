@@ -194,6 +194,45 @@ class RegularOptionsHistoricalFilteredSimulatedForwardAuditTests(unittest.TestCa
         self.assertEqual(report["status"], "blocked_historical_filtered_simulated_forward_audit")
         self.assertIn("frozen_contract_filter_hash_mismatch", report["blockers"])
 
+    def test_cross_lane_collision_blocks_unbiased_filtered_portfolio_readback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            selected = root / "selected.jsonl"
+            iteration = root / "iteration.json"
+            duplicate = _row("2026-01", "AAPL", 10.0, prior=12.0, lane="aaa", direction="call")
+            _write_jsonl(
+                selected,
+                [
+                    duplicate,
+                    {**duplicate, "lane_id": "zzz", "lane": "zzz", "long_contract_symbol": "ZZZ"},
+                    _row("2026-02", "AAPL", 12.0, prior=13.0, lane="aaa", direction="call"),
+                ],
+            )
+            _write_json(
+                iteration,
+                {
+                    "selection_permitted": True,
+                    "accepted_filters": [
+                        {
+                            "filter_id": "aapl",
+                            "conditions": [{"field": "ticker", "op": "in", "value": ["AAPL"]}],
+                        }
+                    ],
+                },
+            )
+
+            report = filtered.build_report(
+                selected_candidates_path=selected,
+                filter_iteration_path=iteration,
+                train_months=1,
+                audit_months=1,
+                bootstrap_draws=20,
+            )
+
+        self.assertIn("cross_lane_allocation_policy_missing", report["blockers"])
+        self.assertEqual(report["allocation_policy"]["collision_group_count"], 1)
+        self.assertFalse(report["allocation_policy"]["combined_portfolio_unbiased"])
+
     def test_write_outputs_creates_latest_and_docs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

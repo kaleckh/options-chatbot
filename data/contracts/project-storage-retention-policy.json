@@ -1,0 +1,175 @@
+{
+  "schema_version": 1,
+  "policy_id": "options_chatbot_project_storage_retention_v1",
+  "apply_acknowledgement": "APPLY_PROJECT_STORAGE_RETENTION_V1",
+  "pre_vacuum_retirement_acknowledgement": "RETIRE_VERIFIED_PRE_VACUUM_BACKUP_V1",
+  "default_mode": "dry_run",
+  "protected_exact_paths": [
+    ".env.local",
+    "chat_history.db",
+    "market_data.db",
+    "data/tracked_positions.db",
+    "data/options-validation/options_history.db",
+    "data/options-validation/options_history.db.pre_vacuum_backup",
+    "data/options-validation/forward_tracking.db",
+    "data/options-validation/forward_tracking_authoritative.db"
+  ],
+  "protected_path_prefixes": [
+    ".git/",
+    "data/agent-control/",
+    "data/backups/"
+  ],
+  "rebuildable_roots": [
+    {
+      "category": "next_build",
+      "path": ".next",
+      "min_age_hours": 24
+    },
+    {
+      "category": "dependencies",
+      "path": "node_modules",
+      "min_age_hours": 168
+    },
+    {
+      "category": "dependencies",
+      "path": ".venv",
+      "min_age_hours": 168
+    }
+  ],
+  "python_cache_names": [
+    "__pycache__",
+    ".pytest_cache",
+    ".ruff_cache"
+  ],
+  "snapshot_rules": [
+    {
+      "path": "data/profitability-lab/regular-options-13-symbol-frozen-daily-candidate-decisions",
+      "keep_recent_runs": 3,
+      "keep_monthly_runs": 12,
+      "min_age_hours": 24
+    },
+    {
+      "path": "data/profitability-lab/regular-options-historical-frozen-scanner-replay-adapter",
+      "keep_recent_runs": 3,
+      "keep_monthly_runs": 12,
+      "min_age_hours": 24
+    },
+    {
+      "path": "data/profitability-lab/regular-options-13-symbol-frozen-candidate-generation-entrypoint",
+      "keep_recent_runs": 3,
+      "keep_monthly_runs": 12,
+      "min_age_hours": 24
+    },
+    {
+      "path": "data/profitability-lab/regular-options-13-symbol-frozen-candidate-generation-engine",
+      "keep_recent_runs": 3,
+      "keep_monthly_runs": 12,
+      "min_age_hours": 24
+    },
+    {
+      "path": "data/profitability-lab/regular-options-13-symbol-frozen-candidate-generation-source-surface",
+      "keep_recent_runs": 3,
+      "keep_monthly_runs": 12,
+      "min_age_hours": 24
+    },
+    {
+      "path": "data/profitability-lab/regular-options-out-of-sample-extension/frozen-daily-candidate-decisions",
+      "keep_recent_runs": 3,
+      "keep_monthly_runs": 12,
+      "min_age_hours": 24
+    },
+    {
+      "path": "data/profitability-lab/regular-options-out-of-sample-extension/historical-frozen-scanner-replay-adapter",
+      "keep_recent_runs": 3,
+      "keep_monthly_runs": 12,
+      "min_age_hours": 24
+    },
+    {
+      "path": "data/profitability-lab/regular-options-out-of-sample-extension/frozen-candidate-generation-entrypoint",
+      "keep_recent_runs": 3,
+      "keep_monthly_runs": 12,
+      "min_age_hours": 24
+    },
+    {
+      "path": "data/profitability-lab/regular-options-out-of-sample-extension/frozen-candidate-generation-engine",
+      "keep_recent_runs": 3,
+      "keep_monthly_runs": 12,
+      "min_age_hours": 24
+    },
+    {
+      "path": "data/profitability-lab/regular-options-out-of-sample-extension/frozen-candidate-generation-source-surface",
+      "keep_recent_runs": 3,
+      "keep_monthly_runs": 12,
+      "min_age_hours": 24
+    },
+    {
+      "path": "data/forward-tracking",
+      "recursive": false,
+      "family_from_filename": true,
+      "keep_recent_runs": 7,
+      "keep_daily_days": 14,
+      "keep_weekly_weeks": 8,
+      "keep_monthly_runs": 12,
+      "preserve_status_transitions": true,
+      "min_age_hours": 24
+    }
+  ],
+  "log_rules": [
+    {
+      "path": "data/forward-tracking/strict_forward_30_auto_window_collector_log.txt",
+      "max_bytes": 26214400,
+      "min_age_hours": 24,
+      "keep_archives": 3
+    },
+    {
+      "path": "data/forward-tracking/position_review_log.txt",
+      "max_bytes": 10485760,
+      "min_age_hours": 24,
+      "keep_archives": 3
+    }
+  ],
+  "audit_only_paths": [
+    "tmp_public",
+    "research_runs",
+    ".codex-run",
+    "data/options-validation/thetadata-nbbo",
+    "data/options-validation/runs",
+    "data/options-validation/onclickmedia-eod",
+    "data/options-validation/onclickmedia-eod-spy-qqq",
+    "data/options-validation/onclickmedia-eod-tracked-winners-252",
+    "data/profitability-lab/regular-options-13-symbol-out-of-sample-thetadata-opra-import/import-csv",
+    "data/profitability-lab/regular-options-59-symbol-source-repair-resume/import-csv",
+    "data/profitability-lab/regular-options-filter-family-fresh-window/alpaca-underlying-minute-price-surface/source_rows.jsonl",
+    "data/profitability-lab/regular-options-out-of-sample-extension/alpaca-underlying-minute-price-surface/source_rows.jsonl",
+    "data/profitability-lab/regular-options-alpaca-underlying-minute-price-surface/source_rows.jsonl",
+    "data/profitability-lab/regular-options-all-local-quote-minute-structure-capability-atlas/daily_bucket_structure_status.json",
+    "data/forward-tracking/liquidity_near_misses.jsonl",
+    "data/forward-tracking/scan_picks.jsonl",
+    "data/forward-tracking/fill_attempts.jsonl",
+    "data/forward-tracking/pending_scan_candidates.jsonl",
+    "data/options-validation/fresh_window_2018_2021_import.log",
+    "data/options-validation/fresh_window_pipeline.log",
+    "data/options-validation/vacuum_into_progress.log",
+    "data/day-trading",
+    "data/ai-commodity-infra"
+  ],
+  "pre_vacuum_gate": {
+    "active_db": "data/options-validation/options_history.db",
+    "pre_vacuum_backup": "data/options-validation/options_history.db.pre_vacuum_backup",
+    "import_lock": "data/options-validation/options_history_import.lock",
+    "vacuum_log": "data/options-validation/vacuum_into_progress.log",
+    "vacuum_required_markers": [
+      "quick_check=[('ok',)]",
+      "VACUUM_INTO_COMPLETE"
+    ],
+    "import_log": "data/options-validation/fresh_window_2018_2021_import.log",
+    "import_required_markers": [
+      "FRESH_WINDOW_IMPORTS_COMPLETE"
+    ],
+    "pipeline_log": "data/options-validation/fresh_window_pipeline.log",
+    "pipeline_required_markers": [
+      "PIPELINE_COMPLETE"
+    ],
+    "required_table": "option_quote_snapshots"
+  }
+}

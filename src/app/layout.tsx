@@ -1,6 +1,12 @@
 import "./globals.css";
+import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import AppShell from "@/components/layout/AppShell";
+
+export const metadata: Metadata = {
+  title: "Options AI Trading Desk",
+  description: "Supervised options research and trade review workbench.",
+};
 
 const inter = Inter({
   subsets: ["latin"],

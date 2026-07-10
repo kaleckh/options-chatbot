@@ -5,7 +5,7 @@ This generated ledger consolidates parked, falsified, exhausted, and superseded 
 ## Summary
 
 - Status: `parked_branch_ledger_ready`.
-- Generated at UTC: `2026-07-02T05:55:30Z`.
+- Generated at UTC: `2026-07-10T04:05:13Z`.
 - Branches: `7`.
 - Live index references to parked source docs: `0`.
 - Live index references to archived docs: `0`.
