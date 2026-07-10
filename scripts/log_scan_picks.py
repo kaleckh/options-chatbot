@@ -113,7 +113,9 @@ def _replace_scan_rows(
     log_file: Path = LOG_FILE,
 ) -> int:
     existing_rows = _load_log_rows(log_file=log_file)
-    record_playbooks = {_playbook_value(record) for record in records if _playbook_value(record)}
+    record_playbooks = {
+        _playbook_value(record) for record in records if _playbook_value(record)
+    }
 
     def _matches_replace_scope(row: dict[str, Any]) -> bool:
         if _scan_date_value(row) != scan_date:
@@ -199,7 +201,9 @@ def _scheduled_scan_host_policy(provenance: dict[str, Any]) -> dict[str, Any]:
     return evidence_host_status(current_host=str(provenance.get("host") or ""))
 
 
-def _scheduled_scan_write_allowed(provenance: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
+def _scheduled_scan_write_allowed(
+    provenance: dict[str, Any],
+) -> tuple[bool, dict[str, Any]]:
     policy = _scheduled_scan_host_policy(provenance)
     if bool(policy.get("write_allowed")):
         return True, policy
@@ -216,7 +220,9 @@ def _first_float(*values: Any) -> float | None:
     return None
 
 
-def _top_spread_alternatives(pick: dict[str, Any], *, limit: int = 3) -> list[dict[str, Any]]:
+def _top_spread_alternatives(
+    pick: dict[str, Any], *, limit: int = 3
+) -> list[dict[str, Any]]:
     alternatives = [
         dict(item)
         for item in list(pick.get("spread_alternatives") or [])
@@ -279,7 +285,9 @@ def _compact_pick_label(pick: dict[str, Any]) -> str:
     expiry = pick.get("expiry") or "?"
     debit = pick.get("net_debit")
     debit_pct = pick.get("debit_pct_of_width")
-    spread = f"{strike}/{short_strike}" if short_strike is not None else str(strike or "?")
+    spread = (
+        f"{strike}/{short_strike}" if short_strike is not None else str(strike or "?")
+    )
     parts = [f"{ticker} {direction} {spread}", f"exp={expiry}"]
     if debit is not None:
         try:
@@ -294,13 +302,19 @@ def _compact_pick_label(pick: dict[str, Any]) -> str:
     return " ".join(parts)
 
 
-def _print_scan_diagnostics(scan_result: dict[str, Any], *, max_candidates: int = 5) -> None:
+def _print_scan_diagnostics(
+    scan_result: dict[str, Any], *, max_candidates: int = 5
+) -> None:
     playbook = _safe_dict(scan_result.get("playbook"))
     playbook_id = str(playbook.get("id") or "unknown")
     playbook_label = str(playbook.get("label") or playbook_id)
     scan_funnel = _safe_dict(scan_result.get("scan_funnel"))
-    raw_candidates = scan_funnel.get("raw_candidates", scan_result.get("candidate_count", 0))
-    returned_picks = scan_funnel.get("returned_picks", scan_result.get("returned_count", 0))
+    raw_candidates = scan_funnel.get(
+        "raw_candidates", scan_result.get("candidate_count", 0)
+    )
+    returned_picks = scan_funnel.get(
+        "returned_picks", scan_result.get("returned_count", 0)
+    )
 
     print(
         "Scan diagnostics: "
@@ -325,7 +339,10 @@ def _print_scan_diagnostics(scan_result: dict[str, Any], *, max_candidates: int 
         reasons = list(pick.get("guardrail_reasons") or [])
         if not reasons and pick.get("managed_block_reason"):
             reasons = [str(pick.get("managed_block_reason"))]
-        reason_text = "; ".join(str(reason) for reason in reasons if str(reason).strip()) or "no blocker recorded"
+        reason_text = (
+            "; ".join(str(reason) for reason in reasons if str(reason).strip())
+            or "no blocker recorded"
+        )
         print(f"    - {decision}: {_compact_pick_label(pick)} | {reason_text}")
 
 
@@ -352,14 +369,18 @@ def _safe_scan_playbook_allows_auto_track(playbook_id: str) -> bool:
 
 def _safe_scan_playbook_position_tracking_mode(playbook_id: str) -> str:
     try:
-        return scan_playbook_position_tracking_mode(playbook_id or SCAN_PLAYBOOK_FALLBACK_ID)
+        return scan_playbook_position_tracking_mode(
+            playbook_id or SCAN_PLAYBOOK_FALLBACK_ID
+        )
     except Exception:
         return "unknown"
 
 
 def _safe_scan_playbook_fresh_live_validation_enabled(playbook_id: str) -> bool:
     try:
-        return scan_playbook_fresh_live_validation_enabled(playbook_id or SCAN_PLAYBOOK_FALLBACK_ID)
+        return scan_playbook_fresh_live_validation_enabled(
+            playbook_id or SCAN_PLAYBOOK_FALLBACK_ID
+        )
     except Exception:
         return False
 
@@ -398,7 +419,9 @@ def _scan_lane_gate_blockers(scan_result: dict[str, Any]) -> list[str]:
         )
 
     try:
-        lane_promotion_report = load_lane_promotion_report(DEFAULT_LANE_PROMOTION_REPORT)
+        lane_promotion_report = load_lane_promotion_report(
+            DEFAULT_LANE_PROMOTION_REPORT
+        )
         lane_promotion_health = lane_promotion_report_health(lane_promotion_report)
     except Exception as exc:
         return [f"lane_promotion_state_report_unusable:{exc}"]
@@ -411,7 +434,9 @@ def _scan_lane_gate_blockers(scan_result: dict[str, Any]) -> list[str]:
     if blockers:
         return list(dict.fromkeys(blockers))
 
-    picks = [pick for pick in list(scan_result.get("picks") or []) if isinstance(pick, dict)]
+    picks = [
+        pick for pick in list(scan_result.get("picks") or []) if isinstance(pick, dict)
+    ]
     for pick in picks or [{}]:
         try:
             gate_decision = candidate_gate_decision(
@@ -459,7 +484,9 @@ def _scan_open_risk_blockers() -> list[str]:
     except Exception as exc:
         return [f"open_position_risk_import_error:{exc}"]
     try:
-        return regular_open_risk_entry_blockers(load_regular_open_risk_report(DEFAULT_OPEN_RISK_REPORT))
+        return regular_open_risk_entry_blockers(
+            load_regular_open_risk_report(DEFAULT_OPEN_RISK_REPORT)
+        )
     except Exception as exc:
         return [f"open_position_risk_report_unusable:{exc}"]
 
@@ -520,7 +547,11 @@ def _position_contract_signature(record: dict[str, Any]) -> tuple[Any, ...]:
     strategy_type = (
         source.get("strategy_type")
         or record.get("strategy_type")
-        or ("vertical_spread" if source.get("short_strike") is not None else "single_leg")
+        or (
+            "vertical_spread"
+            if source.get("short_strike") is not None
+            else "single_leg"
+        )
     )
 
     return (
@@ -529,13 +560,24 @@ def _position_contract_signature(record: dict[str, Any]) -> tuple[Any, ...]:
         str(expiry or "").strip()[:10] or None,
         str(strategy_type or "").strip().lower() or None,
         _norm_float(strike),
-        _norm_float(source.get("short_strike") if source else record.get("short_strike")),
+        _norm_float(
+            source.get("short_strike") if source else record.get("short_strike")
+        ),
         str(contract_symbol or "").strip().upper() or None,
-        str(source.get("short_contract_symbol") or record.get("short_contract_symbol") or "").strip().upper() or None,
+        str(
+            source.get("short_contract_symbol")
+            or record.get("short_contract_symbol")
+            or ""
+        )
+        .strip()
+        .upper()
+        or None,
     )
 
 
-def _find_existing_open_contract(repository: Any, payload: dict[str, Any]) -> dict[str, Any] | None:
+def _find_existing_open_contract(
+    repository: Any, payload: dict[str, Any]
+) -> dict[str, Any] | None:
     try:
         open_positions = list(repository.list_positions("open") or [])
     except Exception:
@@ -585,7 +627,9 @@ def _auto_track_scan_picks(
         if creation_blockers:
             skipped += 1
             if auto_track_skip_reasons is not None:
-                auto_track_skip_reasons[idx] = f"creation_blocked:{','.join(creation_blockers)}"
+                auto_track_skip_reasons[idx] = (
+                    f"creation_blocked:{','.join(creation_blockers)}"
+                )
             print(
                 f"  Skipped auto-track: {pick.get('ticker')} "
                 f"creation blocked ({', '.join(creation_blockers)})"
@@ -623,7 +667,9 @@ def _auto_track_scan_picks(
         if existing_position is not None:
             duplicates += 1
             if tracked_links is not None and existing_position.get("id") is not None:
-                tracked_links.append((int(existing_position["id"]), idx, "duplicate_open"))
+                tracked_links.append(
+                    (int(existing_position["id"]), idx, "duplicate_open")
+                )
             print(f"  Already open: {pick.get('ticker')} {payload.get('expiry')}")
             continue
 
@@ -660,12 +706,14 @@ def _review_positions_before_scan(repository: Any) -> list[dict[str, Any]]:
     expired_auto_closed = sum(
         1
         for position in reviewed_positions
-        if position.get("status") == "closed" and position.get("exit_reason") == "expired_auto_close"
+        if position.get("status") == "closed"
+        and position.get("exit_reason") == "expired_auto_close"
     )
     sell_auto_closed = sum(
         1
         for position in reviewed_positions
-        if position.get("status") == "closed" and position.get("exit_reason") == "auto_sell_recommendation"
+        if position.get("status") == "closed"
+        and position.get("exit_reason") == "auto_sell_recommendation"
     )
     if reviewed_positions:
         print(
@@ -686,6 +734,16 @@ def _build_log_record(
     scan_result = scan_result or {}
     playbook = _safe_dict(scan_result.get("playbook"))
     prior_20_return = _prior_20_trading_day_return(pick)
+    entry_snapshot = _safe_dict(pick.get("entry_quote_snapshot"))
+    entry_legs = [_safe_dict(leg) for leg in list(entry_snapshot.get("legs") or [])]
+    long_entry_leg = next(
+        (leg for leg in entry_legs if str(leg.get("role") or "").lower() == "long"),
+        {},
+    )
+    short_entry_leg = next(
+        (leg for leg in entry_legs if str(leg.get("role") or "").lower() == "short"),
+        {},
+    )
     return {
         "logged_at": run_at.isoformat(),
         "scan_date": run_at.strftime("%Y-%m-%d"),
@@ -714,7 +772,8 @@ def _build_log_record(
         "original_logged_expiry": pick.get("original_logged_expiry"),
         "resolved_listed_expiry": pick.get("resolved_listed_expiry"),
         "dte": pick.get("dte"),
-        "underlying_price": pick.get("underlying_price_at_selection") or pick.get("stock_price"),
+        "underlying_price": pick.get("underlying_price_at_selection")
+        or pick.get("stock_price"),
         "direction_score": pick.get("direction_score"),
         "tech_score": pick.get("tech_score"),
         "quality_score": pick.get("quality_score"),
@@ -746,6 +805,10 @@ def _build_log_record(
         "entry_quote_source": pick.get("entry_quote_source"),
         "entry_quote_timestamp_utc": pick.get("entry_quote_timestamp_utc"),
         "entry_quote_timestamp_et": pick.get("entry_quote_timestamp_et"),
+        "long_entry_quote_timestamp_utc": pick.get("long_entry_quote_timestamp_utc")
+        or long_entry_leg.get("quote_timestamp_utc"),
+        "short_entry_quote_timestamp_utc": pick.get("short_entry_quote_timestamp_utc")
+        or short_entry_leg.get("quote_timestamp_utc"),
         "iv_rank_source": pick.get("iv_rank_source"),
         "iv_rank_proof_grade": pick.get("iv_rank_proof_grade"),
         "iv_rank_quality_flag": pick.get("iv_rank_quality_flag"),
@@ -756,8 +819,10 @@ def _build_log_record(
         "source_separation": pick.get("source_separation"),
         "selection_source": pick.get("selection_source"),
         "promotion_class": pick.get("promotion_class"),
-        "candidate_execution_label": pick.get("candidate_execution_label") or pick.get("execution_candidate_label"),
-        "trade_policy_decision": pick.get("trade_policy_decision") or pick.get("policy_decision"),
+        "candidate_execution_label": pick.get("candidate_execution_label")
+        or pick.get("execution_candidate_label"),
+        "trade_policy_decision": pick.get("trade_policy_decision")
+        or pick.get("policy_decision"),
         "policy_fit_score": pick.get("policy_fit_score"),
         "policy_fit_reasons": pick.get("policy_fit_reasons"),
         "winner_profile_fit_score": pick.get("winner_profile_fit_score"),
@@ -775,6 +840,10 @@ def _build_log_record(
         "truth_lane": scan_result.get("truth_lane"),
         "policy_applied": scan_result.get("policy_applied"),
         **_provenance_fields(scan_result),
+        "source_scan_session_id": pick.get("source_scan_session_id"),
+        "source_scan_event_key": pick.get("source_scan_event_key"),
+        "source_scan_run_id": pick.get("source_scan_run_id"),
+        "source_scan_recorded_at_utc": pick.get("source_scan_recorded_at_utc"),
         "approximation_only": pick.get("approximation_only"),
         "comparable_contract": pick.get("comparable_contract"),
         "comparable_contract_basis": pick.get("comparable_contract_basis"),
@@ -818,8 +887,12 @@ def _spread_fill_snapshot(pick: dict[str, Any]) -> dict[str, Any]:
         "long_ask": long_ask,
         "short_bid": short_bid,
         "short_ask": short_ask,
-        "long_mid": round((long_bid + long_ask) / 2.0, 4) if long_bid is not None and long_ask is not None else None,
-        "short_mid": round((short_bid + short_ask) / 2.0, 4) if short_bid is not None and short_ask is not None else None,
+        "long_mid": round((long_bid + long_ask) / 2.0, 4)
+        if long_bid is not None and long_ask is not None
+        else None,
+        "short_mid": round((short_bid + short_ask) / 2.0, 4)
+        if short_bid is not None and short_ask is not None
+        else None,
         "worst_leg_bid_ask_spread_pct": _first_float(
             liquidity.get("worst_leg_bid_ask_spread_pct"),
             pick.get("worst_leg_bid_ask_spread_pct"),
@@ -849,14 +922,18 @@ def _fill_discipline_snapshot(
         "attempted_limit_price": intended_limit_price,
         "attempted_limit_basis": pick.get("entry_execution_basis"),
         "spread_mid_debit": spread_mid,
-        "spread_entry_debit": _first_float(liquidity.get("spread_entry_debit"), pick.get("entry_execution_price")),
+        "spread_entry_debit": _first_float(
+            liquidity.get("spread_entry_debit"), pick.get("entry_execution_price")
+        ),
         "fill_degradation_vs_mid": fill_degradation_vs_mid,
         "fill_degradation_vs_mid_pct": fill_degradation_vs_mid_pct,
         "spread_bid_ask_pct_of_mid": _first_float(
             pick.get("spread_bid_ask_pct_of_mid"),
             liquidity.get("spread_bid_ask_pct_of_mid"),
         ),
-        "worst_leg_bid_ask_spread_pct": selected_spread.get("worst_leg_bid_ask_spread_pct"),
+        "worst_leg_bid_ask_spread_pct": selected_spread.get(
+            "worst_leg_bid_ask_spread_pct"
+        ),
         "long_bid": selected_spread.get("long_bid"),
         "long_ask": selected_spread.get("long_ask"),
         "short_bid": selected_spread.get("short_bid"),
@@ -884,8 +961,12 @@ def _build_fill_attempt_record(
     fill_degradation_vs_mid = None
     fill_degradation_vs_mid_pct = None
     if intended_limit_price is not None and spread_mid is not None and spread_mid > 0:
-        fill_degradation_vs_mid = round(float(intended_limit_price) - float(spread_mid), 4)
-        fill_degradation_vs_mid_pct = round(fill_degradation_vs_mid / float(spread_mid) * 100.0, 4)
+        fill_degradation_vs_mid = round(
+            float(intended_limit_price) - float(spread_mid), 4
+        )
+        fill_degradation_vs_mid_pct = round(
+            fill_degradation_vs_mid / float(spread_mid) * 100.0, 4
+        )
     alternatives = _top_spread_alternatives(pick)
     selected_spread = _spread_fill_snapshot(pick)
     selected_spread["fill_degradation_vs_mid"] = fill_degradation_vs_mid
@@ -920,7 +1001,9 @@ def _build_fill_attempt_record(
             or _safe_scan_playbook_position_tracking_mode(playbook_id)
         ),
         "tracking_approved_lane": _safe_scan_playbook_allows_auto_track(playbook_id),
-        "fresh_live_validation_enabled": _safe_scan_playbook_fresh_live_validation_enabled(playbook_id),
+        "fresh_live_validation_enabled": _safe_scan_playbook_fresh_live_validation_enabled(
+            playbook_id
+        ),
         "creation_eligible": pick.get("creation_eligible"),
         "creation_blockers": list(pick.get("creation_blockers") or []),
         "ticker": pick.get("ticker"),
@@ -928,7 +1011,8 @@ def _build_fill_attempt_record(
         "strategy_type": pick.get("strategy_type"),
         "signal_variant": pick.get("signal_variant"),
         "signal_family": pick.get("signal_family"),
-        "candidate_execution_label": pick.get("candidate_execution_label") or pick.get("execution_candidate_label"),
+        "candidate_execution_label": pick.get("candidate_execution_label")
+        or pick.get("execution_candidate_label"),
         "selected_spread": selected_spread,
         "top_alternatives": alternatives,
         "top_spread_alternatives": copy.deepcopy(alternatives),
@@ -944,7 +1028,9 @@ def _build_fill_attempt_record(
         "long_ask": fill_discipline.get("long_ask"),
         "short_bid": fill_discipline.get("short_bid"),
         "short_ask": fill_discipline.get("short_ask"),
-        "worst_leg_bid_ask_spread_pct": fill_discipline.get("worst_leg_bid_ask_spread_pct"),
+        "worst_leg_bid_ask_spread_pct": fill_discipline.get(
+            "worst_leg_bid_ask_spread_pct"
+        ),
         "spread_bid_ask_pct_of_mid": fill_discipline.get("spread_bid_ask_pct_of_mid"),
         "fill_degradation_vs_mid": fill_degradation_vs_mid,
         "fill_degradation_vs_mid_pct": fill_degradation_vs_mid_pct,
@@ -976,7 +1062,8 @@ def _build_fill_attempt_record(
         "pricing_evidence_class": pick.get("pricing_evidence_class"),
         "profitability_evidence_class": pick.get("profitability_evidence_class"),
         "source_separation": pick.get("source_separation"),
-        "selection_source": pick.get("selection_source") or pick.get("contract_selection_source"),
+        "selection_source": pick.get("selection_source")
+        or pick.get("contract_selection_source"),
         "promotion_class": pick.get("promotion_class"),
     }
 
@@ -1006,7 +1093,9 @@ def _annotate_fill_attempt_outcomes(
         rank = int(record.get("candidate_rank") or 0)
         position_id = position_by_rank.get(rank)
         auto_track_outcome = outcome_by_rank.get(rank)
-        auto_track_skip_reason = str((auto_track_skip_reasons or {}).get(rank) or "").strip()
+        auto_track_skip_reason = str(
+            (auto_track_skip_reasons or {}).get(rank) or ""
+        ).strip()
         if not auto_track_allowed:
             record.update(
                 {
@@ -1028,7 +1117,9 @@ def _annotate_fill_attempt_outcomes(
             )
             continue
         if position_id is None:
-            fill_outcome_reason = auto_track_skip_reason or "auto_track_skipped_or_missing_fill_price"
+            fill_outcome_reason = (
+                auto_track_skip_reason or "auto_track_skipped_or_missing_fill_price"
+            )
             record.update(
                 {
                     "fill_status": "not_filled_auto_track_skipped",
@@ -1060,8 +1151,11 @@ def _annotate_fill_attempt_outcomes(
                 "filled_at": record.get("logged_at"),
                 "review_status": review.get("status") or "open",
                 "reviewed_at": review.get("reviewed_at") or review.get("updated_at"),
-                "close_review_status": review.get("exit_reason") if review.get("status") == "closed" else None,
-                "close_marked_at": review.get("closed_at") or review.get("exit_marked_at"),
+                "close_review_status": review.get("exit_reason")
+                if review.get("status") == "closed"
+                else None,
+                "close_marked_at": review.get("closed_at")
+                or review.get("exit_marked_at"),
             }
         )
     return records
@@ -1094,11 +1188,19 @@ def _liquidity_distance(details: dict[str, Any]) -> dict[str, Any]:
         return round(max(floor - actual, 0.0), 4)
 
     components = {
-        "worst_leg_spread_excess_pct": _excess("worst_leg_bid_ask_spread_pct", "liquidity_spread_max_pct"),
-        "spread_slippage_excess_pct": _excess("spread_bid_ask_pct_of_mid", "spread_liquidity_slippage_max_pct"),
-        "quote_age_excess_hours": _excess("max_quote_age_hours", "max_option_quote_age_hours"),
+        "worst_leg_spread_excess_pct": _excess(
+            "worst_leg_bid_ask_spread_pct", "liquidity_spread_max_pct"
+        ),
+        "spread_slippage_excess_pct": _excess(
+            "spread_bid_ask_pct_of_mid", "spread_liquidity_slippage_max_pct"
+        ),
+        "quote_age_excess_hours": _excess(
+            "max_quote_age_hours", "max_option_quote_age_hours"
+        ),
         "min_leg_volume_shortfall": _shortfall("min_leg_volume", "min_option_volume"),
-        "min_leg_open_interest_shortfall": _shortfall("min_leg_open_interest", "min_option_open_interest"),
+        "min_leg_open_interest_shortfall": _shortfall(
+            "min_leg_open_interest", "min_option_open_interest"
+        ),
     }
     numeric = [float(value) for value in components.values() if value is not None]
     return {
@@ -1119,7 +1221,9 @@ def _build_liquidity_near_miss_records(
     playbook = _safe_dict(scan_result.get("playbook"))
     scan_funnel = _safe_dict(scan_result.get("scan_funnel"))
     records: list[dict[str, Any]] = []
-    for symbol, reason in sorted(scan_drop_reasons.items(), key=lambda item: str(item[0]).upper()):
+    for symbol, reason in sorted(
+        scan_drop_reasons.items(), key=lambda item: str(item[0]).upper()
+    ):
         reason = _safe_dict(reason)
         if str(reason.get("drop_key") or "").strip() != "option_liquidity":
             continue
@@ -1187,14 +1291,26 @@ def _build_liquidity_near_miss_records(
                 "reason": details.get("reason"),
                 "liquidity_reasons": copy.deepcopy(liquidity.get("reasons") or []),
                 "liquidity": copy.deepcopy(liquidity),
-                "liquidity_filters": copy.deepcopy(details.get("liquidity_filters") or {}),
+                "liquidity_filters": copy.deepcopy(
+                    details.get("liquidity_filters") or {}
+                ),
                 "distance_to_current_filters": distance["distance_to_current_filters"],
                 "distance_components": distance_components,
-                "worst_leg_spread_excess_pct": distance_components.get("worst_leg_spread_excess_pct"),
-                "spread_slippage_excess_pct": distance_components.get("spread_slippage_excess_pct"),
-                "quote_age_excess_hours": distance_components.get("quote_age_excess_hours"),
-                "min_leg_volume_shortfall": distance_components.get("min_leg_volume_shortfall"),
-                "min_leg_open_interest_shortfall": distance_components.get("min_leg_open_interest_shortfall"),
+                "worst_leg_spread_excess_pct": distance_components.get(
+                    "worst_leg_spread_excess_pct"
+                ),
+                "spread_slippage_excess_pct": distance_components.get(
+                    "spread_slippage_excess_pct"
+                ),
+                "quote_age_excess_hours": distance_components.get(
+                    "quote_age_excess_hours"
+                ),
+                "min_leg_volume_shortfall": distance_components.get(
+                    "min_leg_volume_shortfall"
+                ),
+                "min_leg_open_interest_shortfall": distance_components.get(
+                    "min_leg_open_interest_shortfall"
+                ),
                 "max_quote_age_hours": max_quote_age_hours,
                 "quote_age_hours": max_quote_age_hours,
                 "ask_bid": copy.deepcopy(ask_bid),
@@ -1211,8 +1327,12 @@ def _build_liquidity_near_miss_records(
                 "research_only": True,
                 "non_promotable": True,
                 "diagnostic_label": "research_only_near_miss",
-                "raw_candidates": scan_funnel.get("raw_candidates", scan_result.get("candidate_count", 0)),
-                "returned_picks": scan_funnel.get("returned_picks", scan_result.get("returned_count", 0)),
+                "raw_candidates": scan_funnel.get(
+                    "raw_candidates", scan_result.get("candidate_count", 0)
+                ),
+                "returned_picks": scan_funnel.get(
+                    "returned_picks", scan_result.get("returned_count", 0)
+                ),
                 "production_filter_action": "preserve_filters_until_exact_replay_unlock",
                 "next_diagnostic_action": "recheck_with_fresh_opra_quote_then_compare_spread_alternatives",
             }
@@ -1232,7 +1352,9 @@ def _append_liquidity_near_miss_records(
     *,
     log_file: Path | None = None,
 ) -> None:
-    _append_log_rows(records, log_file=log_file or (LOG_DIR / "liquidity_near_misses.jsonl"))
+    _append_log_rows(
+        records, log_file=log_file or (LOG_DIR / "liquidity_near_misses.jsonl")
+    )
 
 
 def _record_forward_ledger_snapshot(
@@ -1257,7 +1379,9 @@ def _record_forward_ledger_snapshot(
             if str(pick.get("cohort_id") or "").strip()
         ],
     }
-    requested_cohort_ids = {cohort_id for cohort_id in requested_cohort_ids if cohort_id}
+    requested_cohort_ids = {
+        cohort_id for cohort_id in requested_cohort_ids if cohort_id
+    }
     scan_funnel = scan_result.get("scan_funnel")
     cohort_funnels = {
         cohort_id: scan_funnel
@@ -1284,12 +1408,17 @@ def _record_forward_ledger_snapshot(
         exposure_snapshot=scan_result.get("exposure_snapshot"),
         cohort_funnels=cohort_funnels,
         cohort_ids=sorted(requested_cohort_ids),
-        run_id=str(_run_provenance(scan_result).get("run_id") or f"scheduled_scan:{scan_date}:{datetime.now().isoformat()}"),
+        run_id=str(
+            _run_provenance(scan_result).get("run_id")
+            or f"scheduled_scan:{scan_date}:{datetime.now().isoformat()}"
+        ),
         run_mode="scheduled_scan",
         evidence_class="live_production",
         is_fixture=False,
         policy_artifact_id="scheduled_scan",
-        symbol_diagnostics={"scan_drop_reasons": scan_drop_reasons} if scan_drop_reasons else {},
+        symbol_diagnostics={"scan_drop_reasons": scan_drop_reasons}
+        if scan_drop_reasons
+        else {},
     )
     snapshot["operational_provenance"] = _run_provenance(scan_result)
     try:
@@ -1316,12 +1445,12 @@ def _annotate_picks_with_scan_provenance(
     ledger_result: dict[str, Any] | None,
 ) -> list[dict[str, Any]]:
     if not ledger_result:
-        return picks
+        raise ValueError("forward ledger result missing")
     session_id = ledger_result.get("session_id")
     run_id = str(ledger_result.get("run_id") or "").strip()
     recorded_at_utc = str(ledger_result.get("recorded_at_utc") or "").strip()
     if session_id is None or not run_id or not recorded_at_utc:
-        return picks
+        raise ValueError("forward ledger result locator incomplete")
 
     annotated: list[dict[str, Any]] = []
     for idx, pick in enumerate(list(picks or []), start=1):
@@ -1334,6 +1463,43 @@ def _annotate_picks_with_scan_provenance(
     return annotated
 
 
+def _forward_ledger_result_reject_reasons(
+    ledger_result: dict[str, Any] | None,
+    *,
+    picks: list[dict[str, Any]],
+) -> list[str]:
+    reasons: list[str] = []
+    if not isinstance(ledger_result, dict):
+        return ["forward_ledger_result_missing"]
+    session_id = ledger_result.get("session_id")
+    if (
+        isinstance(session_id, bool)
+        or not isinstance(session_id, int)
+        or session_id <= 0
+    ):
+        reasons.append("forward_ledger_session_id_invalid")
+    if not str(ledger_result.get("run_id") or "").strip():
+        reasons.append("forward_ledger_run_id_missing")
+    recorded_at = str(ledger_result.get("recorded_at_utc") or "").strip()
+    try:
+        parsed_recorded_at = datetime.fromisoformat(recorded_at.replace("Z", "+00:00"))
+    except ValueError:
+        parsed_recorded_at = None
+    if parsed_recorded_at is None or parsed_recorded_at.tzinfo is None:
+        reasons.append("forward_ledger_recorded_at_invalid")
+    count = ledger_result.get("scan_picks_count")
+    if isinstance(count, bool) or not isinstance(count, int) or count != len(picks):
+        reasons.append("forward_ledger_scan_picks_count_mismatch")
+    event_keys = [
+        _scan_pick_event_key(pick, idx) for idx, pick in enumerate(picks, start=1)
+    ]
+    if any(not str(key).strip() for key in event_keys):
+        reasons.append("forward_ledger_scan_event_key_missing")
+    if len(set(event_keys)) != len(event_keys):
+        reasons.append("forward_ledger_scan_event_keys_not_unique")
+    return sorted(set(reasons))
+
+
 def _backfill_position_scan_provenance(
     *,
     repository: Any,
@@ -1341,7 +1507,11 @@ def _backfill_position_scan_provenance(
     tracked_links: list[tuple[int, int] | tuple[int, int, str]],
     ledger_result: dict[str, Any] | None,
 ) -> int:
-    if not ledger_result or not tracked_links or not getattr(repository, "is_available", False):
+    if (
+        not ledger_result
+        or not tracked_links
+        or not getattr(repository, "is_available", False)
+    ):
         return 0
     session_id = ledger_result.get("session_id")
     run_id = ledger_result.get("run_id")
@@ -1385,7 +1555,9 @@ def _backfill_position_scan_provenance(
             )
             updated += 1
         except Exception as exc:
-            print(f"  Scan provenance backfill failed for position {position_id}: {exc}")
+            print(
+                f"  Scan provenance backfill failed for position {position_id}: {exc}"
+            )
     if updated:
         print(f"Scan provenance backfill: updated_positions={updated}")
     return updated
@@ -1430,8 +1602,10 @@ def main() -> int:
     _force_lane_gate_for_auto_track()
 
     import market_data_service as mds
+
     mds._MEMORY_CACHE.clear()
     import options_chatbot as oc
+
     try:
         market_open_at_run = bool(oc._market_is_open())
     except Exception:
@@ -1441,7 +1615,9 @@ def main() -> int:
 
     repository = create_positions_repository(os.getenv("DATABASE_URL"))
     reviewed_positions: list[dict[str, Any]] = _review_positions_before_scan(repository)
-    requested_playbook_id = os.getenv("OPTIONS_SCAN_PLAYBOOK") or SCAN_PLAYBOOK_FALLBACK_ID
+    requested_playbook_id = (
+        os.getenv("OPTIONS_SCAN_PLAYBOOK") or SCAN_PLAYBOOK_FALLBACK_ID
+    )
     cohort_blocker = _forward_cohort_scan_blocker(requested_playbook_id)
     if cohort_blocker:
         print(
@@ -1462,15 +1638,21 @@ def main() -> int:
         n_picks=10,
         watchlist_size=len(oc.DEFAULT_WATCHLIST),
         playbook_id=requested_playbook_id,
-        use_recommended_policy=_env_flag_enabled("OPTIONS_SCAN_USE_RECOMMENDED_POLICY", False),
-        enforce_portfolio_caps=_env_flag_enabled("OPTIONS_SCAN_ENFORCE_PORTFOLIO_CAPS", True),
+        use_recommended_policy=_env_flag_enabled(
+            "OPTIONS_SCAN_USE_RECOMMENDED_POLICY", False
+        ),
+        enforce_portfolio_caps=_env_flag_enabled(
+            "OPTIONS_SCAN_ENFORCE_PORTFOLIO_CAPS", True
+        ),
         truth_lane=os.getenv("OPTIONS_SCAN_TRUTH_LANE") or LIVE_SCAN_TRUTH_LANE,
         min_trades=int(os.getenv("OPTIONS_SCAN_MIN_TRADES", "20")),
     )
     scan_result["operational_provenance"] = operational_provenance
     scan_result["market_open_at_run"] = market_open_at_run
     if scan_result.get("policy_fail_closed"):
-        print(f"Supervised scan failed closed: {scan_result.get('policy_error') or 'unknown policy error'}")
+        print(
+            f"Supervised scan failed closed: {scan_result.get('policy_error') or 'unknown policy error'}"
+        )
         _write_scan_heartbeat(
             status="failed_policy_closed",
             scan_date=scan_date,
@@ -1487,46 +1669,73 @@ def main() -> int:
             scan_result=scan_result,
             run_at=run_at,
         )
-        _append_liquidity_near_miss_records(near_miss_records)
-        if near_miss_records:
-            print(f"{len(near_miss_records)} liquidity near-miss record(s) logged to {LOG_DIR / 'liquidity_near_misses.jsonl'}")
         ledger_result = _record_forward_ledger_snapshot(
             scan_result=scan_result,
             repository=repository,
             reviewed_positions=reviewed_positions,
             scan_date=scan_date,
         )
-        if ledger_result is None:
+        ledger_reasons = _forward_ledger_result_reject_reasons(
+            ledger_result, picks=picks
+        )
+        if ledger_reasons:
             _write_scan_heartbeat(
                 status="failed_forward_ledger_snapshot",
                 scan_date=scan_date,
                 provenance=operational_provenance,
-                details={"returned_picks": 0},
+                details={"returned_picks": 0, "reasons": ledger_reasons},
             )
             return 1
+        _append_liquidity_near_miss_records(near_miss_records)
+        if near_miss_records:
+            print(
+                f"{len(near_miss_records)} liquidity near-miss record(s) logged to {LOG_DIR / 'liquidity_near_misses.jsonl'}"
+            )
         _write_scan_heartbeat(
             status="completed",
             scan_date=scan_date,
             provenance=operational_provenance,
-            details={"returned_picks": 0, "ledger_session_id": ledger_result.get("session_id")},
+            details={
+                "returned_picks": 0,
+                "ledger_session_id": ledger_result.get("session_id"),
+            },
         )
         return 0
 
-    records = [_build_log_record(pick, run_at=run_at, scan_result=scan_result) for pick in picks]
+    ledger_result = _record_forward_ledger_snapshot(
+        scan_result=scan_result,
+        repository=repository,
+        reviewed_positions=reviewed_positions,
+        scan_date=scan_date,
+    )
+    ledger_reasons = _forward_ledger_result_reject_reasons(ledger_result, picks=picks)
+    if ledger_reasons:
+        _write_scan_heartbeat(
+            status="failed_forward_ledger_snapshot",
+            scan_date=scan_date,
+            provenance=operational_provenance,
+            details={"returned_picks": len(picks), "reasons": ledger_reasons},
+        )
+        return 1
+    picks = _annotate_picks_with_scan_provenance(picks, ledger_result=ledger_result)
+    records = [
+        _build_log_record(pick, run_at=run_at, scan_result=scan_result)
+        for pick in picks
+    ]
     replaced = _replace_scan_rows(scan_date, records, log_file=LOG_FILE)
     if replaced:
-        print(f"Replaced {replaced} existing log row(s) for {scan_date} before writing the current run.")
+        print(
+            f"Replaced {replaced} existing log row(s) for {scan_date} before writing the current run."
+        )
 
-    logged = 0
     for record in records:
-        logged += 1
         print(
             f"  Logged: {record['ticker']} {record['direction']} "
             f"{record['long_strike']}/{record['short_strike']} "
             f"${(record.get('net_debit') or record.get('entry_execution_price') or 0.0):.2f} exp={record['expiry']}"
         )
+    print(f"\n{len(records)} picks logged to {LOG_FILE}")
 
-    print(f"\n{logged} picks logged to {LOG_FILE}")
     fill_attempt_records = [
         _build_fill_attempt_record(
             pick,
@@ -1542,23 +1751,10 @@ def main() -> int:
     )
     _append_liquidity_near_miss_records(near_miss_records)
     if near_miss_records:
-        print(f"{len(near_miss_records)} liquidity near-miss record(s) logged to {LOG_DIR / 'liquidity_near_misses.jsonl'}")
-
-    ledger_result = _record_forward_ledger_snapshot(
-        scan_result=scan_result,
-        repository=repository,
-        reviewed_positions=reviewed_positions,
-        scan_date=scan_date,
-    )
-    if ledger_result is None:
-        _write_scan_heartbeat(
-            status="failed_forward_ledger_snapshot",
-            scan_date=scan_date,
-            provenance=operational_provenance,
-            details={"returned_picks": len(picks)},
+        print(
+            f"{len(near_miss_records)} liquidity near-miss record(s) logged to "
+            f"{LOG_DIR / 'liquidity_near_misses.jsonl'}"
         )
-        return 1
-    picks = _annotate_picks_with_scan_provenance(picks, ledger_result=ledger_result)
 
     tracked_links: list[tuple[int, int] | tuple[int, int, str]] = []
     auto_track_skip_reasons: dict[int, str] = {}
@@ -1582,12 +1778,14 @@ def main() -> int:
             expired_auto_closed = sum(
                 1
                 for position in post_track_review
-                if position.get("status") == "closed" and position.get("exit_reason") == "expired_auto_close"
+                if position.get("status") == "closed"
+                and position.get("exit_reason") == "expired_auto_close"
             )
             sell_auto_closed = sum(
                 1
                 for position in post_track_review
-                if position.get("status") == "closed" and position.get("exit_reason") == "auto_sell_recommendation"
+                if position.get("status") == "closed"
+                and position.get("exit_reason") == "auto_sell_recommendation"
             )
             print(
                 "Open position review summary: "
@@ -1598,7 +1796,9 @@ def main() -> int:
         except Exception as exc:
             print(f"Open position review failed: {exc}")
     elif repository_available:
-        print("Auto-track disabled by OPTIONS_SCAN_AUTO_TRACK; position review skipped.")
+        print(
+            "Auto-track disabled by OPTIONS_SCAN_AUTO_TRACK; position review skipped."
+        )
     else:
         print("Tracked positions repository unavailable; auto-track skipped.")
 
@@ -1612,7 +1812,9 @@ def main() -> int:
     )
     _append_fill_attempt_records(fill_attempt_records)
     if fill_attempt_records:
-        print(f"{len(fill_attempt_records)} fill-attempt record(s) logged to {LOG_DIR / 'fill_attempts.jsonl'}")
+        print(
+            f"{len(fill_attempt_records)} fill-attempt record(s) logged to {LOG_DIR / 'fill_attempts.jsonl'}"
+        )
 
     _backfill_position_scan_provenance(
         repository=repository,
@@ -1624,7 +1826,10 @@ def main() -> int:
         status="completed",
         scan_date=scan_date,
         provenance=operational_provenance,
-        details={"returned_picks": len(picks), "ledger_session_id": ledger_result.get("session_id")},
+        details={
+            "returned_picks": len(picks),
+            "ledger_session_id": ledger_result.get("session_id"),
+        },
     )
     return 0
 

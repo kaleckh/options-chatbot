@@ -4,8 +4,10 @@ import argparse
 import hashlib
 import json
 import re
+import sqlite3
 import sys
 from collections import Counter
+from decimal import Decimal, InvalidOperation
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Sequence
@@ -75,6 +77,9 @@ DEFAULT_SCAN_TASK_HEALTH = (
     / "forward-tracking"
     / "regular_options_strict_forward_scan_task_health_latest.json"
 )
+DEFAULT_FORWARD_LEDGER_DB = (
+    ROOT / "data" / "options-validation" / "forward_tracking_authoritative.db"
+)
 HISTORICAL_FILTERED_MATERIALIZER_ROW_COUNT = 306
 HISTORICAL_FILTERED_MATERIALIZER_MONTH_COUNT = 24
 
@@ -122,6 +127,7 @@ READY_SCAN_TASK_HEALTH_STATUS = "scan_tasks_ready_for_next_market_window"
 ENTRY_QUOTE_STORE_VERIFICATION_BLOCKER = (
     "entry_quote_store_verification_not_established"
 )
+ENTRY_QUOTE_STORE_BINDING_SCHEMA = "authoritative_forward_scan_event_v1"
 
 
 def _utc_now_iso() -> str:
@@ -898,12 +904,537 @@ def _signal_lineage(row: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
 
 def _entry_quote_store_verification_established(
     row: dict[str, Any] | None = None,
+    *,
+    verifier: _EntryQuoteStoreVerifier | None = None,
 ) -> bool:
-    """Fail closed until exact entry rows are revalidated against a trusted store."""
-    # Caller-supplied fields, booleans, and hashes are intentionally ignored. Replace
-    # this seam only with a verifier that opens and content-validates the bound store.
-    del row
-    return False
+    result = (
+        verifier.verify(row)
+        if verifier is not None
+        else _entry_quote_store_verification(row)
+    )
+    return bool(result.get("verified"))
+
+
+def _strict_positive_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    if isinstance(value, str) and re.fullmatch(r"[1-9][0-9]*", value):
+        return int(value)
+    return None
+
+
+def _exact_decimal(value: Any) -> Decimal | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        parsed = Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+    if not parsed.is_finite():
+        return None
+    normalized = parsed.normalize()
+    if normalized.as_tuple().exponent < -4:
+        return None
+    return parsed
+
+
+def _canonical_payload_sha256(payload: dict[str, Any]) -> str:
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        default=lambda value: (
+            format(value, "f")
+            if isinstance(value, Decimal)
+            else TypeError(type(value).__name__)
+        ),
+    ).encode("utf8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _populated_entry_metadata_values(
+    row: dict[str, Any], field_names: Sequence[str]
+) -> set[str]:
+    snapshot = _as_dict(row.get("entry_quote_snapshot"))
+    legs = [_as_dict(item) for item in _as_list(snapshot.get("legs"))]
+    containers = [row, snapshot, *legs]
+    return {
+        _norm_lower(container.get(field))
+        for container in containers
+        for field in field_names
+        if _norm(container.get(field))
+    }
+
+
+def _raw_entry_leg_prices(row: dict[str, Any]) -> dict[str, Any]:
+    long_leg = _entry_snapshot_leg(row, "long")
+    short_leg = _entry_snapshot_leg(row, "short")
+    paths = {
+        "entry_long_bid": (
+            "entry_long_bid",
+            "long_bid",
+            "spread_liquidity.long_bid",
+            "entry_quote_snapshot.long_bid",
+        ),
+        "entry_long_ask": (
+            "entry_long_ask",
+            "long_ask",
+            "spread_liquidity.long_ask",
+            "entry_quote_snapshot.long_ask",
+        ),
+        "entry_short_bid": (
+            "entry_short_bid",
+            "short_bid",
+            "spread_liquidity.short_bid",
+            "entry_quote_snapshot.short_bid",
+        ),
+        "entry_short_ask": (
+            "entry_short_ask",
+            "short_ask",
+            "spread_liquidity.short_ask",
+            "entry_quote_snapshot.short_ask",
+        ),
+    }
+    result = {
+        field: _field_from_row(row, candidates) for field, candidates in paths.items()
+    }
+    if result["entry_long_bid"] is None:
+        result["entry_long_bid"] = long_leg.get("bid")
+    if result["entry_long_ask"] is None:
+        result["entry_long_ask"] = long_leg.get("ask")
+    if result["entry_short_bid"] is None:
+        result["entry_short_bid"] = short_leg.get("bid")
+    if result["entry_short_ask"] is None:
+        result["entry_short_ask"] = short_leg.get("ask")
+    declared_debit = row.get("net_debit")
+    if declared_debit is None:
+        declared_debit = row.get("entry_execution_price")
+    if declared_debit is None:
+        declared_debit = row.get("entry_debit")
+    result["entry_debit"] = declared_debit
+    return result
+
+
+def _entry_price_alias_sets(
+    row: dict[str, Any],
+) -> tuple[dict[str, set[Decimal]], list[str]]:
+    long_leg = _entry_snapshot_leg(row, "long")
+    short_leg = _entry_snapshot_leg(row, "short")
+    specs = {
+        "entry_long_bid": (
+            (
+                "entry_long_bid",
+                "long_bid",
+                "spread_liquidity.long_bid",
+                "entry_quote_snapshot.long_bid",
+            ),
+            long_leg.get("bid"),
+        ),
+        "entry_long_ask": (
+            (
+                "entry_long_ask",
+                "long_ask",
+                "spread_liquidity.long_ask",
+                "entry_quote_snapshot.long_ask",
+            ),
+            long_leg.get("ask"),
+        ),
+        "entry_short_bid": (
+            (
+                "entry_short_bid",
+                "short_bid",
+                "spread_liquidity.short_bid",
+                "entry_quote_snapshot.short_bid",
+            ),
+            short_leg.get("bid"),
+        ),
+        "entry_short_ask": (
+            (
+                "entry_short_ask",
+                "short_ask",
+                "spread_liquidity.short_ask",
+                "entry_quote_snapshot.short_ask",
+            ),
+            short_leg.get("ask"),
+        ),
+    }
+    aliases: dict[str, set[Decimal]] = {}
+    reasons: list[str] = []
+    for field, (paths, leg_value) in specs.items():
+        raw_values: list[Any] = []
+        for path in paths:
+            value: Any = row
+            found = True
+            for part in path.split("."):
+                if not isinstance(value, dict) or part not in value:
+                    found = False
+                    break
+                value = value[part]
+            if found and value not in (None, ""):
+                raw_values.append(value)
+        if leg_value not in (None, ""):
+            raw_values.append(leg_value)
+        parsed = [_exact_decimal(value) for value in raw_values]
+        if not parsed or any(value is None for value in parsed):
+            reasons.append(f"{field}_aliases_missing_or_invalid")
+            aliases[field] = set()
+            continue
+        aliases[field] = {value for value in parsed if value is not None}
+        if len(aliases[field]) != 1:
+            reasons.append(f"{field}_aliases_conflict")
+    return aliases, reasons
+
+
+class _EntryQuoteStoreVerifier:
+    """One read-only SQLite snapshot and locator cache for one report build."""
+
+    def __init__(self, db_path: Path = DEFAULT_FORWARD_LEDGER_DB) -> None:
+        self.db_path = db_path
+        self.connection: sqlite3.Connection | None = None
+        self.initialization_detail: str | None = None
+        self.cache: dict[tuple[int, str, str, str, str], dict[str, Any]] = {}
+
+    def __enter__(self) -> _EntryQuoteStoreVerifier:
+        if not self.db_path.exists() or not self.db_path.is_file():
+            self.initialization_detail = "authoritative_forward_ledger_missing"
+            return self
+        try:
+            uri = f"file:{self.db_path.resolve().as_posix()}?mode=ro"
+            self.connection = sqlite3.connect(uri, uri=True, timeout=5.0)
+            self.connection.row_factory = sqlite3.Row
+            self.connection.execute("PRAGMA query_only = ON")
+            self.connection.execute("BEGIN")
+        except (OSError, sqlite3.Error) as exc:
+            if self.connection is not None:
+                self.connection.close()
+                self.connection = None
+            self.initialization_detail = (
+                f"authoritative_forward_ledger_read_failed:{type(exc).__name__}"
+            )
+        return self
+
+    def __exit__(self, *_args: Any) -> None:
+        if self.connection is not None:
+            self.connection.close()
+            self.connection = None
+
+    def verify(self, row: dict[str, Any] | None) -> dict[str, Any]:
+        if self.initialization_detail:
+            return {
+                "schema": ENTRY_QUOTE_STORE_BINDING_SCHEMA,
+                "verified": False,
+                "reason": ENTRY_QUOTE_STORE_VERIFICATION_BLOCKER,
+                "db_path": _rel(self.db_path),
+                "detail": self.initialization_detail,
+            }
+        if not isinstance(row, dict):
+            return _entry_quote_store_verification(row, db_path=self.db_path)
+        session_id = _strict_positive_int(row.get("source_scan_session_id"))
+        key = (
+            session_id or 0,
+            _norm(row.get("source_scan_event_key")),
+            _norm(row.get("source_scan_run_id")),
+            _norm(row.get("source_scan_recorded_at_utc")),
+            _canonical_payload_sha256(row),
+        )
+        if key not in self.cache:
+            self.cache[key] = _entry_quote_store_verification(
+                row,
+                db_path=self.db_path,
+                connection=self.connection,
+            )
+        return dict(self.cache[key])
+
+
+def _entry_quote_store_verification(
+    row: dict[str, Any] | None,
+    *,
+    db_path: Path = DEFAULT_FORWARD_LEDGER_DB,
+    connection: sqlite3.Connection | None = None,
+) -> dict[str, Any]:
+    """Content-verify one matched entry against one authoritative scan event."""
+    result: dict[str, Any] = {
+        "schema": ENTRY_QUOTE_STORE_BINDING_SCHEMA,
+        "verified": False,
+        "reason": ENTRY_QUOTE_STORE_VERIFICATION_BLOCKER,
+        "db_path": _rel(db_path),
+    }
+    if not isinstance(row, dict):
+        result["detail"] = "matched_entry_missing"
+        return result
+    session_id = _strict_positive_int(row.get("source_scan_session_id"))
+    if session_id is None:
+        result["detail"] = "source_scan_session_id_missing_or_invalid"
+        return result
+    event_key = _norm(row.get("source_scan_event_key"))
+    run_id = _norm(row.get("source_scan_run_id"))
+    recorded_at = _norm(row.get("source_scan_recorded_at_utc"))
+    if not event_key or not run_id or _parse_utc_timestamp(recorded_at) is None:
+        result["detail"] = "source_scan_locator_incomplete"
+        return result
+    if not db_path.exists() or not db_path.is_file():
+        result["detail"] = "authoritative_forward_ledger_missing"
+        return result
+
+    owned_connection: sqlite3.Connection | None = None
+    try:
+        active_connection = connection
+        if active_connection is None:
+            uri = f"file:{db_path.resolve().as_posix()}?mode=ro"
+            owned_connection = sqlite3.connect(uri, uri=True, timeout=5.0)
+            owned_connection.row_factory = sqlite3.Row
+            owned_connection.execute("PRAGMA query_only = ON")
+            owned_connection.execute("BEGIN")
+            active_connection = owned_connection
+        matches = active_connection.execute(
+            """
+            SELECT
+                fs.id AS session_id,
+                fs.recorded_at_utc AS session_recorded_at_utc,
+                fs.source_label AS session_source_label,
+                fs.playbook AS session_playbook,
+                fs.run_id AS session_run_id,
+                fs.run_mode AS session_run_mode,
+                fs.evidence_class AS session_evidence_class,
+                fs.is_fixture AS session_is_fixture,
+                fe.id AS event_id,
+                fe.event_key,
+                fe.run_id AS event_run_id,
+                fe.run_mode AS event_run_mode,
+                fe.evidence_class AS event_evidence_class,
+                fe.is_fixture AS event_is_fixture,
+                fe.payload_json
+            FROM forward_sessions fs
+            JOIN forward_events fe ON fe.session_id = fs.id
+            WHERE fs.id = ?
+              AND fe.event_type = 'scan_pick'
+              AND fe.event_key = ?
+            """,
+            (session_id, event_key),
+        ).fetchall()
+    except (OSError, sqlite3.Error) as exc:
+        result["detail"] = (
+            f"authoritative_forward_ledger_read_failed:{type(exc).__name__}"
+        )
+        return result
+    finally:
+        if owned_connection is not None:
+            owned_connection.close()
+
+    if len(matches) != 1:
+        result["detail"] = f"authoritative_scan_event_match_count:{len(matches)}"
+        return result
+    stored = dict(matches[0])
+    try:
+        event = json.loads(str(stored.pop("payload_json") or "{}"), parse_float=Decimal)
+    except json.JSONDecodeError:
+        result["detail"] = "authoritative_scan_event_payload_invalid_json"
+        return result
+    if not isinstance(event, dict):
+        result["detail"] = "authoritative_scan_event_payload_not_object"
+        return result
+
+    exact_metadata = {
+        "session_recorded_at_utc": recorded_at,
+        "session_run_id": run_id,
+        "event_run_id": run_id,
+        "session_source_label": "scheduled_scan",
+        "session_run_mode": "scheduled_scan",
+        "event_run_mode": "scheduled_scan",
+        "session_evidence_class": "live_production",
+        "event_evidence_class": "live_production",
+    }
+    for field, expected in exact_metadata.items():
+        if _norm(stored.get(field)) != expected:
+            result["detail"] = f"authoritative_scan_event_{field}_mismatch"
+            return result
+    if bool(stored.get("session_is_fixture")) or bool(stored.get("event_is_fixture")):
+        result["detail"] = "authoritative_scan_event_fixture"
+        return result
+    if _norm(stored.get("session_playbook")) != _norm(row.get("lane_id")):
+        result["detail"] = "authoritative_scan_event_session_playbook_mismatch"
+        return result
+    if _norm(event.get("selection_source")) != "live_chain_exact_contract":
+        result["detail"] = "authoritative_scan_event_selection_source_invalid"
+        return result
+    if _norm(event.get("entry_execution_basis")) != "spread_ask_bid":
+        result["detail"] = "authoritative_scan_event_entry_basis_invalid"
+        return result
+    event_sources = _populated_entry_metadata_values(
+        event,
+        (
+            "entry_quote_source",
+            "quote_source",
+            "options_data_source",
+            "data_source",
+            "market_data_source",
+            "options_market_data_source",
+        ),
+    )
+    row_sources = _populated_entry_metadata_values(
+        row,
+        (
+            "entry_quote_source",
+            "quote_source",
+            "options_data_source",
+            "data_source",
+            "market_data_source",
+            "options_market_data_source",
+        ),
+    )
+    if event_sources != {"alpaca_opra"}:
+        result["detail"] = "authoritative_scan_event_quote_source_invalid"
+        return result
+    if row_sources != event_sources:
+        result["detail"] = "matched_entry_quote_source_mismatch"
+        return result
+    event_source_feeds = _populated_entry_metadata_values(event, ("source_feed",))
+    row_source_feeds = _populated_entry_metadata_values(row, ("source_feed",))
+    if event_source_feeds - {"opra"} or row_source_feeds != event_source_feeds:
+        result["detail"] = "authoritative_scan_event_source_feed_invalid"
+        return result
+    freshness_values = _populated_entry_metadata_values(
+        event,
+        (
+            "quote_freshness_status",
+            "freshness_status",
+            "options_snapshot_status",
+            "option_chain_status",
+        ),
+    )
+    if not freshness_values or freshness_values != {"fresh"}:
+        result["detail"] = "authoritative_scan_event_quote_freshness_invalid"
+        return result
+    row_freshness_values = _populated_entry_metadata_values(
+        row,
+        (
+            "quote_freshness_status",
+            "freshness_status",
+            "options_snapshot_status",
+            "option_chain_status",
+        ),
+    )
+    if row_freshness_values != freshness_values:
+        result["detail"] = "matched_entry_quote_freshness_mismatch"
+        return result
+    snapshot_kinds = _populated_entry_metadata_values(
+        event, ("snapshot_kind", "quote_snapshot_kind")
+    )
+    if snapshot_kinds & {"daily", "eod", "end_of_day", "daily_snapshot"}:
+        result["detail"] = "authoritative_scan_event_snapshot_kind_invalid"
+        return result
+
+    event_legs = [
+        _as_dict(item)
+        for item in _as_list(_as_dict(event.get("entry_quote_snapshot")).get("legs"))
+    ]
+    if len(event_legs) != 2 or sorted(
+        _norm_lower(leg.get("role")) for leg in event_legs
+    ) != ["long", "short"]:
+        result["detail"] = "authoritative_scan_event_leg_roles_not_exact"
+        return result
+    event_provenance, event_reasons = _entry_provenance(event)
+    row_provenance, row_reasons = _entry_provenance(row)
+    if event_reasons:
+        result["detail"] = f"authoritative_scan_event_entry_invalid:{event_reasons[0]}"
+        return result
+    if row_reasons:
+        result["detail"] = f"matched_entry_invalid:{row_reasons[0]}"
+        return result
+    event_price_aliases, event_price_alias_reasons = _entry_price_alias_sets(event)
+    row_price_aliases, row_price_alias_reasons = _entry_price_alias_sets(row)
+    if event_price_alias_reasons:
+        result["detail"] = f"authoritative_scan_event_{event_price_alias_reasons[0]}"
+        return result
+    if row_price_alias_reasons:
+        result["detail"] = f"matched_entry_{row_price_alias_reasons[0]}"
+        return result
+    if _norm_lower(event_provenance.get("entry_quote_source")) != _norm_lower(
+        row_provenance.get("entry_quote_source")
+    ):
+        result["detail"] = "authoritative_scan_event_entry_quote_source_mismatch"
+        return result
+
+    text_pairs = (
+        (
+            _norm(event.get("ticker")).upper(),
+            _norm(row.get("ticker")).upper(),
+            "ticker",
+        ),
+        (_candidate_direction(event), _candidate_direction(row), "direction"),
+        (
+            _norm(event.get("strategy_type")),
+            _norm(row.get("strategy_type")),
+            "strategy_type",
+        ),
+        (_norm(event.get("playbook_id")), _norm(row.get("lane_id")), "lane_id"),
+        (
+            _norm(event_provenance.get("expiry")),
+            _norm(row_provenance.get("expiry")),
+            "expiry",
+        ),
+        (
+            _norm(event_provenance.get("long_contract_symbol")),
+            _norm(row_provenance.get("long_contract_symbol")),
+            "long_contract_symbol",
+        ),
+        (
+            _norm(event_provenance.get("short_contract_symbol")),
+            _norm(row_provenance.get("short_contract_symbol")),
+            "short_contract_symbol",
+        ),
+        (
+            _norm(event_provenance.get("entry_quote_timestamp_utc")),
+            _norm(row_provenance.get("entry_quote_timestamp_utc")),
+            "entry_quote_timestamp_utc",
+        ),
+        (
+            _norm(event_provenance.get("long_entry_quote_timestamp_utc")),
+            _norm(row_provenance.get("long_entry_quote_timestamp_utc")),
+            "long_entry_quote_timestamp_utc",
+        ),
+        (
+            _norm(event_provenance.get("short_entry_quote_timestamp_utc")),
+            _norm(row_provenance.get("short_entry_quote_timestamp_utc")),
+            "short_entry_quote_timestamp_utc",
+        ),
+    )
+    for left, right, field in text_pairs:
+        if not left or left != right:
+            result["detail"] = f"authoritative_scan_event_{field}_mismatch"
+            return result
+    for field in (
+        "entry_long_bid",
+        "entry_long_ask",
+        "entry_short_bid",
+        "entry_short_ask",
+    ):
+        if event_price_aliases.get(field) != row_price_aliases.get(field):
+            result["detail"] = f"authoritative_scan_event_{field}_mismatch"
+            return result
+    event_debit = _exact_decimal(_raw_entry_leg_prices(event).get("entry_debit"))
+    row_debit = _exact_decimal(_raw_entry_leg_prices(row).get("entry_debit"))
+    if event_debit is None or row_debit is None or event_debit != row_debit:
+        result["detail"] = "authoritative_scan_event_entry_debit_mismatch"
+        return result
+
+    result.update(
+        {
+            "verified": True,
+            "reason": None,
+            "detail": "exact_authoritative_scan_event_match",
+            "session_id": session_id,
+            "event_id": int(stored["event_id"]),
+            "event_key": event_key,
+            "run_id": run_id,
+            "recorded_at_utc": recorded_at,
+            "canonical_payload_sha256": _canonical_payload_sha256(event),
+        }
+    )
+    return result
 
 
 def _completion_lineage_reject_reasons(row: dict[str, Any]) -> list[str]:
@@ -1220,6 +1751,7 @@ def _forward_evidence_bar_progress(
     *,
     bar_contract: dict[str, Any],
     bar_meta: dict[str, Any],
+    verifier: _EntryQuoteStoreVerifier | None = None,
 ) -> dict[str, Any]:
     requirements = _as_dict(bar_contract.get("requirements"))
     min_rows = int(requirements.get("min_completed_forward_paper_shadow_rows") or 30)
@@ -1231,7 +1763,7 @@ def _forward_evidence_bar_progress(
     max_fixture_rows = int(requirements.get("max_fixture_rows") or 0)
     draws = int(requirements.get("bootstrap_draws") or 10000)
     completed_rows, declared_rows, lineage_reject_counts = _validated_completion_rows(
-        rows
+        rows, verifier=verifier
     )
     declared_completed = [dict(row) for row in declared_rows]
     completed = [dict(row) for row in completed_rows]
@@ -1265,8 +1797,9 @@ def _forward_evidence_bar_progress(
         if usd is not None:
             usd_entries.append((cluster, usd))
 
-    entry_quote_store_verification_established = (
-        _entry_quote_store_verification_established()
+    entry_quote_store_verification_established = bool(
+        completed
+        and not lineage_reject_counts.get(ENTRY_QUOTE_STORE_VERIFICATION_BLOCKER)
     )
     evaluation_permitted = bool(
         entry_quote_store_verification_established and len(completed) >= min_rows
@@ -1666,6 +2199,8 @@ def _paper_shadow_row(
         "entry_quote_source": row.get("entry_quote_source")
         or row.get("quote_source")
         or row.get("options_data_source"),
+        "quote_freshness_status": row.get("quote_freshness_status"),
+        "entry_quote_snapshot": row.get("entry_quote_snapshot"),
         "entry_quote_timestamp_utc": _entry_quote_timestamp(row),
         "entry_quote_as_of_utc": row.get("entry_quote_as_of_utc")
         or _entry_quote_timestamp(row),
@@ -1699,7 +2234,10 @@ def _paper_shadow_row(
         "net_pnl_pct": _canonical_net_pnl_pct(row),
         "net_pnl_pct_after_fees": row.get("net_pnl_pct_after_fees"),
         "net_pnl_usd": row.get("net_pnl_usd"),
-        "source_scan_run_id": row.get("scanner_run_id") or row.get("scan_run_id"),
+        "source_scan_run_id": row.get("source_scan_run_id"),
+        "source_scan_session_id": row.get("source_scan_session_id"),
+        "source_scan_event_key": row.get("source_scan_event_key"),
+        "source_scan_recorded_at_utc": row.get("source_scan_recorded_at_utc"),
         "source_logged_at": row.get("logged_at"),
         "source_row": row,
         "live_trade": False,
@@ -1749,6 +2287,14 @@ def _matched_entry_lineage_reject_reasons(row: dict[str, Any]) -> list[str]:
         reasons.append("preceding_entry_identity_schema_missing_or_invalid")
     if not _norm(row.get("candidate_id")):
         reasons.append("preceding_entry_candidate_id_missing")
+    if _strict_positive_int(row.get("source_scan_session_id")) is None:
+        reasons.append("preceding_entry_source_scan_session_id_missing_or_invalid")
+    if not _norm(row.get("source_scan_event_key")):
+        reasons.append("preceding_entry_source_scan_event_key_missing")
+    if not _norm(row.get("source_scan_run_id")):
+        reasons.append("preceding_entry_source_scan_run_id_missing")
+    if _parse_utc_timestamp(row.get("source_scan_recorded_at_utc")) is None:
+        reasons.append("preceding_entry_source_scan_recorded_at_missing_or_invalid")
     _provenance, provenance_reasons = _entry_provenance(row)
     reasons.extend(f"preceding_entry_{reason}" for reason in provenance_reasons)
     _scan, scan_reasons = _scan_provenance(row)
@@ -1791,6 +2337,9 @@ def _completion_preceding_entry_reject_reasons(
         "entry_quote_timestamp_utc",
         "long_entry_quote_timestamp_utc",
         "short_entry_quote_timestamp_utc",
+        "source_scan_event_key",
+        "source_scan_run_id",
+        "source_scan_recorded_at_utc",
     )
     for field in text_fields:
         left = (
@@ -1819,6 +2368,18 @@ def _completion_preceding_entry_reject_reasons(
         right = _safe_float(preceding_entry.get(field))
         if left is None or right is None or abs(left - right) > 0.0001:
             reasons.append(f"completion_preceding_entry_{field}_mismatch")
+    completion_session_id = _strict_positive_int(
+        completion.get("source_scan_session_id")
+    )
+    preceding_session_id = _strict_positive_int(
+        preceding_entry.get("source_scan_session_id")
+    )
+    if (
+        completion_session_id is None
+        or preceding_session_id is None
+        or completion_session_id != preceding_session_id
+    ):
+        reasons.append("completion_preceding_entry_source_scan_session_id_mismatch")
     for field in ("scan_provenance", "signal_lineage"):
         if _as_dict(completion.get(field)) != _as_dict(preceding_entry.get(field)):
             reasons.append(f"completion_preceding_entry_{field}_mismatch")
@@ -1827,29 +2388,70 @@ def _completion_preceding_entry_reject_reasons(
 
 def _validated_completion_rows(
     rows: Sequence[dict[str, Any]],
+    *,
+    verifier: _EntryQuoteStoreVerifier | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], Counter[str]]:
-    valid_entries: dict[str, dict[str, Any]] = {}
+    declared_entries: dict[str, list[dict[str, Any]]] = {}
+    locator_candidate_ids: dict[tuple[int, str, str, str], set[str]] = {}
+    for declared_entry in rows:
+        if _norm(declared_entry.get("record_type")) != "matched_entry":
+            continue
+        declared_candidate_id = _norm(declared_entry.get("candidate_id"))
+        declared_session_id = _strict_positive_int(
+            declared_entry.get("source_scan_session_id")
+        )
+        declared_locator = (
+            declared_session_id or 0,
+            _norm(declared_entry.get("source_scan_event_key")),
+            _norm(declared_entry.get("source_scan_run_id")),
+            _norm(declared_entry.get("source_scan_recorded_at_utc")),
+        )
+        if all(declared_locator) and declared_candidate_id:
+            locator_candidate_ids.setdefault(declared_locator, set()).add(
+                declared_candidate_id
+            )
+    valid_entries: dict[str, list[dict[str, Any]]] = {}
     completed_by_candidate: dict[str, dict[str, Any]] = {}
     declared: list[dict[str, Any]] = []
     reject_counts: Counter[str] = Counter()
     for row in rows:
         candidate_id = _norm(row.get("candidate_id"))
-        if _norm(
-            row.get("record_type")
-        ) == "matched_entry" and not _matched_entry_lineage_reject_reasons(row):
-            valid_entries[candidate_id] = row
+        if _norm(row.get("record_type")) == "matched_entry":
+            declared_entries.setdefault(candidate_id, []).append(row)
+            if not _matched_entry_lineage_reject_reasons(row):
+                valid_entries.setdefault(candidate_id, []).append(row)
         if not _declares_completed_forward_row(row):
             continue
         declared.append(row)
-        reasons = [
-            *_completion_lineage_reject_reasons(row),
-            *_completion_preceding_entry_reject_reasons(
-                row, valid_entries.get(candidate_id)
-            ),
-        ]
-        if not _entry_quote_store_verification_established(
-            valid_entries.get(candidate_id)
-        ):
+        preceding_declared_entries = declared_entries.get(candidate_id, [])
+        preceding_entries = valid_entries.get(candidate_id, [])
+        preceding_entry = (
+            preceding_entries[0]
+            if len(preceding_declared_entries) == 1 and len(preceding_entries) == 1
+            else None
+        )
+        reasons = [*_completion_lineage_reject_reasons(row)]
+        if len(preceding_declared_entries) > 1:
+            reasons.append("completion_preceding_matched_entry_not_unique")
+        reasons.extend(_completion_preceding_entry_reject_reasons(row, preceding_entry))
+        if preceding_entry is not None:
+            preceding_locator = (
+                _strict_positive_int(preceding_entry.get("source_scan_session_id"))
+                or 0,
+                _norm(preceding_entry.get("source_scan_event_key")),
+                _norm(preceding_entry.get("source_scan_run_id")),
+                _norm(preceding_entry.get("source_scan_recorded_at_utc")),
+            )
+            if len(locator_candidate_ids.get(preceding_locator, set())) != 1:
+                reasons.append("completion_source_scan_locator_not_unique")
+        verification_established = (
+            _entry_quote_store_verification_established(
+                preceding_entry, verifier=verifier
+            )
+            if verifier is not None
+            else _entry_quote_store_verification_established(preceding_entry)
+        )
+        if not verification_established:
             reasons.append(ENTRY_QUOTE_STORE_VERIFICATION_BLOCKER)
         if reasons:
             for reason in sorted(set(reasons)):
@@ -1862,8 +2464,14 @@ def _validated_completion_rows(
     return list(completed_by_candidate.values()), declared, reject_counts
 
 
-def _validated_completed_candidate_ids(rows: Sequence[dict[str, Any]]) -> set[str]:
-    completed, _declared, _reject_counts = _validated_completion_rows(rows)
+def _validated_completed_candidate_ids(
+    rows: Sequence[dict[str, Any]],
+    *,
+    verifier: _EntryQuoteStoreVerifier | None = None,
+) -> set[str]:
+    completed, _declared, _reject_counts = _validated_completion_rows(
+        rows, verifier=verifier
+    )
     return {
         _norm(row.get("candidate_id"))
         for row in completed
@@ -1871,8 +2479,14 @@ def _validated_completed_candidate_ids(rows: Sequence[dict[str, Any]]) -> set[st
     }
 
 
-def _merge_lifecycle_rows(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
-    valid_completed, _declared, _reject_counts = _validated_completion_rows(rows)
+def _merge_lifecycle_rows(
+    rows: Sequence[dict[str, Any]],
+    *,
+    verifier: _EntryQuoteStoreVerifier | None = None,
+) -> list[dict[str, Any]]:
+    valid_completed, _declared, _reject_counts = _validated_completion_rows(
+        rows, verifier=verifier
+    )
     valid_completion_objects = {id(row) for row in valid_completed}
     by_candidate: dict[str, dict[str, Any]] = {}
     for row in rows:
@@ -2117,7 +2731,24 @@ def build_report(
         *matched_log_rows,
         *([] if append_matched_rows else appendable_entries),
     ]
-    paper_shadow_rows = _merge_lifecycle_rows(merged_source_rows)
+    with _EntryQuoteStoreVerifier() as entry_verifier:
+        paper_shadow_rows = _merge_lifecycle_rows(
+            merged_source_rows, verifier=entry_verifier
+        )
+        forward_evidence_bar = _forward_evidence_bar_progress(
+            merged_source_rows,
+            bar_contract=bar_contract,
+            bar_meta=bar_meta,
+            verifier=entry_verifier,
+        )
+        (
+            validated_completion_rows,
+            declared_completion_rows,
+            raw_completion_lineage_reject_counts,
+        ) = _validated_completion_rows(matched_log_rows, verifier=entry_verifier)
+        entry_quote_store_verifications = [
+            dict(value) for value in entry_verifier.cache.values()
+        ]
     by_ticker = Counter(str(row.get("ticker")) for row in paper_shadow_rows)
     by_date = Counter(str(row.get("scan_date")) for row in paper_shadow_rows)
     historical_metrics = _as_dict(filtered_audit.get("metrics"))
@@ -2125,17 +2756,7 @@ def build_report(
     audit_bootstrap = _as_dict(
         audit_metrics.get("bootstrap_cluster") or audit_metrics.get("bootstrap")
     )
-    forward_evidence_bar = _forward_evidence_bar_progress(
-        merged_source_rows,
-        bar_contract=bar_contract,
-        bar_meta=bar_meta,
-    )
     parity_disclosure = _parity_disclosure(scan_task_health, scan_task_meta)
-    (
-        validated_completion_rows,
-        declared_completion_rows,
-        raw_completion_lineage_reject_counts,
-    ) = _validated_completion_rows(matched_log_rows)
     duplicate_valid_completion_event_count = int(
         raw_completion_lineage_reject_counts.get("duplicate_valid_completion_event")
         or 0
@@ -2239,6 +2860,7 @@ def build_report(
             "entry_quote_store_verification_established": forward_evidence_bar.get(
                 "entry_quote_store_verification_established"
             ),
+            "entry_quote_store_verifications": entry_quote_store_verifications,
             "appendable_entry_count": len(appendable_entries),
             "entry_rows_appended_count": len(appendable_entries)
             if append_matched_rows

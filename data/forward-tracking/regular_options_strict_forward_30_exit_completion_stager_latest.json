@@ -34,7 +34,7 @@
     "row_count": 0,
     "status": "missing"
   },
-  "generated_at_utc": "2026-07-10T17:18:24Z",
+  "generated_at_utc": "2026-07-10T17:55:22Z",
   "guarded_append_template": "npm run options:append:phase2-forward-paper-shadow -- data/forward-tracking/phase2_regular_options_forward_paper_shadow_exit_completion_candidate_rows.jsonl --approval-token APPROVE_PHASE2_FORWARD_COHORT_APPEND --market-window-confirmed",
   "historical_rows_are_forward_proof": false,
   "live_entry_allowed": false,

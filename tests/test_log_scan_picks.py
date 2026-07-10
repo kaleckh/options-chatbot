@@ -105,7 +105,9 @@ def _lane_gate_report(
             playbook_id: {
                 "status": "pass" if auto_track_allowed else "fail",
                 "auto_track_allowed": auto_track_allowed,
-                "blockers": [] if auto_track_allowed else ["profit_factor_below_lane_gate"],
+                "blockers": []
+                if auto_track_allowed
+                else ["profit_factor_below_lane_gate"],
                 "self_guardrails": self_guardrails or {},
             }
         },
@@ -130,8 +132,12 @@ def _lane_promotion_report(
                     if promotion_state in {"live_validation", "auto_track"}
                     else "promotion_requires_fresh_walk_forward_paper_and_risk_gates"
                 ),
-                "failed_promotion_gates": [] if promotion_state in {"live_validation", "auto_track"} else ["fresh_paper_cohort"],
-                "blockers": [] if promotion_state in {"live_validation", "auto_track"} else ["fresh_paper_cohort_insufficient"],
+                "failed_promotion_gates": []
+                if promotion_state in {"live_validation", "auto_track"}
+                else ["fresh_paper_cohort"],
+                "blockers": []
+                if promotion_state in {"live_validation", "auto_track"}
+                else ["fresh_paper_cohort_insufficient"],
             }
         },
     }
@@ -203,9 +209,17 @@ class LogScanPicksTests(unittest.TestCase):
                     "create_positions_repository",
                     return_value=_UnavailableRepository(),
                 ),
-                patch.object(log_scan_picks, "load_forward_cohort_preregistration", return_value=_active_forward_cohort()),
-                patch.object(log_scan_picks, "run_supervised_scan") as run_supervised_scan,
-                patch.dict(log_scan_picks.os.environ, {"OPTIONS_SCAN_PLAYBOOK": "short_term"}),
+                patch.object(
+                    log_scan_picks,
+                    "load_forward_cohort_preregistration",
+                    return_value=_active_forward_cohort(),
+                ),
+                patch.object(
+                    log_scan_picks, "run_supervised_scan"
+                ) as run_supervised_scan,
+                patch.dict(
+                    log_scan_picks.os.environ, {"OPTIONS_SCAN_PLAYBOOK": "short_term"}
+                ),
                 patch.dict(
                     sys.modules,
                     {
@@ -220,7 +234,9 @@ class LogScanPicksTests(unittest.TestCase):
             self.assertEqual(exit_code, 1)
             self.assertFalse(run_supervised_scan.called)
             self.assertFalse(log_file.exists())
-            self.assertIn("Scheduled scan blocked by forward cohort freeze", output.getvalue())
+            self.assertIn(
+                "Scheduled scan blocked by forward cohort freeze", output.getvalue()
+            )
 
     def test_replace_scan_rows_rewrites_only_requested_date(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -255,7 +271,11 @@ class LogScanPicksTests(unittest.TestCase):
             log_file = Path(tmpdir) / "scan_picks.jsonl"
             log_scan_picks._write_log_rows(
                 [
-                    {"scan_date": "2026-04-14", "ticker": "SPY", "playbook_id": "short_term"},
+                    {
+                        "scan_date": "2026-04-14",
+                        "ticker": "SPY",
+                        "playbook_id": "short_term",
+                    },
                     {
                         "scan_date": "2026-04-14",
                         "ticker": "QQQ",
@@ -282,7 +302,11 @@ class LogScanPicksTests(unittest.TestCase):
             self.assertEqual(
                 rows,
                 [
-                    {"scan_date": "2026-04-14", "ticker": "SPY", "playbook_id": "short_term"},
+                    {
+                        "scan_date": "2026-04-14",
+                        "ticker": "SPY",
+                        "playbook_id": "short_term",
+                    },
                     {
                         "scan_date": "2026-04-14",
                         "ticker": "IWM",
@@ -345,7 +369,11 @@ class LogScanPicksTests(unittest.TestCase):
             ):
                 result = log_scan_picks.main()
 
-            heartbeat = json.loads((log_dir / "scheduled_scan_heartbeat_latest.json").read_text(encoding="utf-8"))
+            heartbeat = json.loads(
+                (log_dir / "scheduled_scan_heartbeat_latest.json").read_text(
+                    encoding="utf-8"
+                )
+            )
             self.assertEqual(result, 1)
             load_local_env.assert_not_called()
             self.assertFalse(log_file.exists())
@@ -374,8 +402,16 @@ class LogScanPicksTests(unittest.TestCase):
                 patch.object(log_scan_picks, "LOG_FILE", log_file),
                 patch.object(log_scan_picks, "datetime", _WeekdayDateTime),
                 patch.object(log_scan_picks, "load_local_env"),
-                patch.object(log_scan_picks, "build_operational_provenance", return_value=provenance),
-                patch.object(log_scan_picks, "create_positions_repository", return_value=_UnavailableRepository()),
+                patch.object(
+                    log_scan_picks,
+                    "build_operational_provenance",
+                    return_value=provenance,
+                ),
+                patch.object(
+                    log_scan_picks,
+                    "create_positions_repository",
+                    return_value=_UnavailableRepository(),
+                ),
                 patch.object(
                     log_scan_picks,
                     "run_supervised_scan",
@@ -395,13 +431,22 @@ class LogScanPicksTests(unittest.TestCase):
                         "session_id": 789,
                         "scan_picks_count": 0,
                         "eligibility_status": "eligible",
+                        "run_id": "scheduled_scan:2026-04-14:test",
+                        "recorded_at_utc": "2026-04-14T17:00:00Z",
                     },
                 ),
-                patch.dict(sys.modules, {"market_data_service": fake_mds, "options_chatbot": fake_oc}),
+                patch.dict(
+                    sys.modules,
+                    {"market_data_service": fake_mds, "options_chatbot": fake_oc},
+                ),
             ):
                 result = log_scan_picks.main()
 
-            heartbeat = json.loads((log_dir / "scheduled_scan_heartbeat_latest.json").read_text(encoding="utf-8"))
+            heartbeat = json.loads(
+                (log_dir / "scheduled_scan_heartbeat_latest.json").read_text(
+                    encoding="utf-8"
+                )
+            )
             self.assertEqual(result, 0)
             self.assertEqual(heartbeat["status"], "completed")
             self.assertEqual(heartbeat["scan_date"], "2026-04-14")
@@ -411,7 +456,9 @@ class LogScanPicksTests(unittest.TestCase):
             self.assertEqual(heartbeat["branch"], "main")
             self.assertEqual(heartbeat["run_id"], "scheduled_scan:2026-04-14:test")
             self.assertTrue(heartbeat["generated_at_utc"])
-            self.assertEqual(heartbeat["run_completed_at_utc"], heartbeat["generated_at_utc"])
+            self.assertEqual(
+                heartbeat["run_completed_at_utc"], heartbeat["generated_at_utc"]
+            )
             self.assertEqual(heartbeat["details"]["returned_picks"], 0)
             self.assertEqual(heartbeat["details"]["ledger_session_id"], 789)
 
@@ -432,6 +479,10 @@ class LogScanPicksTests(unittest.TestCase):
                 "ret5": -0.8,
                 "signal_ret5": -1.2,
                 "signal_ret20": 12.3456,
+                "source_scan_session_id": 42,
+                "source_scan_event_key": "bullish_pullback_observation:rank_1",
+                "source_scan_run_id": "scheduled_scan:test",
+                "source_scan_recorded_at_utc": "2026-06-30T15:01:00Z",
             }
         )
 
@@ -448,10 +499,24 @@ class LogScanPicksTests(unittest.TestCase):
             record["signal_evidence"]["prior_20_trading_day_return_pct"],
             12.3456,
         )
-        self.assertEqual(record["signal_evidence"]["prior_20_trading_day_return_source"], "scan_pick_signal")
-        self.assertEqual(record["signal_evidence"]["signal_variant"], "pullback_uptrend")
+        self.assertEqual(
+            record["signal_evidence"]["prior_20_trading_day_return_source"],
+            "scan_pick_signal",
+        )
+        self.assertEqual(
+            record["signal_evidence"]["signal_variant"], "pullback_uptrend"
+        )
+        self.assertEqual(record["source_scan_session_id"], 42)
+        self.assertEqual(
+            record["source_scan_event_key"],
+            "bullish_pullback_observation:rank_1",
+        )
+        self.assertEqual(record["source_scan_run_id"], "scheduled_scan:test")
+        self.assertEqual(record["source_scan_recorded_at_utc"], "2026-06-30T15:01:00Z")
 
-    def test_build_fill_attempt_record_persists_selected_spread_and_auto_track_status(self):
+    def test_build_fill_attempt_record_persists_selected_spread_and_auto_track_status(
+        self,
+    ):
         pick = _make_pick("SPY", debit=5.0)
         pick.update(
             {
@@ -514,17 +579,23 @@ class LogScanPicksTests(unittest.TestCase):
         self.assertEqual(record["short_ask"], 4.0)
         self.assertEqual(record["worst_leg_bid_ask_spread_pct"], 2.6)
         self.assertEqual(record["spread_bid_ask_pct_of_mid"], 4.0)
-        self.assertEqual(record["selected_spread"]["long_contract_symbol"], "SPY260626C00650000")
+        self.assertEqual(
+            record["selected_spread"]["long_contract_symbol"], "SPY260626C00650000"
+        )
         self.assertEqual(record["selected_spread"]["long_mid"], 9.0)
         self.assertEqual(record["selected_spread"]["short_mid"], 3.9)
         self.assertEqual(record["selected_spread"]["fill_degradation_vs_mid_pct"], 4.0)
-        self.assertEqual(record["fill_discipline_snapshot"]["attempted_limit_price"], 5.2)
+        self.assertEqual(
+            record["fill_discipline_snapshot"]["attempted_limit_price"], 5.2
+        )
         self.assertEqual(record["fill_discipline_snapshot"]["top_alternative_count"], 3)
         self.assertEqual(len(record["top_alternatives"]), 3)
         self.assertEqual(record["top_spread_alternatives"], record["top_alternatives"])
         self.assertEqual(record["top_alternatives"][0]["short_strike"], 680.0)
         self.assertEqual(record["top_alternatives"][-1]["rank"], 3)
-        self.assertEqual(record["candidate_execution_label"], "executable_opra_paper_candidate")
+        self.assertEqual(
+            record["candidate_execution_label"], "executable_opra_paper_candidate"
+        )
 
     def test_annotate_fill_attempt_outcome_records_review_and_close_marks(self):
         record = log_scan_picks._build_fill_attempt_record(
@@ -582,9 +653,13 @@ class LogScanPicksTests(unittest.TestCase):
         )
 
         self.assertEqual(annotated[0]["auto_track_outcome"], "created")
-        self.assertEqual(annotated[0]["fill_outcome_reason"], "auto_track_position_created")
+        self.assertEqual(
+            annotated[0]["fill_outcome_reason"], "auto_track_position_created"
+        )
         self.assertEqual(annotated[1]["auto_track_outcome"], "duplicate_open")
-        self.assertEqual(annotated[1]["fill_outcome_reason"], "auto_track_position_already_open")
+        self.assertEqual(
+            annotated[1]["fill_outcome_reason"], "auto_track_position_already_open"
+        )
 
     def test_build_fill_attempt_record_preserves_creation_safety_state(self):
         pick = _make_pick("SPY", debit=5.0)
@@ -603,7 +678,10 @@ class LogScanPicksTests(unittest.TestCase):
             scan_result={
                 "market_open_at_run": True,
                 "playbook": {"id": "swing", "label": "Swing"},
-                "exposure_snapshot": {"available": False, "portfolio_caps_enforced": True},
+                "exposure_snapshot": {
+                    "available": False,
+                    "portfolio_caps_enforced": True,
+                },
             },
             candidate_rank=1,
         )
@@ -611,12 +689,16 @@ class LogScanPicksTests(unittest.TestCase):
         self.assertTrue(record["market_open_at_run"])
         self.assertTrue(record["portfolio_caps_enforced"])
         self.assertFalse(record["exposure_available"])
-        self.assertIn("exposure_snapshot_unavailable", record["auto_track_gate_blockers"])
+        self.assertIn(
+            "exposure_snapshot_unavailable", record["auto_track_gate_blockers"]
+        )
         self.assertEqual(record["position_tracking_mode"], "auto_track")
         self.assertTrue(record["tracking_approved_lane"])
         self.assertTrue(record["fresh_live_validation_enabled"])
         self.assertFalse(record["creation_eligible"])
-        self.assertEqual(record["creation_blockers"], ["candidate_execution_label:fallback_delayed"])
+        self.assertEqual(
+            record["creation_blockers"], ["candidate_execution_label:fallback_delayed"]
+        )
 
     def test_build_liquidity_near_miss_record_preserves_alternatives_and_distance(self):
         record = log_scan_picks._build_liquidity_near_miss_records(
@@ -660,8 +742,12 @@ class LogScanPicksTests(unittest.TestCase):
                                 "min_option_open_interest": 200,
                                 "max_option_quote_age_hours": 8.0,
                             },
-                            "selected_spread": {"long_leg": {"contract_symbol": "RIO260619C00070000"}},
-                            "spread_alternatives": [{"rank": 1, "long_strike": 70.0, "short_strike": 75.0}],
+                            "selected_spread": {
+                                "long_leg": {"contract_symbol": "RIO260619C00070000"}
+                            },
+                            "spread_alternatives": [
+                                {"rank": 1, "long_strike": 70.0, "short_strike": 75.0}
+                            ],
                         },
                     }
                 },
@@ -674,10 +760,15 @@ class LogScanPicksTests(unittest.TestCase):
         self.assertEqual(record["scan_host"], "KaesDevice")
         self.assertEqual(record["scan_commit_sha"], "abcdef1234567890")
         self.assertEqual(record["ticker"], "RIO")
-        self.assertEqual(record["distance_components"]["worst_leg_spread_excess_pct"], 4.5)
+        self.assertEqual(
+            record["distance_components"]["worst_leg_spread_excess_pct"], 4.5
+        )
         self.assertEqual(record["distance_components"]["quote_age_excess_hours"], 10.25)
         self.assertEqual(record["distance_to_current_filters"], 14.75)
-        self.assertEqual(record["selected_spread"]["long_leg"]["contract_symbol"], "RIO260619C00070000")
+        self.assertEqual(
+            record["selected_spread"]["long_leg"]["contract_symbol"],
+            "RIO260619C00070000",
+        )
         self.assertEqual(record["top_alternatives"][0]["short_strike"], 75.0)
         self.assertEqual(record["top_spread_alternatives"], record["top_alternatives"])
         self.assertEqual(record["ask_bid"], {"ask": 3.2, "bid": 0.8})
@@ -686,15 +777,25 @@ class LogScanPicksTests(unittest.TestCase):
         self.assertEqual(record["executable_debit"], 2.45)
         self.assertEqual(record["max_quote_age_hours"], 18.25)
         self.assertEqual(record["quote_age_excess_hours"], 10.25)
-        self.assertEqual(record["no_fill_reason"], "spread_ask_bid_not_fillable_inside_filters")
+        self.assertEqual(
+            record["no_fill_reason"], "spread_ask_bid_not_fillable_inside_filters"
+        )
         self.assertEqual(record["liquidity_reason"], "illiquid_quote")
         self.assertTrue(record["research_only"])
         self.assertTrue(record["non_promotable"])
-        self.assertEqual(record["production_filter_action"], "preserve_filters_until_exact_replay_unlock")
+        self.assertEqual(
+            record["production_filter_action"],
+            "preserve_filters_until_exact_replay_unlock",
+        )
 
-    def test_scan_allows_auto_track_defaults_regular_control_playbooks_to_tracking(self):
+    def test_scan_allows_auto_track_defaults_regular_control_playbooks_to_tracking(
+        self,
+    ):
         with (
-            patch("scripts.lane_profitability_gate.load_lane_gate_report", return_value=_lane_gate_report("quality90_debit55_canary")),
+            patch(
+                "scripts.lane_profitability_gate.load_lane_gate_report",
+                return_value=_lane_gate_report("quality90_debit55_canary"),
+            ),
             patch(
                 "scripts.lane_promotion_state.load_lane_promotion_report",
                 return_value=_lane_promotion_report("quality90_debit55_canary"),
@@ -704,18 +805,30 @@ class LogScanPicksTests(unittest.TestCase):
             self.assertTrue(
                 log_scan_picks._scan_allows_auto_track(
                     {
-                        "playbook": {"id": "quality90_debit55_canary", "observation_only": True},
+                        "playbook": {
+                            "id": "quality90_debit55_canary",
+                            "observation_only": True,
+                        },
                         "market_open_at_run": True,
                         "picks": [_make_pick("SPY", debit=5.0)],
-                        "exposure_snapshot": {"available": True, "portfolio_caps_enforced": True},
+                        "exposure_snapshot": {
+                            "available": True,
+                            "portfolio_caps_enforced": True,
+                        },
                     }
                 )
             )
 
     def test_scan_allows_auto_track_fails_closed_when_lane_reports_missing(self):
         with (
-            patch("scripts.lane_profitability_gate.load_lane_gate_report", return_value=None),
-            patch("scripts.lane_promotion_state.load_lane_promotion_report", return_value=None),
+            patch(
+                "scripts.lane_profitability_gate.load_lane_gate_report",
+                return_value=None,
+            ),
+            patch(
+                "scripts.lane_promotion_state.load_lane_promotion_report",
+                return_value=None,
+            ),
             patch.object(log_scan_picks, "_scan_open_risk_blockers", return_value=[]),
         ):
             blockers = log_scan_picks._scan_auto_track_blockers(
@@ -723,16 +836,28 @@ class LogScanPicksTests(unittest.TestCase):
                     "playbook": {"id": "short_term"},
                     "market_open_at_run": True,
                     "picks": [_make_pick("SPY", debit=5.0)],
-                    "exposure_snapshot": {"available": True, "portfolio_caps_enforced": True},
+                    "exposure_snapshot": {
+                        "available": True,
+                        "portfolio_caps_enforced": True,
+                    },
                 }
             )
 
-        self.assertIn("lane_profitability_gate_report_unusable:lane_profitability_gate_report_missing", blockers)
-        self.assertIn("lane_promotion_state_report_unusable:lane_promotion_state_report_missing", blockers)
+        self.assertIn(
+            "lane_profitability_gate_report_unusable:lane_profitability_gate_report_missing",
+            blockers,
+        )
+        self.assertIn(
+            "lane_promotion_state_report_unusable:lane_promotion_state_report_missing",
+            blockers,
+        )
 
     def test_scan_allows_auto_track_blocks_paper_probation_promotion_state(self):
         with (
-            patch("scripts.lane_profitability_gate.load_lane_gate_report", return_value=_lane_gate_report("volatility_expansion_observation")),
+            patch(
+                "scripts.lane_profitability_gate.load_lane_gate_report",
+                return_value=_lane_gate_report("volatility_expansion_observation"),
+            ),
             patch(
                 "scripts.lane_promotion_state.load_lane_promotion_report",
                 return_value=_lane_promotion_report(
@@ -747,7 +872,10 @@ class LogScanPicksTests(unittest.TestCase):
                     "playbook": {"id": "volatility_expansion_observation"},
                     "market_open_at_run": True,
                     "picks": [_make_pick("QQQ", debit=5.0)],
-                    "exposure_snapshot": {"available": True, "portfolio_caps_enforced": True},
+                    "exposure_snapshot": {
+                        "available": True,
+                        "portfolio_caps_enforced": True,
+                    },
                 }
             )
 
@@ -764,7 +892,10 @@ class LogScanPicksTests(unittest.TestCase):
                         "playbook": {"id": "short_term", "observation_only": False},
                         "market_open_at_run": True,
                         "picks": [_make_pick("SPY", debit=5.0)],
-                        "exposure_snapshot": {"available": True, "portfolio_caps_enforced": True},
+                        "exposure_snapshot": {
+                            "available": True,
+                            "portfolio_caps_enforced": True,
+                        },
                     }
                 )
             )
@@ -776,7 +907,10 @@ class LogScanPicksTests(unittest.TestCase):
                     "playbook": {"id": "swing"},
                     "market_open_at_run": False,
                     "picks": [_make_pick("SPY", debit=5.0)],
-                    "exposure_snapshot": {"available": True, "portfolio_caps_enforced": True},
+                    "exposure_snapshot": {
+                        "available": True,
+                        "portfolio_caps_enforced": True,
+                    },
                 }
             )
         )
@@ -785,7 +919,10 @@ class LogScanPicksTests(unittest.TestCase):
                 {
                     "playbook": {"id": "swing"},
                     "picks": [_make_pick("SPY", debit=5.0)],
-                    "exposure_snapshot": {"available": True, "portfolio_caps_enforced": True},
+                    "exposure_snapshot": {
+                        "available": True,
+                        "portfolio_caps_enforced": True,
+                    },
                 }
             )
         )
@@ -797,7 +934,10 @@ class LogScanPicksTests(unittest.TestCase):
                     "playbook": {"id": "swing"},
                     "market_open_at_run": True,
                     "picks": [_make_pick("SPY", debit=5.0)],
-                    "exposure_snapshot": {"available": False, "portfolio_caps_enforced": True},
+                    "exposure_snapshot": {
+                        "available": False,
+                        "portfolio_caps_enforced": True,
+                    },
                 }
             )
         )
@@ -807,7 +947,10 @@ class LogScanPicksTests(unittest.TestCase):
                     "playbook": {"id": "swing"},
                     "market_open_at_run": True,
                     "picks": [_make_pick("SPY", debit=5.0)],
-                    "exposure_snapshot": {"available": True, "portfolio_caps_enforced": False},
+                    "exposure_snapshot": {
+                        "available": True,
+                        "portfolio_caps_enforced": False,
+                    },
                 }
             )
         )
@@ -888,11 +1031,21 @@ class LogScanPicksTests(unittest.TestCase):
                     "create_positions_repository",
                     return_value=_UnavailableRepository(),
                 ),
-                patch.object(log_scan_picks, "run_supervised_scan", side_effect=fake_supervised_scan) as run_supervised_scan,
+                patch.object(
+                    log_scan_picks,
+                    "run_supervised_scan",
+                    side_effect=fake_supervised_scan,
+                ) as run_supervised_scan,
                 patch.object(
                     log_scan_picks,
                     "record_forward_snapshot",
-                    return_value={"session_id": 123, "scan_picks_count": 1, "eligibility_status": "eligible"},
+                    return_value={
+                        "session_id": 123,
+                        "scan_picks_count": 1,
+                        "eligibility_status": "eligible",
+                        "run_id": "scheduled_scan:2026-04-14:test",
+                        "recorded_at_utc": "2026-04-14T17:00:00Z",
+                    },
                 ) as record_forward_snapshot,
                 patch.dict(
                     sys.modules,
@@ -914,18 +1067,32 @@ class LogScanPicksTests(unittest.TestCase):
             self.assertEqual(rows[0]["truth_lane"], "archived_forward_daily")
             self.assertTrue(rows[0]["policy_applied"])
             self.assertEqual(run_supervised_scan.call_count, 2)
-            self.assertIs(run_supervised_scan.call_args.kwargs["scan_func"], fake_oc.scan_daily_top_trades)
-            self.assertEqual(run_supervised_scan.call_args.kwargs["playbook_id"], log_scan_picks.SCAN_PLAYBOOK_FALLBACK_ID)
-            self.assertFalse(run_supervised_scan.call_args.kwargs["use_recommended_policy"])
-            self.assertTrue(run_supervised_scan.call_args.kwargs["enforce_portfolio_caps"])
+            self.assertIs(
+                run_supervised_scan.call_args.kwargs["scan_func"],
+                fake_oc.scan_daily_top_trades,
+            )
+            self.assertEqual(
+                run_supervised_scan.call_args.kwargs["playbook_id"],
+                log_scan_picks.SCAN_PLAYBOOK_FALLBACK_ID,
+            )
+            self.assertFalse(
+                run_supervised_scan.call_args.kwargs["use_recommended_policy"]
+            )
+            self.assertTrue(
+                run_supervised_scan.call_args.kwargs["enforce_portfolio_caps"]
+            )
             self.assertEqual(record_forward_snapshot.call_count, 2)
             latest_snapshot = record_forward_snapshot.call_args.kwargs["scan_snapshot"]
             self.assertEqual(latest_snapshot["picks"][0]["ticker"], "QQQ")
-            self.assertEqual(latest_snapshot["candidate_audit_picks"][0]["ticker"], "BLOCKED")
+            self.assertEqual(
+                latest_snapshot["candidate_audit_picks"][0]["ticker"], "BLOCKED"
+            )
             self.assertEqual(latest_snapshot["evidence_class"], "live_production")
             self.assertEqual(latest_snapshot["run_mode"], "scheduled_scan")
             self.assertEqual(
-                latest_snapshot["symbol_diagnostics"]["scan_drop_reasons"]["SPY"]["drop_key"],
+                latest_snapshot["symbol_diagnostics"]["scan_drop_reasons"]["SPY"][
+                    "drop_key"
+                ],
                 "momentum",
             )
 
@@ -1009,7 +1176,13 @@ class LogScanPicksTests(unittest.TestCase):
                 patch.object(
                     log_scan_picks,
                     "record_forward_snapshot",
-                    return_value={"session_id": 456, "scan_picks_count": 0, "eligibility_status": "eligible"},
+                    return_value={
+                        "session_id": 456,
+                        "scan_picks_count": 0,
+                        "eligibility_status": "eligible",
+                        "run_id": "scheduled_scan:2026-04-14:test",
+                        "recorded_at_utc": "2026-04-14T17:00:00Z",
+                    },
                 ) as record_forward_snapshot,
                 patch.dict(
                     sys.modules,
@@ -1044,7 +1217,11 @@ class LogScanPicksTests(unittest.TestCase):
                 patch.object(log_scan_picks, "LOG_FILE", log_file),
                 patch.object(log_scan_picks, "datetime", _WeekdayDateTime),
                 patch.object(log_scan_picks, "load_local_env"),
-                patch.object(log_scan_picks, "create_positions_repository", return_value=_UnavailableRepository()),
+                patch.object(
+                    log_scan_picks,
+                    "create_positions_repository",
+                    return_value=_UnavailableRepository(),
+                ),
                 patch.object(
                     log_scan_picks,
                     "run_supervised_scan",
@@ -1056,8 +1233,15 @@ class LogScanPicksTests(unittest.TestCase):
                         "playbook": {"id": "short_term", "label": "Short Term"},
                     },
                 ),
-                patch.object(log_scan_picks, "record_forward_snapshot", side_effect=RuntimeError("ledger down")),
-                patch.dict(sys.modules, {"market_data_service": fake_mds, "options_chatbot": fake_oc}),
+                patch.object(
+                    log_scan_picks,
+                    "record_forward_snapshot",
+                    side_effect=RuntimeError("ledger down"),
+                ),
+                patch.dict(
+                    sys.modules,
+                    {"market_data_service": fake_mds, "options_chatbot": fake_oc},
+                ),
             ):
                 result = log_scan_picks.main()
 
@@ -1109,12 +1293,24 @@ class LogScanPicksTests(unittest.TestCase):
                     "create_positions_repository",
                     return_value=repository,
                 ),
-                patch.object(log_scan_picks, "review_open_positions", side_effect=fake_review),
-                patch.object(log_scan_picks, "run_supervised_scan", side_effect=fake_supervised_scan),
+                patch.object(
+                    log_scan_picks, "review_open_positions", side_effect=fake_review
+                ),
+                patch.object(
+                    log_scan_picks,
+                    "run_supervised_scan",
+                    side_effect=fake_supervised_scan,
+                ),
                 patch.object(
                     log_scan_picks,
                     "record_forward_snapshot",
-                    return_value={"session_id": 789, "scan_picks_count": 0, "eligibility_status": "eligible"},
+                    return_value={
+                        "session_id": 789,
+                        "scan_picks_count": 0,
+                        "eligibility_status": "eligible",
+                        "run_id": "scheduled_scan:2026-04-14:test",
+                        "recorded_at_utc": "2026-04-14T17:00:00Z",
+                    },
                 ) as record_forward_snapshot,
                 patch.dict(
                     sys.modules,
@@ -1128,7 +1324,9 @@ class LogScanPicksTests(unittest.TestCase):
 
             self.assertEqual(call_order, ["review", "scan"])
             snapshot = record_forward_snapshot.call_args.kwargs["scan_snapshot"]
-            self.assertEqual(record_forward_snapshot.call_args.kwargs["reviewed_positions"], reviewed)
+            self.assertEqual(
+                record_forward_snapshot.call_args.kwargs["reviewed_positions"], reviewed
+            )
             self.assertEqual(snapshot["picks"], [])
 
     def test_auto_track_rejects_non_proof_exact_contract_picks(self):
@@ -1176,7 +1374,9 @@ class LogScanPicksTests(unittest.TestCase):
         output = StringIO()
         with (
             redirect_stdout(output),
-            patch.object(log_scan_picks, "build_position_payload") as build_position_payload,
+            patch.object(
+                log_scan_picks, "build_position_payload"
+            ) as build_position_payload,
         ):
             skip_reasons: dict[int, str] = {}
             created, duplicates, skipped = log_scan_picks._auto_track_scan_picks(
@@ -1190,7 +1390,10 @@ class LogScanPicksTests(unittest.TestCase):
         self.assertEqual((created, duplicates, skipped), (0, 0, 1))
         self.assertEqual(repository.created, [])
         build_position_payload.assert_not_called()
-        self.assertEqual(skip_reasons[1], "creation_blocked:position_tracking_mode:paper_review_only,creation_eligible_not_true")
+        self.assertEqual(
+            skip_reasons[1],
+            "creation_blocked:position_tracking_mode:paper_review_only,creation_eligible_not_true",
+        )
         self.assertIn("position_tracking_mode:paper_review_only", output.getvalue())
 
     def test_auto_track_requires_explicit_creation_eligible_true(self):
@@ -1200,7 +1403,10 @@ class LogScanPicksTests(unittest.TestCase):
                 if value is not None:
                     pick["creation_eligible"] = value
 
-                self.assertIn("creation_eligible_not_true", log_scan_picks._scan_pick_creation_blockers(pick))
+                self.assertIn(
+                    "creation_eligible_not_true",
+                    log_scan_picks._scan_pick_creation_blockers(pick),
+                )
 
         repository = _TrackingRepository()
         pick = _make_pick("SPY", debit=5.0)
@@ -1219,7 +1425,9 @@ class LogScanPicksTests(unittest.TestCase):
         output = StringIO()
         with (
             redirect_stdout(output),
-            patch.object(log_scan_picks, "build_position_payload") as build_position_payload,
+            patch.object(
+                log_scan_picks, "build_position_payload"
+            ) as build_position_payload,
         ):
             skip_reasons: dict[int, str] = {}
             created, duplicates, skipped = log_scan_picks._auto_track_scan_picks(
@@ -1243,7 +1451,10 @@ class LogScanPicksTests(unittest.TestCase):
             run_at=_WeekdayDateTime(2026, 4, 14, 11, 0, 0),
             scan_result={
                 "market_open_at_run": True,
-                "exposure_snapshot": {"available": True, "portfolio_caps_enforced": True},
+                "exposure_snapshot": {
+                    "available": True,
+                    "portfolio_caps_enforced": True,
+                },
                 "playbook": {"id": "short_term", "label": "Short-Term"},
             },
             candidate_rank=1,
@@ -1336,7 +1547,11 @@ class LogScanPicksTests(unittest.TestCase):
                 patch.object(log_scan_picks, "LOG_FILE", log_file),
                 patch.object(log_scan_picks, "datetime", _WeekdayDateTime),
                 patch.object(log_scan_picks, "load_local_env"),
-                patch.object(log_scan_picks, "build_operational_provenance", return_value=provenance),
+                patch.object(
+                    log_scan_picks,
+                    "build_operational_provenance",
+                    return_value=provenance,
+                ),
                 patch.object(
                     log_scan_picks,
                     "create_positions_repository",
@@ -1351,16 +1566,25 @@ class LogScanPicksTests(unittest.TestCase):
                         "policy_fail_closed": False,
                         "truth_lane": "historical_imported_daily",
                         "market_open_at_run": True,
-                        "exposure_snapshot": {"available": True, "portfolio_caps_enforced": True},
+                        "exposure_snapshot": {
+                            "available": True,
+                            "portfolio_caps_enforced": True,
+                        },
                         "playbook": {
                             "id": "short_term",
                             "label": "Short-Term",
                         },
                     },
                 ),
-                patch.object(log_scan_picks, "_scan_lane_gate_blockers", return_value=[]),
-                patch.object(log_scan_picks, "_scan_open_risk_blockers", return_value=[]),
-                patch.object(log_scan_picks, "review_open_positions", return_value=[]) as review_open_positions,
+                patch.object(
+                    log_scan_picks, "_scan_lane_gate_blockers", return_value=[]
+                ),
+                patch.object(
+                    log_scan_picks, "_scan_open_risk_blockers", return_value=[]
+                ),
+                patch.object(
+                    log_scan_picks, "review_open_positions", return_value=[]
+                ) as review_open_positions,
                 patch.object(
                     log_scan_picks,
                     "record_forward_snapshot",
@@ -1389,11 +1613,26 @@ class LogScanPicksTests(unittest.TestCase):
             self.assertEqual(rows[0]["scan_commit_sha"], "abcdef1234567890")
             self.assertEqual(rows[0]["scan_branch"], "main")
             self.assertEqual(rows[0]["scan_run_id"], "scheduled_scan:2026-04-14:test")
-            self.assertEqual(rows[0]["scanner_run_id"], "scheduled_scan:2026-04-14:test")
+            self.assertEqual(
+                rows[0]["scanner_run_id"], "scheduled_scan:2026-04-14:test"
+            )
             self.assertEqual(rows[0]["entry_quote_source"], "alpaca_opra")
-            self.assertEqual(rows[0]["entry_quote_timestamp_utc"], "2026-04-14T15:00:00Z")
-            self.assertEqual(rows[0]["entry_quote_timestamp_et"], "2026-04-14T11:00:00-04:00")
-            fill_rows = log_scan_picks._load_log_rows(log_file=log_dir / "fill_attempts.jsonl")
+            self.assertEqual(
+                rows[0]["entry_quote_timestamp_utc"], "2026-04-14T15:00:00Z"
+            )
+            self.assertEqual(
+                rows[0]["entry_quote_timestamp_et"], "2026-04-14T11:00:00-04:00"
+            )
+            self.assertEqual(rows[0]["source_scan_session_id"], 123)
+            self.assertEqual(rows[0]["source_scan_event_key"], "short_term:rank_1")
+            self.assertEqual(rows[0]["source_scan_run_id"], "scheduled_scan:test")
+            self.assertEqual(
+                rows[0]["source_scan_recorded_at_utc"],
+                "2026-04-14T17:00:00Z",
+            )
+            fill_rows = log_scan_picks._load_log_rows(
+                log_file=log_dir / "fill_attempts.jsonl"
+            )
             self.assertEqual(len(fill_rows), 1)
             self.assertEqual(fill_rows[0]["fill_status"], "auto_tracked")
             self.assertEqual(fill_rows[0]["scan_host"], "KaesDevice")
@@ -1405,9 +1644,13 @@ class LogScanPicksTests(unittest.TestCase):
             self.assertEqual(repository.created[0]["ticker"], "SPY")
             self.assertTrue(repository.created[0]["proof_eligible"])
             self.assertEqual(repository.created[0]["source_scan_session_id"], 123)
-            self.assertEqual(repository.created[0]["source_scan_run_id"], "scheduled_scan:test")
             self.assertEqual(
-                repository.created[0]["source_pick_snapshot"]["source_scan_recorded_at_utc"],
+                repository.created[0]["source_scan_run_id"], "scheduled_scan:test"
+            )
+            self.assertEqual(
+                repository.created[0]["source_pick_snapshot"][
+                    "source_scan_recorded_at_utc"
+                ],
                 "2026-04-14T17:00:00Z",
             )
             self.assertEqual(review_open_positions.call_count, 3)
@@ -1431,7 +1674,11 @@ class LogScanPicksTests(unittest.TestCase):
                 patch.object(log_scan_picks, "LOG_FILE", log_file),
                 patch.object(log_scan_picks, "datetime", _WeekdayDateTime),
                 patch.object(log_scan_picks, "load_local_env"),
-                patch.object(log_scan_picks, "create_positions_repository", return_value=_UnavailableRepository()),
+                patch.object(
+                    log_scan_picks,
+                    "create_positions_repository",
+                    return_value=_UnavailableRepository(),
+                ),
                 patch.object(
                     log_scan_picks,
                     "run_supervised_scan",
@@ -1443,12 +1690,63 @@ class LogScanPicksTests(unittest.TestCase):
                         "playbook": {"id": "short_term", "label": "Short Term"},
                     },
                 ),
-                patch.object(log_scan_picks, "record_forward_snapshot", side_effect=RuntimeError("ledger down")),
-                patch.dict(sys.modules, {"market_data_service": fake_mds, "options_chatbot": fake_oc}),
+                patch.object(
+                    log_scan_picks,
+                    "record_forward_snapshot",
+                    side_effect=RuntimeError("ledger down"),
+                ),
+                patch.dict(
+                    sys.modules,
+                    {"market_data_service": fake_mds, "options_chatbot": fake_oc},
+                ),
             ):
                 result = log_scan_picks.main()
 
             self.assertEqual(result, 1)
+
+    def test_forward_ledger_result_requires_exact_authoritative_locator(self):
+        pick = _make_pick("SPY", debit=5.0)
+        valid = {
+            "session_id": 123,
+            "scan_picks_count": 1,
+            "run_id": "scheduled_scan:2026-04-14:test",
+            "recorded_at_utc": "2026-04-14T17:00:00Z",
+        }
+        self.assertEqual(
+            log_scan_picks._forward_ledger_result_reject_reasons(valid, picks=[pick]),
+            [],
+        )
+        cases = {
+            "empty": ({}, "forward_ledger_session_id_invalid"),
+            "boolean_session": (
+                {**valid, "session_id": True},
+                "forward_ledger_session_id_invalid",
+            ),
+            "zero_session": (
+                {**valid, "session_id": 0},
+                "forward_ledger_session_id_invalid",
+            ),
+            "missing_run": (
+                {**valid, "run_id": ""},
+                "forward_ledger_run_id_missing",
+            ),
+            "invalid_timestamp": (
+                {**valid, "recorded_at_utc": "2026-04-14T17:00:00"},
+                "forward_ledger_recorded_at_invalid",
+            ),
+            "count_mismatch": (
+                {**valid, "scan_picks_count": 0},
+                "forward_ledger_scan_picks_count_mismatch",
+            ),
+        }
+        for name, (payload, expected) in cases.items():
+            with self.subTest(name=name):
+                self.assertIn(
+                    expected,
+                    log_scan_picks._forward_ledger_result_reject_reasons(
+                        payload, picks=[pick]
+                    ),
+                )
 
     def test_backfills_position_scan_provenance_after_ledger_record(self):
         repo = _FakeRepository()

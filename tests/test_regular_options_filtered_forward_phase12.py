@@ -121,6 +121,10 @@ def _ready_scan_task_health_path(root: Path) -> Path:
 def _scan_row() -> dict:
     return {
         "scan_run_id": "scan-aapl-1",
+        "source_scan_session_id": 123,
+        "source_scan_event_key": "short_term:rank_1",
+        "source_scan_run_id": "scan-aapl-1",
+        "source_scan_recorded_at_utc": "2026-06-01T15:00:01Z",
         "scan_date": "2026-06-01",
         "logged_at": "2026-06-01T15:00:00Z",
         "ticker": "AAPL",
@@ -212,6 +216,10 @@ def _completion_pair(
     expiry_token = expiry.strftime("%y%m%d")
     scan = {
         **_scan_row(),
+        "source_scan_session_id": 123 + index,
+        "source_scan_event_key": f"short_term:rank_{index + 1}",
+        "source_scan_run_id": f"scan-aapl-{index + 1}",
+        "source_scan_recorded_at_utc": f"{scan_day.isoformat()}T15:00:01Z",
         "scan_date": scan_day.isoformat(),
         "logged_at": f"{scan_day.isoformat()}T15:00:00Z",
         "quote_timestamp_utc": f"{scan_day.isoformat()}T15:00:00Z",

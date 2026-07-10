@@ -2,10 +2,10 @@
   "accepted_profitability": false,
   "artifacts": {
     "docs_report": "docs/regular-options-strict-forward-market-window-readiness-refresh.md",
-    "json": "data/forward-tracking/regular_options_strict_forward_market_window_readiness_refresh_20260710T170503Z.json",
+    "json": "data/forward-tracking/regular_options_strict_forward_market_window_readiness_refresh_20260710T180504Z.json",
     "latest_json": "data/forward-tracking/regular_options_strict_forward_market_window_readiness_refresh_latest.json",
     "latest_markdown": "data/forward-tracking/regular_options_strict_forward_market_window_readiness_refresh_latest.md",
-    "markdown": "data/forward-tracking/regular_options_strict_forward_market_window_readiness_refresh_20260710T170503Z.md"
+    "markdown": "data/forward-tracking/regular_options_strict_forward_market_window_readiness_refresh_20260710T180504Z.md"
   },
   "auto_track_allowed": false,
   "blockers": [
@@ -21,15 +21,15 @@
     "post_freeze_phase2_scan_pick_count": 1,
     "scan_picks_row_count": 550,
     "scheduled_phase2_all_lanes_scanned": true,
-    "scheduled_phase2_drop_count_total": 1008,
+    "scheduled_phase2_drop_count_total": 1390,
     "scheduled_phase2_playbooks_missing_session": [],
     "scheduled_phase2_playbooks_with_session": [
       "bullish_pullback_observation",
       "volatility_expansion_observation"
     ],
-    "scheduled_phase2_scan_drop_reason_count_total": 992,
+    "scheduled_phase2_scan_drop_reason_count_total": 1367,
     "scheduled_phase2_scan_picks_count": 0,
-    "scheduled_scan_session_count": 32,
+    "scheduled_scan_session_count": 45,
     "stager_rejected_counts": {
       "non_phase2_lane": 468,
       "non_preregistered_symbol": 50,
@@ -42,7 +42,7 @@
   },
   "cohort_append_performed": false,
   "evidence_stores_mutated": false,
-  "generated_at_utc": "2026-07-10T17:05:03Z",
+  "generated_at_utc": "2026-07-10T18:05:04Z",
   "historical_executable_economics": {
     "harness_decision": "profitable_but_preflight_blocked",
     "historical_side_aware_pf": 3.7414,
@@ -135,7 +135,7 @@
     "monthly_profitability_audit": "monthly_profitability_readback",
     "paper_shadow_evidence_plan": "paper_shadow_evidence_collecting",
     "strict_forward_operator_queue": "strict_forward_queue_ready_approval_and_market_window_blocked",
-    "strict_forward_scan_task_health": "scan_task_runtime_blocked",
+    "strict_forward_scan_task_health": "scan_tasks_ready_for_next_market_window",
     "suggested_trade_review_plan": "suggested_trade_review_plan_ready_for_historical_resolution",
     "trade_qualification": "blocked_no_live_release"
   },
@@ -158,21 +158,11 @@
   },
   "safety_violations": [],
   "scan_task_health": {
-    "blockers": [
-      "\\OptionsScanPicks:scan_task_runtime_blocking:scan_task_runtime_failed",
-      "\\OptionsScanPicks:scan_task_runtime_last_result_nonzero",
-      "\\OptionsScanPicksSafetyNet:scan_task_runtime_blocking:scan_task_runtime_failed",
-      "\\OptionsScanPicksSafetyNet:scan_task_runtime_last_result_nonzero"
-    ],
-    "status": "scan_task_runtime_blocked"
+    "blockers": [],
+    "status": "scan_tasks_ready_for_next_market_window"
   },
-  "scan_task_health_blockers": [
-    "\\OptionsScanPicks:scan_task_runtime_blocking:scan_task_runtime_failed",
-    "\\OptionsScanPicks:scan_task_runtime_last_result_nonzero",
-    "\\OptionsScanPicksSafetyNet:scan_task_runtime_blocking:scan_task_runtime_failed",
-    "\\OptionsScanPicksSafetyNet:scan_task_runtime_last_result_nonzero"
-  ],
-  "scan_task_health_status": "scan_task_runtime_blocked",
+  "scan_task_health_blockers": [],
+  "scan_task_health_status": "scan_tasks_ready_for_next_market_window",
   "scanner_policy_changed": false,
   "schema_version": 1,
   "scope": "strict_forward_bullish_pullback_layer4_market_window_readiness_refresh",
@@ -199,7 +189,7 @@
   "sizing_changed": false,
   "source_artifacts": {
     "bullish_pullback_layer4_forward_capture_protocol": {
-      "age_hours": 338.63,
+      "age_hours": 339.63,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-26T14:27:06Z",
@@ -211,7 +201,7 @@
       "status": "stale"
     },
     "bullish_pullback_layer_executable_economics": {
-      "age_hours": 338.63,
+      "age_hours": 339.63,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-26T14:27:05Z",
@@ -223,7 +213,7 @@
       "status": "stale"
     },
     "bullish_pullback_layer_execution_safety_audit": {
-      "age_hours": 338.65,
+      "age_hours": 339.65,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-26T14:26:07Z",
@@ -235,7 +225,7 @@
       "status": "stale"
     },
     "bullish_pullback_layer_shadow_selection": {
-      "age_hours": 338.65,
+      "age_hours": 339.65,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-26T14:26:07Z",
@@ -247,7 +237,7 @@
       "status": "stale"
     },
     "fill_attempt_evidence_capture_plan": {
-      "age_hours": 67.41,
+      "age_hours": 68.41,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-07-07T21:40:38Z",
@@ -261,7 +251,7 @@
       "age_hours": 0.0,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-07-10T17:05:03Z",
+      "generated_at_utc": "2026-07-10T18:05:04Z",
       "path": "data/forward-tracking/regular_options_forward_candidate_throughput_audit_latest.json",
       "reason_codes": [],
       "report_id": "regular_options_forward_candidate_throughput_audit",
@@ -269,7 +259,7 @@
       "status": "loaded"
     },
     "gateboard": {
-      "age_hours": 67.41,
+      "age_hours": 68.41,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-07-07T21:40:43Z",
@@ -280,7 +270,7 @@
       "status": "loaded"
     },
     "market_window_approval_preflight": {
-      "age_hours": 283.58,
+      "age_hours": 284.58,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-28T21:30:05Z",
@@ -292,7 +282,7 @@
       "status": "stale"
     },
     "monthly_profitability_audit": {
-      "age_hours": 325.24,
+      "age_hours": 326.24,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-27T03:50:51Z",
@@ -304,7 +294,7 @@
       "status": "stale"
     },
     "paper_shadow_evidence_plan": {
-      "age_hours": 325.2,
+      "age_hours": 326.2,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-27T03:52:56Z",
@@ -316,7 +306,7 @@
       "status": "stale"
     },
     "strict_forward_operator_queue": {
-      "age_hours": 310.38,
+      "age_hours": 311.38,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-27T18:42:32Z",
@@ -328,10 +318,10 @@
       "status": "stale"
     },
     "strict_forward_scan_task_health": {
-      "age_hours": 0.06,
+      "age_hours": 0.0,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-07-10T17:01:44Z",
+      "generated_at_utc": "2026-07-10T18:04:59Z",
       "path": "data/forward-tracking/regular_options_strict_forward_scan_task_health_latest.json",
       "reason_codes": [],
       "report_id": "regular_options_strict_forward_scan_task_health",
@@ -339,7 +329,7 @@
       "status": "loaded"
     },
     "suggested_trade_review_plan": {
-      "age_hours": 67.41,
+      "age_hours": 68.41,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-07-07T21:40:38Z",
@@ -350,7 +340,7 @@
       "status": "loaded"
     },
     "trade_qualification": {
-      "age_hours": 325.24,
+      "age_hours": 326.24,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-27T03:50:52Z",

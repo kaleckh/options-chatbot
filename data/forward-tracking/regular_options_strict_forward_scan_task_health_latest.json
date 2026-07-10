@@ -1,15 +1,12 @@
 {
   "artifacts": {
     "docs_report": "docs/regular-options-strict-forward-scan-task-health.md",
-    "json": "data/forward-tracking/regular_options_strict_forward_scan_task_health_20260710T171823Z.json",
+    "json": "data/forward-tracking/regular_options_strict_forward_scan_task_health_20260710T180459Z.json",
     "latest_json": "data/forward-tracking/regular_options_strict_forward_scan_task_health_latest.json",
     "latest_markdown": "data/forward-tracking/regular_options_strict_forward_scan_task_health_latest.md",
-    "markdown": "data/forward-tracking/regular_options_strict_forward_scan_task_health_20260710T171823Z.md"
+    "markdown": "data/forward-tracking/regular_options_strict_forward_scan_task_health_20260710T180459Z.md"
   },
-  "blockers": [
-    "\\OptionsScanPicksSafetyNet:scan_task_runtime_blocking:scan_task_runtime_failed",
-    "\\OptionsScanPicksSafetyNet:scan_task_runtime_last_result_nonzero"
-  ],
+  "blockers": [],
   "config_blockers": [],
   "config_status": "scan_tasks_config_ready",
   "expected": {
@@ -50,7 +47,7 @@
       "FRI"
     ]
   },
-  "generated_at_utc": "2026-07-10T17:18:23Z",
+  "generated_at_utc": "2026-07-10T18:04:59Z",
   "prohibited_actions": [
     "do_not_append_from_scan_task_health",
     "do_not_enable_live_validation_from_scan_task_health",
@@ -61,11 +58,8 @@
     "do_not_treat_historical_rows_as_forward_proof"
   ],
   "report_id": "regular_options_strict_forward_scan_task_health",
-  "runtime_blockers": [
-    "\\OptionsScanPicksSafetyNet:scan_task_runtime_blocking:scan_task_runtime_failed",
-    "\\OptionsScanPicksSafetyNet:scan_task_runtime_last_result_nonzero"
-  ],
-  "runtime_status": "scan_task_runtime_blocked",
+  "runtime_blockers": [],
+  "runtime_status": "scan_task_runtime_observed_ok",
   "safety": {
     "append_allowed": false,
     "auto_track_allowed": false,
@@ -76,7 +70,7 @@
     "quotes_imported": false
   },
   "schema_version": 2,
-  "status": "scan_task_runtime_blocked",
+  "status": "scan_tasks_ready_for_next_market_window",
   "task_reports": {
     "\\OptionsScanPicks": {
       "batch_file": {
@@ -104,9 +98,10 @@
           "next_run_time": "7/13/2026 11:00:00 AM",
           "number_of_missed_runs": "",
           "start_date": "4/22/2026",
-          "start_time": "11:00:00 AM"
+          "start_time": "11:00:00 AM",
+          "task_status": "Ready"
         },
-        "generated_at_local": "2026-07-10T11:18:23",
+        "generated_at_local": "2026-07-10T12:04:59",
         "notes": [
           "Scan-task runtime telemetry is evaluated as a daily weekday feeder, not a repeated 30-minute collector.",
           "Runtime blockers do not authorize append, live validation, auto-track, broker orders, quote import, proof-bar changes, or evidence mutation."
@@ -167,52 +162,46 @@
         "prohibited_tokens_present": [],
         "status": "loaded"
       },
-      "blockers": [
-        "scan_task_runtime_blocking:scan_task_runtime_failed",
-        "scan_task_runtime_last_result_nonzero"
-      ],
+      "blockers": [],
       "config_blockers": [],
       "config_status": "ready",
       "query_returncode": 0,
       "query_stderr": [],
-      "runtime_blockers": [
-        "scan_task_runtime_last_result_nonzero"
-      ],
-      "runtime_blocking": true,
-      "runtime_status": "scan_task_runtime_failed",
+      "runtime_blockers": [],
+      "runtime_blocking": false,
+      "runtime_status": "scan_task_runtime_observed_ok",
       "runtime_telemetry": {
-        "blockers": [
-          "scan_task_runtime_last_result_nonzero"
-        ],
+        "blockers": [],
         "fields": {
           "configured_expected_start_time": "11:30:00 AM",
-          "last_result": "-1073741510",
-          "last_run_time": "7/9/2026 8:21:36 PM",
-          "next_run_time": "7/10/2026 11:30:00 AM",
+          "last_result": "0",
+          "last_run_time": "7/10/2026 11:30:00 AM",
+          "next_run_time": "7/13/2026 11:30:00 AM",
           "number_of_missed_runs": "",
           "start_date": "5/5/2026",
-          "start_time": "11:30:00 AM"
+          "start_time": "11:30:00 AM",
+          "task_status": "Ready"
         },
-        "generated_at_local": "2026-07-10T11:18:23",
+        "generated_at_local": "2026-07-10T12:04:59",
         "notes": [
           "Scan-task runtime telemetry is evaluated as a daily weekday feeder, not a repeated 30-minute collector.",
           "Runtime blockers do not authorize append, live validation, auto-track, broker orders, quote import, proof-bar changes, or evidence mutation."
         ],
         "parsed": {
           "expected_scan_start_today_local": "2026-07-10T11:30:00",
-          "generated_after_expected_start_grace": false,
+          "generated_after_expected_start_grace": true,
           "generated_local_is_weekday_scan_date": true,
-          "last_result_code": -1073741510,
+          "last_result_code": 0,
           "last_run_time_is_never_run_sentinel": false,
-          "last_run_time_local": "2026-07-09T20:21:36",
-          "next_run_time_local": "2026-07-10T11:30:00",
+          "last_run_time_local": "2026-07-10T11:30:00",
+          "next_run_time_local": "2026-07-13T11:30:00",
           "number_of_missed_runs": null,
           "start_run_time_local": "2026-05-05T11:30:00"
         },
-        "runtime_blocking": true,
-        "status": "scan_task_runtime_failed"
+        "runtime_blocking": false,
+        "status": "scan_task_runtime_observed_ok"
       },
-      "status": "blocked",
+      "status": "ready",
       "task": {
         "Author": "N/A",
         "Comment": "Runs the options scan if the normal daily scan did not write a ledger session.",
@@ -222,11 +211,11 @@
         "Folder": "\\",
         "HostName": "KAESDEVICE",
         "Idle Time": "Disabled",
-        "Last Result": "-1073741510",
-        "Last Run Time": "7/9/2026 8:21:36 PM",
+        "Last Result": "0",
+        "Last Run Time": "7/10/2026 11:30:00 AM",
         "Logon Mode": "Interactive only",
         "Months": "Every 1 week(s)",
-        "Next Run Time": "7/10/2026 11:30:00 AM",
+        "Next Run Time": "7/13/2026 11:30:00 AM",
         "Power Management": "Stop On Battery Mode, No Start On Batteries",
         "Repeat: Every": "Disabled",
         "Repeat: Stop If Still Running": "Disabled",

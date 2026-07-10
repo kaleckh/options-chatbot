@@ -5,10 +5,10 @@
   "append_token_required": "APPROVE_PHASE2_FORWARD_COHORT_APPEND",
   "artifacts": {
     "docs_report": "docs/regular-options-strict-forward-30-candidate-review-packet.md",
-    "json": "data/forward-tracking/regular_options_strict_forward_30_candidate_review_packet_20260710T171823Z.json",
+    "json": "data/forward-tracking/regular_options_strict_forward_30_candidate_review_packet_20260710T175521Z.json",
     "latest_json": "data/forward-tracking/regular_options_strict_forward_30_candidate_review_packet_latest.json",
     "latest_markdown": "data/forward-tracking/regular_options_strict_forward_30_candidate_review_packet_latest.md",
-    "markdown": "data/forward-tracking/regular_options_strict_forward_30_candidate_review_packet_20260710T171823Z.md"
+    "markdown": "data/forward-tracking/regular_options_strict_forward_30_candidate_review_packet_20260710T175521Z.md"
   },
   "auto_track_allowed": false,
   "broker_order_allowed": false,
@@ -36,9 +36,9 @@
   "capture_candidate_rows_staged": 0,
   "capture_freshness": {
     "blockers": [],
-    "capture_latest_generated_at_utc": "2026-07-10T17:05:03Z",
-    "collector_generated_at_utc": "2026-07-10T17:05:03Z",
-    "collector_nested_capture_generated_at_utc": "2026-07-10T17:05:03Z",
+    "capture_latest_generated_at_utc": "2026-07-10T17:35:03Z",
+    "collector_generated_at_utc": "2026-07-10T17:35:03Z",
+    "collector_nested_capture_generated_at_utc": "2026-07-10T17:35:03Z",
     "effective_capture_source": "capture_latest",
     "fresh": true,
     "status": "capture_latest_fresh_for_candidate_review"
@@ -47,7 +47,7 @@
   "cohort_append_performed": false,
   "collector_candidate_rows_staged": 0,
   "collector_status": "collector_attempts_exhausted_waiting_for_more_rows",
-  "generated_at_utc": "2026-07-10T17:18:23Z",
+  "generated_at_utc": "2026-07-10T17:55:21Z",
   "guarded_append_observed": false,
   "historical_rows_are_forward_proof": false,
   "live_entry_allowed": false,
@@ -151,29 +151,23 @@
     }
   ],
   "safety_violations": [],
-  "scan_task_health_blockers": [
-    "\\OptionsScanPicksSafetyNet:scan_task_runtime_blocking:scan_task_runtime_failed",
-    "\\OptionsScanPicksSafetyNet:scan_task_runtime_last_result_nonzero",
-    "scan_task_health_not_ready:scan_task_runtime_blocked"
-  ],
+  "scan_task_health_blockers": [],
   "scan_task_health_freshness": {
-    "blockers": [
-      "scan_task_health_not_ready:scan_task_runtime_blocked"
-    ],
-    "collector_generated_at_utc": "2026-07-10T17:05:03Z",
-    "fresh": false,
-    "scan_task_health_generated_at_utc": "2026-07-10T17:18:23Z",
-    "status": "scan_task_health_not_ready"
+    "blockers": [],
+    "collector_generated_at_utc": "2026-07-10T17:35:03Z",
+    "fresh": true,
+    "scan_task_health_generated_at_utc": "2026-07-10T17:55:21Z",
+    "status": "scan_task_health_fresh_for_candidate_review"
   },
-  "scan_task_health_status": "scan_task_runtime_blocked",
+  "scan_task_health_status": "scan_tasks_ready_for_next_market_window",
   "scheduler_blockers": [
     "scheduler_runtime_blocking:scheduler_runtime_failed"
   ],
   "scheduler_health_freshness": {
     "blockers": [],
-    "collector_generated_at_utc": "2026-07-10T17:05:03Z",
+    "collector_generated_at_utc": "2026-07-10T17:35:03Z",
     "fresh": true,
-    "scheduler_generated_at_utc": "2026-07-10T17:18:23Z",
+    "scheduler_generated_at_utc": "2026-07-10T17:55:21Z",
     "status": "scheduler_health_fresh_for_candidate_review"
   },
   "scheduler_status": "scheduler_runtime_blocked",
@@ -191,7 +185,7 @@
     },
     "scan_task_health_latest": {
       "path": "data/forward-tracking/regular_options_strict_forward_scan_task_health_latest.json",
-      "report_status": "scan_task_runtime_blocked",
+      "report_status": "scan_tasks_ready_for_next_market_window",
       "status": "loaded"
     },
     "scheduler_health_latest": {
@@ -229,22 +223,22 @@
       "enable_live_validation_auto_track_or_broker_orders",
       "mutate_evidence_stores"
     ],
-    "drop_count_total": 1008,
+    "drop_count_total": 1264,
     "drop_stage_ranking": [
       {
-        "count": 752,
+        "count": 942,
         "stage": "momentum"
       },
       {
-        "count": 128,
+        "count": 160,
         "stage": "history_or_liquidity"
       },
       {
-        "count": 112,
+        "count": 141,
         "stage": "option_liquidity"
       },
       {
-        "count": 16,
+        "count": 21,
         "stage": "guardrails"
       }
     ],
@@ -266,9 +260,9 @@
     },
     "scheduled_scan_picks_count": 0,
     "scheduled_session_error": null,
-    "scheduled_sessions_reviewed": 32,
+    "scheduled_sessions_reviewed": 41,
     "status": "zero_candidate_diagnosis_ready_symbol_drop_reasons_recorded",
-    "symbol_drop_reason_count_total": 992,
+    "symbol_drop_reason_count_total": 1243,
     "symbol_drop_reason_status": "symbol_drop_reasons_recorded",
     "target_date_only": true,
     "target_selection_date": "2026-07-10"
@@ -280,19 +274,19 @@
     ],
     "drop_stage_ranking": [
       {
-        "count": 752,
+        "count": 942,
         "stage": "momentum"
       },
       {
-        "count": 128,
+        "count": 160,
         "stage": "history_or_liquidity"
       },
       {
-        "count": 112,
+        "count": 141,
         "stage": "option_liquidity"
       },
       {
-        "count": 16,
+        "count": 21,
         "stage": "guardrails"
       }
     ],

@@ -8,18 +8,18 @@ Status: `blocked_no_same_day_phase2_natural_selections`.
 - Post-freeze Phase 2 rows: `1`.
 - Target-date rows: `0`.
 - Target-date Phase 2 rows: `0`.
-- Scheduled Phase 2 sessions: `32`.
-- Scheduled Phase 2 raw candidates: `16`.
+- Scheduled Phase 2 sessions: `45`.
+- Scheduled Phase 2 raw candidates: `23`.
 - Scheduled Phase 2 returned picks: `0`.
-- Scheduled Phase 2 drop-count total: `1008`.
+- Scheduled Phase 2 drop-count total: `1390`.
 - Scheduled Phase 2 drop-stage status: `candidate_starvation_from_scan_filters`.
-- Scheduled Phase 2 symbol drop reasons: `992`.
+- Scheduled Phase 2 symbol drop reasons: `1367`.
 - Scheduled Phase 2 near-miss status: `symbol_level_near_miss_table_ready`.
 - Candidate-starvation evidence status: `raw_symbol_drop_reasons_recorded`.
 - Zero-candidate diagnostics: `zero_candidate_diagnosis_ready_symbol_drop_reasons_recorded`.
 - Scheduled Phase 2 scan picks: `0`.
 - Scheduled Phase 2 all lanes scanned: `true`.
-- Scheduled Phase 2 eligibility statuses: `{'ineligible': 32}`.
+- Scheduled Phase 2 eligibility statuses: `{'ineligible': 45}`.
 - Candidate rows staged: `0`.
 - Candidate JSONL written: `false`.
 - Cohort append performed: `false`.
@@ -27,6 +27,12 @@ Status: `blocked_no_same_day_phase2_natural_selections`.
 
 ## Scheduled Sessions
 
+- `bullish_pullback_observation` session `8854`: `0` picks, `ineligible`, `59` symbol drop reasons. blockers `policy_not_applied, missing_truth_source, missing_promotion_status, unknown_quote_freshness, no_scan_picks`
+- `bullish_pullback_observation` session `8852`: `0` picks, `ineligible`, `59` symbol drop reasons. blockers `policy_not_applied, missing_truth_source, missing_promotion_status, unknown_quote_freshness, no_scan_picks`
+- `bullish_pullback_observation` session `8850`: `0` picks, `ineligible`, `59` symbol drop reasons. blockers `policy_not_applied, missing_truth_source, missing_promotion_status, unknown_quote_freshness, no_scan_picks`
+- `bullish_pullback_observation` session `8848`: `0` picks, `ineligible`, `59` symbol drop reasons. blockers `policy_not_applied, missing_truth_source, missing_promotion_status, unknown_quote_freshness, no_scan_picks`
+- `bullish_pullback_observation` session `8844`: `0` picks, `ineligible`, `59` symbol drop reasons. blockers `policy_not_applied, missing_truth_source, missing_promotion_status, unknown_quote_freshness, no_scan_picks`
+- `bullish_pullback_observation` session `8843`: `0` picks, `ineligible`, `59` symbol drop reasons. blockers `policy_not_applied, missing_truth_source, missing_promotion_status, unknown_quote_freshness, no_scan_picks`
 - `bullish_pullback_observation` session `8840`: `0` picks, `ineligible`, `59` symbol drop reasons. blockers `policy_not_applied, missing_truth_source, missing_promotion_status, unknown_quote_freshness, no_scan_picks`
 - `bullish_pullback_observation` session `8838`: `0` picks, `ineligible`, `59` symbol drop reasons. blockers `policy_not_applied, missing_truth_source, missing_promotion_status, unknown_quote_freshness, no_scan_picks`
 - `bullish_pullback_observation` session `8836`: `0` picks, `ineligible`, `59` symbol drop reasons. blockers `policy_not_applied, missing_truth_source, missing_promotion_status, unknown_quote_freshness, no_scan_picks`
@@ -43,6 +49,13 @@ Status: `blocked_no_same_day_phase2_natural_selections`.
 - `bullish_pullback_observation` session `8814`: `0` picks, `ineligible`, `59` symbol drop reasons. blockers `policy_not_applied, missing_truth_source, missing_promotion_status, unknown_quote_freshness, no_scan_picks`
 - `bullish_pullback_observation` session `8812`: `0` picks, `ineligible`, `59` symbol drop reasons. blockers `policy_not_applied, missing_truth_source, missing_promotion_status, unknown_quote_freshness, no_scan_picks`
 - `bullish_pullback_observation` session `8810`: `0` picks, `ineligible`, `59` symbol drop reasons. blockers `policy_not_applied, missing_truth_source, missing_promotion_status, unknown_quote_freshness, no_scan_picks`
+- `volatility_expansion_observation` session `8853`: `0` picks, `ineligible`, `3` symbol drop reasons. blockers `policy_not_applied, missing_truth_source, missing_promotion_status, unknown_quote_freshness, no_scan_picks`
+- `volatility_expansion_observation` session `8851`: `0` picks, `ineligible`, `3` symbol drop reasons. blockers `policy_not_applied, missing_truth_source, missing_promotion_status, unknown_quote_freshness, no_scan_picks`
+- `volatility_expansion_observation` session `8849`: `0` picks, `ineligible`, `3` symbol drop reasons. blockers `policy_not_applied, missing_truth_source, missing_promotion_status, unknown_quote_freshness, no_scan_picks`
+- `volatility_expansion_observation` session `8847`: `0` picks, `ineligible`, `3` symbol drop reasons. blockers `policy_not_applied, missing_truth_source, missing_promotion_status, unknown_quote_freshness, no_scan_picks`
+- `volatility_expansion_observation` session `8845`: `0` picks, `ineligible`, `3` symbol drop reasons. blockers `policy_not_applied, missing_truth_source, missing_promotion_status, unknown_quote_freshness, no_scan_picks`
+- `volatility_expansion_observation` session `8842`: `0` picks, `ineligible`, `3` symbol drop reasons. blockers `policy_not_applied, missing_truth_source, missing_promotion_status, unknown_quote_freshness, no_scan_picks`
+- `volatility_expansion_observation` session `8841`: `0` picks, `ineligible`, `3` symbol drop reasons. blockers `policy_not_applied, missing_truth_source, missing_promotion_status, unknown_quote_freshness, no_scan_picks`
 - `volatility_expansion_observation` session `8839`: `0` picks, `ineligible`, `3` symbol drop reasons. blockers `policy_not_applied, missing_truth_source, missing_promotion_status, unknown_quote_freshness, no_scan_picks`
 - `volatility_expansion_observation` session `8837`: `0` picks, `ineligible`, `3` symbol drop reasons. blockers `policy_not_applied, missing_truth_source, missing_promotion_status, unknown_quote_freshness, no_scan_picks`
 - `volatility_expansion_observation` session `8835`: `0` picks, `ineligible`, `3` symbol drop reasons. blockers `policy_not_applied, missing_truth_source, missing_promotion_status, unknown_quote_freshness, no_scan_picks`
@@ -62,11 +75,11 @@ Status: `blocked_no_same_day_phase2_natural_selections`.
 
 ## Scheduled Eligibility Blockers
 
-- `missing_promotion_status`: `32`.
-- `missing_truth_source`: `32`.
-- `no_scan_picks`: `32`.
-- `policy_not_applied`: `32`.
-- `unknown_quote_freshness`: `32`.
+- `missing_promotion_status`: `45`.
+- `missing_truth_source`: `45`.
+- `no_scan_picks`: `45`.
+- `policy_not_applied`: `45`.
+- `unknown_quote_freshness`: `45`.
 
 ## Scheduled Drop Counts
 
@@ -75,12 +88,12 @@ Status: `blocked_no_same_day_phase2_natural_selections`.
 - `earnings`: `0`.
 - `ev_floor`: `0`.
 - `exceptions`: `0`.
-- `guardrails`: `16`.
-- `history_or_liquidity`: `128`.
+- `guardrails`: `23`.
+- `history_or_liquidity`: `176`.
 - `iv_crush_penalty`: `0`.
 - `min_history`: `0`.
-- `momentum`: `752`.
-- `option_liquidity`: `112`.
+- `momentum`: `1036`.
+- `option_liquidity`: `155`.
 - `signal_index`: `0`.
 - `stop_cooldown`: `0`.
 - `tech_score`: `0`.
@@ -89,16 +102,16 @@ Status: `blocked_no_same_day_phase2_natural_selections`.
 
 ## Aggregate Candidate-Starvation Stages
 
-- `momentum`: `752`.
-- `history_or_liquidity`: `128`.
-- `option_liquidity`: `112`.
-- `guardrails`: `16`.
+- `momentum`: `1036`.
+- `history_or_liquidity`: `176`.
+- `option_liquidity`: `155`.
+- `guardrails`: `23`.
 
 ## Zero-Candidate Diagnostics
 
 - Status: `zero_candidate_diagnosis_ready_symbol_drop_reasons_recorded`.
 - Scope: allowed lanes `true`, target date `true`, post-freeze `true`.
-- Scheduled sessions reviewed: `32`.
+- Scheduled sessions reviewed: `45`.
 - Symbol drop-reason status: `symbol_drop_reasons_recorded`.
 - Safe next read-only actions: `rank_symbol_level_drop_reasons_for_frozen_phase2_sessions`, `compare_drop_stage_ranking_to_symbol_reason_samples_read_only`.
 
@@ -124,19 +137,19 @@ Status: `blocked_no_same_day_phase2_natural_selections`.
 - `V` / `bullish_pullback_observation`: `option_liquidity` (liquidity_or_history), distance `67.53`.
 - `V` / `bullish_pullback_observation`: `option_liquidity` (liquidity_or_history), distance `67.53`.
 - `V` / `bullish_pullback_observation`: `option_liquidity` (liquidity_or_history), distance `67.53`.
+- `V` / `bullish_pullback_observation`: `option_liquidity` (liquidity_or_history), distance `67.53`.
+- `V` / `bullish_pullback_observation`: `option_liquidity` (liquidity_or_history), distance `67.53`.
+- `V` / `bullish_pullback_observation`: `option_liquidity` (liquidity_or_history), distance `67.53`.
+- `V` / `bullish_pullback_observation`: `option_liquidity` (liquidity_or_history), distance `71.7`.
+- `V` / `bullish_pullback_observation`: `option_liquidity` (liquidity_or_history), distance `71.7`.
 - `V` / `bullish_pullback_observation`: `option_liquidity` (liquidity_or_history), distance `71.93`.
 - `V` / `bullish_pullback_observation`: `option_liquidity` (liquidity_or_history), distance `71.93`.
 - `V` / `bullish_pullback_observation`: `option_liquidity` (liquidity_or_history), distance `71.93`.
+- `V` / `bullish_pullback_observation`: `option_liquidity` (liquidity_or_history), distance `72.15`.
+- `C` / `bullish_pullback_observation`: `option_liquidity` (liquidity_or_history), distance `72.97`.
+- `C` / `bullish_pullback_observation`: `option_liquidity` (liquidity_or_history), distance `72.97`.
 - `C` / `bullish_pullback_observation`: `option_liquidity` (liquidity_or_history), distance `73.14`.
 - `V` / `bullish_pullback_observation`: `option_liquidity` (liquidity_or_history), distance `73.43`.
-- `V` / `bullish_pullback_observation`: `option_liquidity` (liquidity_or_history), distance `75.4`.
-- `V` / `bullish_pullback_observation`: `option_liquidity` (liquidity_or_history), distance `75.4`.
-- `C` / `bullish_pullback_observation`: `option_liquidity` (liquidity_or_history), distance `75.92`.
-- `C` / `bullish_pullback_observation`: `option_liquidity` (liquidity_or_history), distance `76.3`.
-- `C` / `bullish_pullback_observation`: `option_liquidity` (liquidity_or_history), distance `76.91`.
-- `C` / `bullish_pullback_observation`: `option_liquidity` (liquidity_or_history), distance `77.38`.
-- `C` / `bullish_pullback_observation`: `option_liquidity` (liquidity_or_history), distance `77.38`.
-- `C` / `bullish_pullback_observation`: `option_liquidity` (liquidity_or_history), distance `77.5`.
 
 ## Rejection Counts
 

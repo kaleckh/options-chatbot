@@ -10,8 +10,8 @@ Drive the system toward defensible, prospectively verified profitability. Existi
 
 Near-term execution order:
 
-1. Preserve the current audited workspace in Git.
-2. Repair the exact entry/exit evidence and production-parity replay path so candidate economics can be measured honestly.
+1. Preserve the current audited workspace in Git. Baseline commit `885b1cf4471a31574820f1d0e19544be48c5d171` is complete; checkpoint the authoritative-verifier tranche after final review.
+2. Continue repairing exact exit evidence and production-parity replay now that exact forward entry-to-ledger verification is implemented.
 3. Compare current and new lane hypotheses under preregistered, fee-and-slippage-aware train/OOS/forward contracts.
 4. Allocate research effort to robust positive-expectancy lanes and kill or park falsified lanes quickly.
 5. Advance a lane only after executable forward evidence clears its proof and promotion bars.
@@ -66,8 +66,8 @@ Current posture is `safe_blocked_no_live_release`.
 - Establish a versioned manifest-bound point-in-time entry/exit quote corpus and per-row earnings/feature lineage, then regenerate the historical population under the repaired denominator contract.
 - Implement production scanner, spread-selection, slippage, path-dependent exit, ranking, one-new/two-open allocation, and historical-policy-snapshot parity before interpreting historical economics as production economics.
 - Complete the fresh import with provider-exhaustive chain proof, then implement preregistered F2 alignment, frozen top-three selection, formal one-shot validation, and atomic consumption-registry append.
-- Implement a non-self-asserted verifier that content-revalidates each preceding forward matched entry against the exact versioned quote store/manifest. Until then, retain `entry_quote_store_verification_not_established`; diagnostic capture may continue, but no completion or evaluation may count.
-- Only after that verifier passes, accumulate 30 untouched exact forward completions under the lifecycle/contract/policy/scan-health/signal-lineage/quote-store contract. Current strict forward is 0/30 and the paper shortlist has zero eligible candidates.
+- The non-self-asserted forward-entry verifier is implemented: each completion requires one preceding matched entry bound by exact session/event/run/recorded locator to one authoritative `scan_pick`, verified through a coherent read-only SQLite snapshot with exact metadata, contract, synchronized timestamp, fresh provider, and Decimal price equality. Rows created before locator emission or with unsynchronized legs remain fail-closed; do not backfill them fuzzily.
+- Accumulate 30 untouched exact forward completions under the lifecycle/contract/policy/scan-health/signal-lineage/quote-store contract. Current strict forward remains 0/30 and the paper shortlist has zero eligible candidates; implementation of the verifier does not itself establish proof.
 - Continue only preregistered research, source repair, paper-shadow capture, and exact evidence collection allowed by current contracts.
 - Treat consumed evaluation windows as unavailable for tuning or family selection.
 - Keep historical/materializer/tracker rows separate from prospective forward proof.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import tempfile
 import unittest
 import hashlib
@@ -25,6 +26,101 @@ def _write_json(path: Path, payload: dict) -> None:
 def _write_jsonl(path: Path, rows: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf8")
+
+
+def _write_authoritative_scan_event(
+    path: Path,
+    *,
+    entry: dict,
+    duplicate: bool = False,
+    session_overrides: dict | None = None,
+    payload_overrides: dict | None = None,
+    event_overrides: dict | None = None,
+    initialize: bool = True,
+) -> None:
+    source = dict(entry["source_row"])
+    source.update(payload_overrides or {})
+    session = {
+        "recorded_at_utc": entry["source_scan_recorded_at_utc"],
+        "source_label": "scheduled_scan",
+        "playbook": entry["lane_id"],
+        "run_id": entry["source_scan_run_id"],
+        "run_mode": "scheduled_scan",
+        "evidence_class": "live_production",
+        "is_fixture": 0,
+    }
+    session.update(session_overrides or {})
+    event = {
+        "run_id": entry["source_scan_run_id"],
+        "run_mode": "scheduled_scan",
+        "evidence_class": "live_production",
+        "is_fixture": 0,
+    }
+    event.update(event_overrides or {})
+    connection = sqlite3.connect(path)
+    try:
+        if initialize:
+            connection.executescript(
+                """
+            CREATE TABLE forward_sessions (
+                id INTEGER PRIMARY KEY,
+                recorded_at_utc TEXT NOT NULL,
+                source_label TEXT NOT NULL,
+                playbook TEXT,
+                run_id TEXT,
+                run_mode TEXT,
+                evidence_class TEXT,
+                is_fixture INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE forward_events (
+                id INTEGER PRIMARY KEY,
+                session_id INTEGER NOT NULL,
+                event_type TEXT NOT NULL,
+                event_key TEXT NOT NULL,
+                run_id TEXT,
+                run_mode TEXT,
+                evidence_class TEXT,
+                is_fixture INTEGER,
+                payload_json TEXT
+            );
+            """
+            )
+        connection.execute(
+            "INSERT INTO forward_sessions VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                entry["source_scan_session_id"],
+                session["recorded_at_utc"],
+                session["source_label"],
+                session["playbook"],
+                session["run_id"],
+                session["run_mode"],
+                session["evidence_class"],
+                session["is_fixture"],
+            ),
+        )
+        rows = 2 if duplicate else 1
+        next_event_id = int(
+            connection.execute(
+                "SELECT COALESCE(MAX(id), 0) + 1 FROM forward_events"
+            ).fetchone()[0]
+        )
+        for event_id in range(next_event_id, next_event_id + rows):
+            connection.execute(
+                "INSERT INTO forward_events VALUES (?, ?, 'scan_pick', ?, ?, ?, ?, ?, ?)",
+                (
+                    event_id,
+                    entry["source_scan_session_id"],
+                    entry["source_scan_event_key"],
+                    event["run_id"],
+                    event["run_mode"],
+                    event["evidence_class"],
+                    event["is_fixture"],
+                    json.dumps(source),
+                ),
+            )
+        connection.commit()
+    finally:
+        connection.close()
 
 
 def _conditions_hash(conditions: list[dict]) -> str:
@@ -134,6 +230,10 @@ def _ready_scan_task_health_path(root: Path) -> Path:
 def _entry_fields(ticker: str = "AAPL", index: int = 1) -> dict:
     return {
         "scan_run_id": f"scan-{ticker}-{index}",
+        "source_scan_session_id": 1000 + index,
+        "source_scan_event_key": f"bullish_pullback_observation:rank_{index}",
+        "source_scan_run_id": f"scan-{ticker}-{index}",
+        "source_scan_recorded_at_utc": "2026-06-30T15:01:00Z",
         "scan_host": "TESTHOST",
         "scan_commit_sha": "1" * 40,
         "scan_branch": "test",
@@ -189,11 +289,15 @@ def _completion_pair(
         "direction": f"call_{index}",
         "strategy_type": "vertical_spread",
         "lane_id": "bullish_pullback_observation",
+        "playbook_id": "bullish_pullback_observation",
         "expiry": expiry.isoformat(),
         "dte": (expiry - parsed_date).days,
         "contract_symbol": f"{ticker}{expiry_token}C00200000",
         "short_contract_symbol": f"{ticker}{expiry_token}C00210000",
         "quote_source": "alpaca_opra",
+        "selection_source": "live_chain_exact_contract",
+        "entry_execution_basis": "spread_ask_bid",
+        "quote_freshness_status": "fresh",
         "quote_timestamp_utc": f"{scan_date}T15:00:00Z",
         "long_entry_quote_timestamp_utc": f"{scan_date}T15:00:00Z",
         "short_entry_quote_timestamp_utc": f"{scan_date}T15:00:00Z",
@@ -205,6 +309,10 @@ def _completion_pair(
             "short_ask": 1.1,
         },
         "net_debit": 3.2,
+        "source_scan_session_id": 77 + index,
+        "source_scan_event_key": f"bullish_pullback_observation:rank_{index + 1}",
+        "source_scan_run_id": f"scheduled_scan:{scan_date}:{ticker}:{index}",
+        "source_scan_recorded_at_utc": f"{scan_date}T15:01:00Z",
         "scan_run_id": f"scan-{ticker}-{index}",
         "scan_host": "TESTHOST",
         "scan_commit_sha": "1" * 40,
@@ -219,6 +327,26 @@ def _completion_pair(
             "known_at_utc": f"{scan_date}T14:55:00Z",
             "source_ref": f"fixture://signal/{ticker}/{scan_date}",
             "source_row_hash": "4" * 64,
+        },
+        "entry_quote_snapshot": {
+            "quote_source": "alpaca_opra",
+            "quote_freshness_status": "fresh",
+            "legs": [
+                {
+                    "role": "long",
+                    "contract_symbol": f"{ticker}{expiry_token}C00200000",
+                    "bid": 4.0,
+                    "ask": 4.2,
+                    "quote_timestamp_utc": f"{scan_date}T15:00:00Z",
+                },
+                {
+                    "role": "short",
+                    "contract_symbol": f"{ticker}{expiry_token}C00210000",
+                    "bid": 1.0,
+                    "ask": 1.1,
+                    "quote_timestamp_utc": f"{scan_date}T15:00:00Z",
+                },
+            ],
         },
     }
     entry, reasons = tracker._matched_entry_log_row(
@@ -1235,6 +1363,10 @@ class RegularOptionsFilteredForwardPaperShadowTrackerTests(unittest.TestCase):
             "_scan_task_health_sha256": "3" * 64,
             "_scan_task_health_status": tracker.READY_SCAN_TASK_HEALTH_STATUS,
             "_scan_task_health_generated_at_utc": "2026-07-10T19:00:00Z",
+            "source_scan_session_id": 501,
+            "source_scan_event_key": "bullish_pullback_observation:rank_1",
+            "source_scan_run_id": "scheduled_scan:2026-07-10:SPY",
+            "source_scan_recorded_at_utc": "2026-07-10T18:01:00Z",
             "signal_evidence": {
                 "prior_20_trading_day_return_pct": 12.5,
                 "prior_20_trading_day_return_source": "fixture_point_in_time_source",
@@ -1413,6 +1545,275 @@ class RegularOptionsFilteredForwardPaperShadowTrackerTests(unittest.TestCase):
             tracker._validated_completion_rows([entry, completion])
         self.assertEqual(len(verifier_inputs), 1)
         self.assertIs(verifier_inputs[0], entry)
+
+    def test_authoritative_entry_verifier_requires_one_exact_ledger_event(self) -> None:
+        entry, _completion = _completion_pair("2026-07-10")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            exact_db = root / "exact.db"
+            duplicate_db = root / "duplicate.db"
+            _write_authoritative_scan_event(exact_db, entry=entry)
+            _write_authoritative_scan_event(duplicate_db, entry=entry, duplicate=True)
+
+            verified = tracker._entry_quote_store_verification(entry, db_path=exact_db)
+            tampered = tracker._entry_quote_store_verification(
+                {**entry, "entry_long_bid": 4.00001}, db_path=exact_db
+            )
+            duplicate = tracker._entry_quote_store_verification(
+                entry, db_path=duplicate_db
+            )
+
+        self.assertTrue(verified["verified"])
+        self.assertEqual(verified["detail"], "exact_authoritative_scan_event_match")
+        self.assertEqual(verified["session_id"], entry["source_scan_session_id"])
+        self.assertRegex(verified["canonical_payload_sha256"], r"^[0-9a-f]{64}$")
+        self.assertFalse(tampered["verified"])
+        self.assertEqual(
+            tampered["detail"],
+            "matched_entry_entry_long_bid_aliases_missing_or_invalid",
+        )
+        self.assertFalse(duplicate["verified"])
+        self.assertEqual(duplicate["detail"], "authoritative_scan_event_match_count:2")
+
+    def test_authoritative_entry_verifier_rejects_mixed_sources_and_freshness(
+        self,
+    ) -> None:
+        entry, _completion = _completion_pair("2026-07-10")
+        source = json.loads(json.dumps(entry["source_row"]))
+        snapshot_source = json.loads(json.dumps(source["entry_quote_snapshot"]))
+        snapshot_source["quote_source"] = "thetadata_opra_nbbo_1m"
+        leg_source = json.loads(json.dumps(source["entry_quote_snapshot"]))
+        leg_source["legs"][0]["quote_source"] = "thetadata_opra_nbbo_1m"
+        leg_data_source = json.loads(json.dumps(source["entry_quote_snapshot"]))
+        leg_data_source["legs"][0]["data_source"] = "daily_or_other"
+        leg_stale = json.loads(json.dumps(source["entry_quote_snapshot"]))
+        leg_stale["legs"][1]["quote_freshness_status"] = "stale"
+        chain_stale = json.loads(json.dumps(source["entry_quote_snapshot"]))
+        chain_stale["legs"][1]["option_chain_status"] = "stale"
+        cases = {
+            "snapshot_source": {"entry_quote_snapshot": snapshot_source},
+            "leg_source": {"entry_quote_snapshot": leg_source},
+            "leg_data_source": {"entry_quote_snapshot": leg_data_source},
+            "leg_freshness": {"entry_quote_snapshot": leg_stale},
+            "chain_stale": {"entry_quote_snapshot": chain_stale},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            results = {}
+            for name, overrides in cases.items():
+                db_path = root / f"{name}.db"
+                _write_authoritative_scan_event(
+                    db_path, entry=entry, payload_overrides=overrides
+                )
+                results[name] = tracker._entry_quote_store_verification(
+                    entry, db_path=db_path
+                )
+            exact_db = root / "exact.db"
+            _write_authoritative_scan_event(exact_db, entry=entry)
+            matched_source = tracker._entry_quote_store_verification(
+                {**entry, "entry_quote_source": "thetadata_opra_nbbo_1m"},
+                db_path=exact_db,
+            )
+
+        self.assertEqual(
+            results["snapshot_source"]["detail"],
+            "authoritative_scan_event_quote_source_invalid",
+        )
+        self.assertEqual(
+            results["leg_source"]["detail"],
+            "authoritative_scan_event_quote_source_invalid",
+        )
+        self.assertEqual(
+            results["leg_data_source"]["detail"],
+            "authoritative_scan_event_quote_source_invalid",
+        )
+        self.assertEqual(
+            results["leg_freshness"]["detail"],
+            "authoritative_scan_event_quote_freshness_invalid",
+        )
+        self.assertEqual(
+            results["chain_stale"]["detail"],
+            "authoritative_scan_event_quote_freshness_invalid",
+        )
+        self.assertEqual(
+            matched_source["detail"], "matched_entry_quote_source_mismatch"
+        )
+
+    def test_authoritative_entry_verifier_rejects_session_metadata_divergence(
+        self,
+    ) -> None:
+        entry, _completion = _completion_pair("2026-07-10")
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "divergent.db"
+            _write_authoritative_scan_event(
+                db_path,
+                entry=entry,
+                session_overrides={"run_id": "different-session-run"},
+            )
+            result = tracker._entry_quote_store_verification(entry, db_path=db_path)
+
+        self.assertFalse(result["verified"])
+        self.assertEqual(
+            result["detail"], "authoritative_scan_event_session_run_id_mismatch"
+        )
+
+    def test_report_verifier_uses_one_sqlite_snapshot_and_locator_cache(self) -> None:
+        first, _completion = _completion_pair("2026-07-10", index=0)
+        second, _completion = _completion_pair("2026-07-11", index=1)
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "snapshot.db"
+            _write_authoritative_scan_event(db_path, entry=first)
+            _write_authoritative_scan_event(db_path, entry=second, initialize=False)
+            setup = sqlite3.connect(db_path)
+            setup.execute("PRAGMA journal_mode=WAL")
+            setup.close()
+
+            queries: list[str] = []
+            with tracker._EntryQuoteStoreVerifier(db_path) as verifier:
+                assert verifier.connection is not None
+                verifier.connection.set_trace_callback(queries.append)
+                first_result = verifier.verify(first)
+                verifier.verify(first)
+                tampered_same_locator = verifier.verify(
+                    {**first, "entry_long_bid": 9.9}
+                )
+                writer = sqlite3.connect(db_path)
+                writer.execute(
+                    "UPDATE forward_events SET payload_json = '{}' WHERE session_id = ?",
+                    (second["source_scan_session_id"],),
+                )
+                writer.commit()
+                writer.close()
+                second_snapshot_result = verifier.verify(second)
+            second_after_close = tracker._entry_quote_store_verification(
+                second, db_path=db_path
+            )
+
+        select_count = sum("FROM forward_sessions" in query for query in queries)
+        self.assertTrue(first_result["verified"])
+        self.assertFalse(tampered_same_locator["verified"])
+        self.assertTrue(second_snapshot_result["verified"])
+        self.assertFalse(second_after_close["verified"])
+        self.assertEqual(select_count, 3)
+        self.assertEqual(len(verifier.cache), 3)
+
+    def test_authoritative_event_rejects_conflicting_price_aliases(self) -> None:
+        entry, _completion = _completion_pair("2026-07-10")
+        snapshot = json.loads(json.dumps(entry["source_row"]["entry_quote_snapshot"]))
+        snapshot["legs"][0]["bid"] = 9.0
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "conflict.db"
+            _write_authoritative_scan_event(
+                db_path,
+                entry=entry,
+                payload_overrides={
+                    "entry_long_bid": 4.0,
+                    "entry_quote_snapshot": snapshot,
+                },
+            )
+            result = tracker._entry_quote_store_verification(entry, db_path=db_path)
+
+        self.assertFalse(result["verified"])
+        self.assertEqual(
+            result["detail"],
+            "authoritative_scan_event_entry_long_bid_aliases_conflict",
+        )
+
+    def test_report_verifier_database_init_error_fails_closed(self) -> None:
+        entry, _completion = _completion_pair("2026-07-10")
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "corrupt.db"
+            db_path.write_bytes(b"not-a-sqlite-database")
+            with tracker._EntryQuoteStoreVerifier(db_path) as verifier:
+                result = verifier.verify(entry)
+
+        self.assertFalse(result["verified"])
+        self.assertTrue(
+            result["detail"].startswith("authoritative_forward_ledger_read_failed:")
+        )
+
+    def test_authoritative_locator_ids_are_strict_and_exact(self) -> None:
+        entry, completion = _completion_pair("2026-07-10")
+        for invalid in (True, 77.5, "77.5", "+77", 0, -1):
+            with self.subTest(invalid=invalid):
+                result = tracker._entry_quote_store_verification(
+                    {**entry, "source_scan_session_id": invalid},
+                    db_path=Path("missing.db"),
+                )
+                self.assertEqual(
+                    result["detail"], "source_scan_session_id_missing_or_invalid"
+                )
+        large_entry = {**entry, "source_scan_session_id": 2**53 + 1}
+        large_completion = {**completion, "source_scan_session_id": 2**53}
+        reasons = tracker._completion_preceding_entry_reject_reasons(
+            large_completion, large_entry
+        )
+        self.assertIn(
+            "completion_preceding_entry_source_scan_session_id_mismatch", reasons
+        )
+
+    def test_duplicate_preceding_entries_fail_closed_instead_of_overwriting(
+        self,
+    ) -> None:
+        entry, completion = _completion_pair("2026-07-10")
+        with patch.object(
+            tracker, "_entry_quote_store_verification_established", return_value=True
+        ):
+            valid, _declared, rejects = tracker._validated_completion_rows(
+                [entry, dict(entry), completion]
+            )
+
+        self.assertEqual(valid, [])
+        self.assertEqual(rejects["completion_preceding_matched_entry_not_unique"], 1)
+
+    def test_valid_plus_malformed_preceding_entry_is_not_unique(self) -> None:
+        entry, completion = _completion_pair("2026-07-10")
+        malformed = {**entry, "source_scan_event_key": ""}
+        with patch.object(
+            tracker, "_entry_quote_store_verification_established", return_value=True
+        ):
+            valid, _declared, rejects = tracker._validated_completion_rows(
+                [entry, malformed, completion]
+            )
+
+        self.assertEqual(valid, [])
+        self.assertEqual(rejects["completion_preceding_matched_entry_not_unique"], 1)
+
+    def test_authoritative_locator_cannot_bind_two_candidate_ids(self) -> None:
+        first, completion = _completion_pair("2026-07-10")
+        second = {**first, "candidate_id": "different-candidate"}
+        with patch.object(
+            tracker, "_entry_quote_store_verification_established", return_value=True
+        ):
+            valid, _declared, rejects = tracker._validated_completion_rows(
+                [first, second, completion]
+            )
+
+        self.assertEqual(valid, [])
+        self.assertEqual(rejects["completion_source_scan_locator_not_unique"], 1)
+
+    def test_scanner_run_id_does_not_upgrade_to_authoritative_locator(self) -> None:
+        source = {
+            **_entry_fields(),
+            "source_scan_run_id": None,
+            "scanner_run_id": "legacy-scanner-run",
+            "scan_date": "2026-06-30",
+            "logged_at": "2026-06-30T15:00:00Z",
+            "ticker": "AAPL",
+            "strategy_type": "vertical_spread",
+        }
+        entry, reasons = tracker._matched_entry_log_row(
+            source,
+            tracking_start_date="2026-06-01",
+            tracking_start_at_utc="2026-06-01T00:00:00Z",
+        )
+
+        self.assertIsNone(entry["source_scan_run_id"])
+        self.assertIn(
+            "preceding_entry_source_scan_run_id_missing",
+            tracker._matched_entry_lineage_reject_reasons(entry),
+        )
+        self.assertEqual(reasons, [])
 
     def test_completion_semantics_policy_and_geometry_must_match_preceding_entry(
         self,

@@ -22,8 +22,8 @@ This is a no-write readiness refresh. It does not stage candidate rows, validate
 
 ## Scan-Task Health
 
-- Scan-task health status: `scan_task_runtime_blocked`.
-- Scan-task health blockers: `["\\OptionsScanPicks:scan_task_runtime_blocking:scan_task_runtime_failed", "\\OptionsScanPicks:scan_task_runtime_last_result_nonzero", "\\OptionsScanPicksSafetyNet:scan_task_runtime_blocking:scan_task_runtime_failed", "\\OptionsScanPicksSafetyNet:scan_task_runtime_last_result_nonzero"]`.
+- Scan-task health status: `scan_tasks_ready_for_next_market_window`.
+- Scan-task health blockers: `[]`.
 
 ## Candidate Throughput
 
@@ -32,10 +32,10 @@ This is a no-write readiness refresh. It does not stage candidate rows, validate
 - Scan-pick rows: `550`.
 - Post-freeze Phase 2 rows: `1`.
 - Target-date Phase 2 rows: `0`.
-- Scheduled scan sessions: `32`.
+- Scheduled scan sessions: `45`.
 - Scheduled Phase 2 scan picks: `0`.
-- Scheduled Phase 2 drop-count total: `1008`.
-- Scheduled Phase 2 symbol drop reasons: `992`.
+- Scheduled Phase 2 drop-count total: `1390`.
+- Scheduled Phase 2 symbol drop reasons: `1367`.
 - Candidate-starvation evidence status: `raw_symbol_drop_reasons_recorded`.
 - Scheduled Phase 2 all lanes scanned: `true`.
 - Scheduled Phase 2 lanes with session: `["bullish_pullback_observation", "volatility_expansion_observation"]`.
@@ -67,20 +67,20 @@ This is a no-write readiness refresh. It does not stage candidate rows, validate
 
 ## Source Readbacks
 
-- `strict_forward_operator_queue`: `stale` age `310.38` hours at `data/forward-tracking/regular_options_strict_forward_operator_queue_latest.json`.
-- `gateboard`: `loaded` age `67.41` hours at `data/forward-tracking/project_operator_gateboard_latest.json`.
-- `trade_qualification`: `stale` age `325.24` hours at `data/forward-tracking/regular_options_trade_qualification_latest.json`.
-- `bullish_pullback_layer_shadow_selection`: `stale` age `338.65` hours at `data/forward-tracking/bullish_pullback_layer_shadow_selection_latest.json`.
-- `bullish_pullback_layer_execution_safety_audit`: `stale` age `338.65` hours at `data/forward-tracking/bullish_pullback_layer_execution_safety_audit_latest.json`.
-- `bullish_pullback_layer_executable_economics`: `stale` age `338.63` hours at `data/forward-tracking/bullish_pullback_layer_executable_economics_latest.json`.
-- `bullish_pullback_layer4_forward_capture_protocol`: `stale` age `338.63` hours at `data/forward-tracking/bullish_pullback_layer4_forward_capture_protocol_latest.json`.
-- `paper_shadow_evidence_plan`: `stale` age `325.2` hours at `data/forward-tracking/regular_options_paper_shadow_evidence_plan_latest.json`.
-- `fill_attempt_evidence_capture_plan`: `loaded` age `67.41` hours at `data/forward-tracking/regular_options_fill_attempt_evidence_capture_plan_latest.json`.
-- `suggested_trade_review_plan`: `loaded` age `67.41` hours at `data/forward-tracking/regular_options_suggested_trade_review_plan_latest.json`.
-- `monthly_profitability_audit`: `stale` age `325.24` hours at `data/forward-tracking/monthly_all_lanes_profitability_audit_latest.json`.
-- `market_window_approval_preflight`: `stale` age `283.58` hours at `data/forward-tracking/regular_options_market_window_approval_preflight_latest.json`.
+- `strict_forward_operator_queue`: `stale` age `311.38` hours at `data/forward-tracking/regular_options_strict_forward_operator_queue_latest.json`.
+- `gateboard`: `loaded` age `68.41` hours at `data/forward-tracking/project_operator_gateboard_latest.json`.
+- `trade_qualification`: `stale` age `326.24` hours at `data/forward-tracking/regular_options_trade_qualification_latest.json`.
+- `bullish_pullback_layer_shadow_selection`: `stale` age `339.65` hours at `data/forward-tracking/bullish_pullback_layer_shadow_selection_latest.json`.
+- `bullish_pullback_layer_execution_safety_audit`: `stale` age `339.65` hours at `data/forward-tracking/bullish_pullback_layer_execution_safety_audit_latest.json`.
+- `bullish_pullback_layer_executable_economics`: `stale` age `339.63` hours at `data/forward-tracking/bullish_pullback_layer_executable_economics_latest.json`.
+- `bullish_pullback_layer4_forward_capture_protocol`: `stale` age `339.63` hours at `data/forward-tracking/bullish_pullback_layer4_forward_capture_protocol_latest.json`.
+- `paper_shadow_evidence_plan`: `stale` age `326.2` hours at `data/forward-tracking/regular_options_paper_shadow_evidence_plan_latest.json`.
+- `fill_attempt_evidence_capture_plan`: `loaded` age `68.41` hours at `data/forward-tracking/regular_options_fill_attempt_evidence_capture_plan_latest.json`.
+- `suggested_trade_review_plan`: `loaded` age `68.41` hours at `data/forward-tracking/regular_options_suggested_trade_review_plan_latest.json`.
+- `monthly_profitability_audit`: `stale` age `326.24` hours at `data/forward-tracking/monthly_all_lanes_profitability_audit_latest.json`.
+- `market_window_approval_preflight`: `stale` age `284.58` hours at `data/forward-tracking/regular_options_market_window_approval_preflight_latest.json`.
 - `forward_candidate_throughput_audit`: `loaded` age `0.0` hours at `data/forward-tracking/regular_options_forward_candidate_throughput_audit_latest.json`.
-- `strict_forward_scan_task_health`: `loaded` age `0.06` hours at `data/forward-tracking/regular_options_strict_forward_scan_task_health_latest.json`.
+- `strict_forward_scan_task_health`: `loaded` age `0.0` hours at `data/forward-tracking/regular_options_strict_forward_scan_task_health_latest.json`.
 
 ## Prohibited Actions
 

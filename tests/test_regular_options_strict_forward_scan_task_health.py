@@ -57,7 +57,9 @@ def _task_output(
 
 
 SCAN_OUTPUT = _task_output(SCAN_TASK)
-SAFETY_OUTPUT = _task_output(SAFETY_TASK, next_run="6/30/2026 11:30:00 AM", last_run="6/29/2026 11:30:00 AM")
+SAFETY_OUTPUT = _task_output(
+    SAFETY_TASK, next_run="6/30/2026 11:30:00 AM", last_run="6/29/2026 11:30:00 AM"
+)
 
 
 def _query(task_name: str) -> tuple[int, str, str]:
@@ -110,7 +112,11 @@ class RegularOptionsStrictForwardScanTaskHealthTests(unittest.TestCase):
         )
 
         def query(task_name: str) -> tuple[int, str, str]:
-            return (0, scan_output, "") if task_name == SCAN_TASK else (0, safety_output, "")
+            return (
+                (0, scan_output, "")
+                if task_name == SCAN_TASK
+                else (0, safety_output, "")
+            )
 
         with (
             patch.object(health, "query_task", side_effect=query),
@@ -119,7 +125,9 @@ class RegularOptionsStrictForwardScanTaskHealthTests(unittest.TestCase):
             report = health.build_report(generated_at_utc="2026-06-29T00:00:00Z")
 
         self.assertEqual(report["status"], "scan_tasks_ready_for_next_market_window")
-        self.assertEqual(report["runtime_status"], "scan_task_runtime_pending_first_expected_run")
+        self.assertEqual(
+            report["runtime_status"], "scan_task_runtime_pending_first_expected_run"
+        )
         self.assertEqual(report["runtime_blockers"], [])
         self.assertEqual(
             report["task_reports"][SCAN_TASK]["runtime_status"],
@@ -134,8 +142,14 @@ class RegularOptionsStrictForwardScanTaskHealthTests(unittest.TestCase):
             report = health.build_report(generated_at_utc="2026-06-29T18:00:00Z")
 
         self.assertEqual(report["runtime_status"], "scan_task_runtime_observed_ok")
-        self.assertEqual(report["task_reports"][SCAN_TASK]["runtime_status"], "scan_task_runtime_observed_ok")
-        self.assertEqual(report["task_reports"][SAFETY_TASK]["runtime_status"], "scan_task_runtime_observed_ok")
+        self.assertEqual(
+            report["task_reports"][SCAN_TASK]["runtime_status"],
+            "scan_task_runtime_observed_ok",
+        )
+        self.assertEqual(
+            report["task_reports"][SAFETY_TASK]["runtime_status"],
+            "scan_task_runtime_observed_ok",
+        )
 
     def test_rolled_forward_missed_daily_feeder_blocks_after_expected_start(self):
         scan_output = _task_output(
@@ -152,12 +166,20 @@ class RegularOptionsStrictForwardScanTaskHealthTests(unittest.TestCase):
         )
 
         def query(task_name: str) -> tuple[int, str, str]:
-            return (0, scan_output, "") if task_name == SCAN_TASK else (0, safety_output, "")
+            return (
+                (0, scan_output, "")
+                if task_name == SCAN_TASK
+                else (0, safety_output, "")
+            )
 
         with (
             patch.object(health, "query_task", side_effect=query),
             patch.object(health, "_inspect_batch_file", return_value=_batch_report()),
-            patch.object(health, "_generated_at_local_naive", return_value=health.datetime(2026, 6, 30, 11, 40)),
+            patch.object(
+                health,
+                "_generated_at_local_naive",
+                return_value=health.datetime(2026, 6, 30, 11, 40),
+            ),
         ):
             report = health.build_report(generated_at_utc="2026-06-30T17:40:00Z")
 
@@ -167,7 +189,10 @@ class RegularOptionsStrictForwardScanTaskHealthTests(unittest.TestCase):
             f"{SCAN_TASK}:scan_task_runtime_last_run_not_on_expected_scan_date",
             report["runtime_blockers"],
         )
-        self.assertEqual(report["task_reports"][SAFETY_TASK]["runtime_status"], "scan_task_runtime_observed_ok")
+        self.assertEqual(
+            report["task_reports"][SAFETY_TASK]["runtime_status"],
+            "scan_task_runtime_observed_ok",
+        )
 
     def test_previous_success_before_daily_start_is_not_blocking(self):
         scan_output = _task_output(
@@ -183,12 +208,19 @@ class RegularOptionsStrictForwardScanTaskHealthTests(unittest.TestCase):
         with (
             patch.object(health, "query_task", side_effect=query),
             patch.object(health, "_inspect_batch_file", return_value=_batch_report()),
-            patch.object(health, "_generated_at_local_naive", return_value=health.datetime(2026, 6, 30, 10, 40)),
+            patch.object(
+                health,
+                "_generated_at_local_naive",
+                return_value=health.datetime(2026, 6, 30, 10, 40),
+            ),
         ):
             report = health.build_report(generated_at_utc="2026-06-30T16:40:00Z")
 
         self.assertEqual(report["status"], "scan_tasks_ready_for_next_market_window")
-        self.assertEqual(report["task_reports"][SCAN_TASK]["runtime_status"], "scan_task_runtime_observed_ok")
+        self.assertEqual(
+            report["task_reports"][SCAN_TASK]["runtime_status"],
+            "scan_task_runtime_observed_ok",
+        )
 
     def test_failed_last_result_blocks_runtime_and_aggregate(self):
         bad_scan_output = _task_output(SCAN_TASK, last_result="1")
@@ -207,8 +239,52 @@ class RegularOptionsStrictForwardScanTaskHealthTests(unittest.TestCase):
         self.assertEqual(report["config_status"], "scan_tasks_config_ready")
         self.assertEqual(report["runtime_status"], "scan_task_runtime_blocked")
         self.assertEqual(report["status"], "scan_task_runtime_blocked")
-        self.assertIn(f"{SCAN_TASK}:scan_task_runtime_last_result_nonzero", report["runtime_blockers"])
-        self.assertIn(f"{SCAN_TASK}:scan_task_runtime_blocking:scan_task_runtime_failed", report["blockers"])
+        self.assertIn(
+            f"{SCAN_TASK}:scan_task_runtime_last_result_nonzero",
+            report["runtime_blockers"],
+        )
+        self.assertIn(
+            f"{SCAN_TASK}:scan_task_runtime_blocking:scan_task_runtime_failed",
+            report["blockers"],
+        )
+
+    def test_currently_running_result_is_in_progress_not_failed(self):
+        current_scan_output = _task_output(
+            SCAN_TASK,
+            next_run="7/13/2026 11:00:00 AM",
+            last_run="7/10/2026 11:00:00 AM",
+            start_date="4/22/2026",
+        )
+        running_safety_output = _task_output(
+            SAFETY_TASK,
+            next_run="7/13/2026 11:30:00 AM",
+            status="Running",
+            last_run="7/10/2026 11:30:00 AM",
+            last_result=str(health.SCHEDULER_TASK_RUNNING_RESULT),
+            missed_runs="0",
+            start_date="5/5/2026",
+        )
+
+        def query(task_name: str) -> tuple[int, str, str]:
+            return (
+                (0, running_safety_output, "")
+                if task_name == SAFETY_TASK
+                else (0, current_scan_output, "")
+            )
+
+        with (
+            patch.object(health, "query_task", side_effect=query),
+            patch.object(health, "_inspect_batch_file", return_value=_batch_report()),
+        ):
+            report = health.build_report(generated_at_utc="2026-07-10T17:38:22Z")
+
+        self.assertEqual(report["status"], "scan_tasks_ready_for_next_market_window")
+        self.assertEqual(report["runtime_status"], "scan_task_runtime_in_progress")
+        self.assertEqual(report["runtime_blockers"], [])
+        self.assertEqual(
+            report["task_reports"][SAFETY_TASK]["runtime_status"],
+            "scan_task_runtime_in_progress",
+        )
 
     def test_stale_never_run_after_expected_run_blocks(self):
         stale_output = _task_output(
@@ -230,7 +306,10 @@ class RegularOptionsStrictForwardScanTaskHealthTests(unittest.TestCase):
             report = health.build_report(generated_at_utc="2026-06-30T00:00:00Z")
 
         self.assertEqual(report["status"], "scan_task_runtime_blocked")
-        self.assertIn(f"{SCAN_TASK}:scan_task_runtime_last_run_never_after_expected_window", report["runtime_blockers"])
+        self.assertIn(
+            f"{SCAN_TASK}:scan_task_runtime_last_run_never_after_expected_window",
+            report["runtime_blockers"],
+        )
 
     def test_missing_runtime_metadata_blocks(self):
         missing_runtime_output = _task_output(SCAN_TASK, last_run=None)
@@ -247,7 +326,10 @@ class RegularOptionsStrictForwardScanTaskHealthTests(unittest.TestCase):
             report = health.build_report(generated_at_utc="2026-06-29T18:00:00Z")
 
         self.assertEqual(report["status"], "scan_task_runtime_blocked")
-        self.assertIn(f"{SCAN_TASK}:scan_task_runtime_last_run_time_missing", report["runtime_blockers"])
+        self.assertIn(
+            f"{SCAN_TASK}:scan_task_runtime_last_run_time_missing",
+            report["runtime_blockers"],
+        )
 
     def test_never_run_with_missing_start_metadata_blocks(self):
         missing_start_output = _task_output(SCAN_TASK, last_run="N/A", start_date=None)
@@ -275,7 +357,9 @@ class RegularOptionsStrictForwardScanTaskHealthTests(unittest.TestCase):
             patch.object(
                 health,
                 "_inspect_batch_file",
-                return_value=_batch_report(missing_steps=["scripts\\run_forward_cohort_scan_sweep.py --force"]),
+                return_value=_batch_report(
+                    missing_steps=["scripts\\run_forward_cohort_scan_sweep.py --force"]
+                ),
             ),
         ):
             report = health.build_report(generated_at_utc="2026-06-27T05:35:00Z")
@@ -289,14 +373,23 @@ class RegularOptionsStrictForwardScanTaskHealthTests(unittest.TestCase):
     def test_append_token_blocks(self):
         with (
             patch.object(health, "query_task", side_effect=_query),
-            patch.object(health, "_inspect_batch_file", return_value=_batch_report(prohibited_tokens_present=["--append"])),
+            patch.object(
+                health,
+                "_inspect_batch_file",
+                return_value=_batch_report(prohibited_tokens_present=["--append"]),
+            ),
         ):
             report = health.build_report(generated_at_utc="2026-06-27T05:35:00Z")
 
         self.assertEqual(report["status"], "scan_task_config_blocked")
-        self.assertIn(r"\OptionsScanPicksSafetyNet:batch_prohibited_token:--append", report["blockers"])
+        self.assertIn(
+            r"\OptionsScanPicksSafetyNet:batch_prohibited_token:--append",
+            report["blockers"],
+        )
 
-    def test_batch_inspection_detects_append_script_token_and_autotrack_true_variants(self):
+    def test_batch_inspection_detects_append_script_token_and_autotrack_true_variants(
+        self,
+    ):
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "scan.bat"
             path.write_text(
@@ -318,12 +411,23 @@ class RegularOptionsStrictForwardScanTaskHealthTests(unittest.TestCase):
 
         self.assertEqual(report["status"], "loaded")
         self.assertEqual(report["missing_steps"], [])
-        self.assertIn("APPROVE_PHASE2_FORWARD_COHORT_APPEND", report["prohibited_tokens_present"])
-        self.assertIn("append_volatility_expansion_forward_paper_shadow_rows.py", report["prohibited_tokens_present"])
+        self.assertIn(
+            "APPROVE_PHASE2_FORWARD_COHORT_APPEND", report["prohibited_tokens_present"]
+        )
+        self.assertIn(
+            "append_volatility_expansion_forward_paper_shadow_rows.py",
+            report["prohibited_tokens_present"],
+        )
         self.assertIn("OPTIONS_SCAN_AUTO_TRACK=1", report["prohibited_tokens_present"])
-        self.assertIn("OPTIONS_SCAN_AUTO_TRACK=true", report["prohibited_tokens_present"])
-        self.assertIn("OPTIONS_SCAN_AUTO_TRACK=True", report["prohibited_tokens_present"])
-        self.assertIn("OPTIONS_SCAN_AUTO_TRACK=TRUE", report["prohibited_tokens_present"])
+        self.assertIn(
+            "OPTIONS_SCAN_AUTO_TRACK=true", report["prohibited_tokens_present"]
+        )
+        self.assertIn(
+            "OPTIONS_SCAN_AUTO_TRACK=True", report["prohibited_tokens_present"]
+        )
+        self.assertIn(
+            "OPTIONS_SCAN_AUTO_TRACK=TRUE", report["prohibited_tokens_present"]
+        )
 
     def test_mispointed_task_blocks(self):
         bad_output = SCAN_OUTPUT.replace("run_scan_picks.bat", "unsafe.bat")
@@ -347,10 +451,14 @@ class RegularOptionsStrictForwardScanTaskHealthTests(unittest.TestCase):
             root = Path(temp_dir)
             with (
                 patch.object(health, "query_task", side_effect=_query),
-                patch.object(health, "_inspect_batch_file", return_value=_batch_report()),
+                patch.object(
+                    health, "_inspect_batch_file", return_value=_batch_report()
+                ),
             ):
                 report = health.build_report(generated_at_utc="2026-06-29T18:00:00Z")
-            artifacts = health.write_outputs(report, output_dir=root / "out", docs_report=root / "doc.md")
+            artifacts = health.write_outputs(
+                report, output_dir=root / "out", docs_report=root / "doc.md"
+            )
             doc = (root / "doc.md").read_text(encoding="utf8")
 
         self.assertIn("latest_json", artifacts)

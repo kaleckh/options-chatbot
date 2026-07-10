@@ -1,10 +1,10 @@
 {
   "artifacts": {
     "docs_report": "docs/regular-options-strict-forward-30-scheduler-health.md",
-    "json": "data/forward-tracking/regular_options_strict_forward_30_scheduler_health_20260710T171823Z.json",
+    "json": "data/forward-tracking/regular_options_strict_forward_30_scheduler_health_20260710T175521Z.json",
     "latest_json": "data/forward-tracking/regular_options_strict_forward_30_scheduler_health_latest.json",
     "latest_markdown": "data/forward-tracking/regular_options_strict_forward_30_scheduler_health_latest.md",
-    "markdown": "data/forward-tracking/regular_options_strict_forward_30_scheduler_health_20260710T171823Z.md"
+    "markdown": "data/forward-tracking/regular_options_strict_forward_30_scheduler_health_20260710T175521Z.md"
   },
   "batch_file": {
     "exists": true,
@@ -44,7 +44,7 @@
     "task_name": "\\OptionsStrictForward30Collector",
     "task_to_run": "C:\\Users\\kalec\\options-chatbot\\scripts\\run_strict_forward_30_auto_window_collector.bat"
   },
-  "generated_at_utc": "2026-07-10T17:18:23Z",
+  "generated_at_utc": "2026-07-10T17:55:21Z",
   "prohibited_actions": [
     "do_not_append_from_scheduler_health",
     "do_not_enable_live_validation_from_scheduler_health",
@@ -67,13 +67,13 @@
     ],
     "fields": {
       "last_result": "267009",
-      "last_run_time": "7/10/2026 11:05:01 AM",
-      "next_run_time": "7/10/2026 11:35:00 AM",
+      "last_run_time": "7/10/2026 11:35:01 AM",
+      "next_run_time": "7/10/2026 12:05:00 PM",
       "number_of_missed_runs": "",
       "start_date": "6/26/2026",
       "start_time": "7:35:00 AM"
     },
-    "generated_at_local": "2026-07-10T11:18:23",
+    "generated_at_local": "2026-07-10T11:55:21",
     "notes": [
       "Runtime telemetry is separate from top-level scheduler configuration readiness.",
       "Runtime blockers do not authorize append, live validation, auto-track, broker orders, quote import, proof-bar changes, or evidence mutation."
@@ -81,8 +81,8 @@
     "parsed": {
       "last_result_code": 267009,
       "last_run_time_is_never_run_sentinel": false,
-      "last_run_time_local": "2026-07-10T11:05:01",
-      "next_run_time_local": "2026-07-10T11:35:00",
+      "last_run_time_local": "2026-07-10T11:35:01",
+      "next_run_time_local": "2026-07-10T12:05:00",
       "number_of_missed_runs": null,
       "start_run_time_local": "2026-06-26T07:35:00"
     },
@@ -110,10 +110,10 @@
     "HostName": "KAESDEVICE",
     "Idle Time": "Disabled",
     "Last Result": "267009",
-    "Last Run Time": "7/10/2026 11:05:01 AM",
+    "Last Run Time": "7/10/2026 11:35:01 AM",
     "Logon Mode": "Interactive only",
     "Months": "Every 1 week(s)",
-    "Next Run Time": "7/10/2026 11:35:00 AM",
+    "Next Run Time": "7/10/2026 12:05:00 PM",
     "Power Management": "",
     "Repeat: Every": "0 Hour(s), 30 Minute(s)",
     "Repeat: Stop If Still Running": "Disabled",

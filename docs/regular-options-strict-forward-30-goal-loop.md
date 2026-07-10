@@ -17,11 +17,11 @@ Status: `blocked_no_phase2_natural_selections`.
 - Capture status: `no_phase2_natural_selections_no_append`.
 - Throughput status: `blocked_no_same_day_phase2_natural_selections`.
 - Candidate-starvation evidence status: `raw_symbol_drop_reasons_recorded`.
-- Scheduled Phase 2 drop-count total: `1008`.
-- Scheduled Phase 2 symbol drop reasons: `992`.
+- Scheduled Phase 2 drop-count total: `1390`.
+- Scheduled Phase 2 symbol drop reasons: `1367`.
 - Readiness status: `blocked_stale_readbacks`.
-- Scan-task health status: `scan_task_runtime_blocked`.
-- Scan-task health blockers: `["\\OptionsScanPicks:scan_task_runtime_blocking:scan_task_runtime_failed", "\\OptionsScanPicks:scan_task_runtime_last_result_nonzero", "\\OptionsScanPicksSafetyNet:scan_task_runtime_blocking:scan_task_runtime_failed", "\\OptionsScanPicksSafetyNet:scan_task_runtime_last_result_nonzero"]`.
+- Scan-task health status: `scan_tasks_ready_for_next_market_window`.
+- Scan-task health blockers: `[]`.
 - Scheduled Phase 2 scan picks: `0`.
 - Next action: `keep_passive_sweep_enabled_for_next_valid_market_window`.
 

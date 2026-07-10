@@ -16,11 +16,11 @@ Status: `collector_attempts_exhausted_waiting_for_more_rows`.
 - Latest capture status: `no_phase2_natural_selections_no_append`.
 - Latest throughput status: `blocked_no_same_day_phase2_natural_selections`.
 - Latest candidate-starvation evidence status: `raw_symbol_drop_reasons_recorded`.
-- Latest scheduled Phase 2 drop-count total: `1008`.
-- Latest scheduled Phase 2 symbol drop reasons: `992`.
+- Latest scheduled Phase 2 drop-count total: `1264`.
+- Latest scheduled Phase 2 symbol drop reasons: `1243`.
 - Latest readiness status: `blocked_stale_readbacks`.
 - Latest scan-task health status: `scan_task_runtime_blocked`.
-- Latest scan-task health blockers: `["\\OptionsScanPicks:scan_task_runtime_blocking:scan_task_runtime_failed", "\\OptionsScanPicks:scan_task_runtime_last_result_nonzero", "\\OptionsScanPicksSafetyNet:scan_task_runtime_blocking:scan_task_runtime_failed", "\\OptionsScanPicksSafetyNet:scan_task_runtime_last_result_nonzero"]`.
+- Latest scan-task health blockers: `["\\OptionsScanPicksSafetyNet:scan_task_runtime_blocking:scan_task_runtime_failed", "\\OptionsScanPicksSafetyNet:scan_task_runtime_last_result_nonzero"]`.
 - Safe no-append collector command: `npm run options:goal-loop:strict-forward-30-collector -- --selection-date 2026-07-10 --market-window-confirmed --market-window-status open --run-scan-sweep --max-attempts 3 --sleep-seconds 300 --json`.
 - Next action: `keep_bounded_collector_available_for_next_confirmed_open_market_window`.
 

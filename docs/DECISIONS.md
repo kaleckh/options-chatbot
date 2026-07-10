@@ -8,6 +8,12 @@ Durable decision: operate the options system toward defensible, prospectively ve
 
 Profitability claims must still clear preregistered, causal, executable-bid/ask, fee-and-slippage-aware, out-of-sample and forward evidence bars. Research freedom does not authorize broker orders, live capital, proof-bar reduction, holdout reuse, or promotion from historical or self-asserted evidence. Optimize for verified expected value and operational deployability rather than preserving a favored hypothesis.
 
+## 2026-07-10: Forward Entry Proof Binds To The Authoritative Ledger
+
+Durable decision: a forward completion may count only when its single preceding matched entry has an exact locator into `forward_tracking_authoritative.db` and content-revalidates against exactly one `scan_pick` event. The scan logger writes the authoritative ledger before any projected scan, fill-attempt, near-miss, or auto-track work and rejects malformed ledger acknowledgements. The tracker verifies all candidates for one report through one read-only SQLite snapshot, caches by immutable locator, requires session/event metadata parity, exact contract/timestamp/Decimal price equality, synchronized legs, and uniformly fresh `alpaca_opra` source lineage. Legacy or ambiguous rows remain fail-closed; no fuzzy backfill is allowed.
+
+Windows Task Scheduler result `0x41301` is an in-progress state when the task status is `Running`, not a failed execution. Health reports may classify that exact pair as nonblocking in-progress; other nonzero results remain blocking.
+
 ## 2026-07-10: Regular Options Has No Accepted Profitability Evidence
 
 Durable decision: maintain `safe_blocked_no_live_release`. The defensible conclusion is that the active regular-options lane has no accepted profitability evidence; the closest historical snapshot loses after fees, but absent production scanner, spread-selection, slippage, path-dependent exit, ranking, allocation, and historical-policy parity means it does not prove the production policy has negative expected value or that its opportunity-sum dollars are deployable portfolio P&L.

@@ -8,3 +8,4 @@
 - Reject counts: `{}`.
 
 This script appends completion events only to the filtered forward matched-row log. It reads trusted quote stores in read-only mode and never imports quotes, submits orders, creates tracked positions, or changes scanner policy.
+<!-- End of generated report. -->
