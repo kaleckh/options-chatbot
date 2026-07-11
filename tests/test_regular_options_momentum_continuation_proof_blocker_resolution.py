@@ -555,6 +555,7 @@ class MomentumContinuationProofBlockerResolutionTests(unittest.TestCase):
         self.assertEqual(repair["long_contract_symbol"], "QQQ250912C00581000")
         self.assertEqual(repair["short_contract_symbol"], "QQQ250912C00600000")
         self.assertEqual(repair["exit_date"], "2025-09-11")
+        self.assertTrue(str(repair["source_run"]).endswith("momentum_run.json"))
 
     def test_zero_short_bid_is_valid_on_exit_when_executable_sides_are_valid(
         self,

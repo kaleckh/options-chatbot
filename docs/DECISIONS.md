@@ -28,6 +28,8 @@ Durable decision: momentum quote coverage is synchronized trusted bid/ask availa
 
 Historical momentum diagnostics use the minimum 5% PF lower bound across ticker-week, market-week, and entry-date block bootstraps. Raw PF is not a stress test; until cost/liquidity shocks are preregistered and implemented, stress remains an explicit blocker. Historical positives remain consumed research evidence, never accepted profitability or forward proof.
 
+After bounded exact repair batch 3122 added 24,573 trusted rows for all 63 provider-confirmed targets, the expanded momentum sample reached 340 strict rows and 98.02% eligible quote coverage but its conservative PF lower bound fell to 0.92. Durable decision: reject/park this branch as underpowered rather than tuning around the newly observed losses. The remaining seven quote gaps and absent stress test are not a rationale to select this consumed lane.
+
 ## 2026-07-10: Schema-v5 Living History And Gateboard Freshness Are Structural
 
 Durable decision: WORKLOG and DECISIONS have stable class expectations (`episode` and `decision`) whose activation is recorded through hash-chained events; expectation rows alone cannot silently redefine them. Ghost graph/retrieval/expectation cleanup is transactional. Schema initialization serializes WAL setup and retries bounded lock contention rather than racing initialization.

@@ -936,6 +936,7 @@ def build_report(
             "ticker": row.get("ticker"),
             "entry_date": row.get("entry_date"),
             "exit_date": row.get("exit_date"),
+            "source_run": row.get("source_run"),
             "long_contract_symbol": row.get("long_contract_symbol"),
             "short_contract_symbol": row.get("short_contract_symbol"),
             "quote_blockers": sorted(
