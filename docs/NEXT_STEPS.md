@@ -11,7 +11,7 @@ Drive the system toward defensible, prospectively verified profitability. Existi
 Near-term execution order:
 
 1. Preserve each audited tranche in Git. Baseline `885b1cf4471a31574820f1d0e19544be48c5d171` and authoritative-verifier `d311f157` are complete; checkpoint the momentum evidence-integrity tranche after final verification.
-2. Fill the 102-row exact momentum quote-repair queue toward at least 90% eligible coverage without fuzzy pairing, then preregister and implement explicit cost/liquidity stress shocks.
+2. Repair the 76-row momentum policy-exit lifecycle queue and seven exact quote pairs without fuzzy reconstruction, then preregister and implement explicit cost/liquidity stress shocks.
 3. Continue exact forward exit evidence and production-parity replay while the untouched 0/30 forward cohort accumulates.
 4. Allocate research effort to robust positive-expectancy lanes and kill or park falsified lanes quickly.
 5. Advance a lane only after executable forward evidence clears its proof and promotion bars.
@@ -68,7 +68,7 @@ Current posture is `safe_blocked_no_live_release`.
 - Complete the fresh import with provider-exhaustive chain proof, then implement preregistered F2 alignment, frozen top-three selection, formal one-shot validation, and atomic consumption-registry append.
 - The non-self-asserted forward-entry verifier is implemented: each completion requires one preceding matched entry bound by exact session/event/run/recorded locator to one authoritative `scan_pick`, verified through a coherent read-only SQLite snapshot with exact metadata, contract, synchronized timestamp, fresh provider, and Decimal price equality. Rows created before locator emission or with unsynchronized legs remain fail-closed; do not backfill them fuzzily.
 - Accumulate 30 untouched exact forward completions under the lifecycle/contract/policy/scan-health/signal-lineage/quote-store contract. Current strict forward remains 0/30 and the paper shortlist has zero eligible candidates; implementation of the verifier does not itself establish proof.
-- Momentum continuation is a research-priority lane, not accepted profitability: 248 historical exact rows have PF 4.0816 and conservative clustered-bootstrap PF LB 2.24, but synchronized eligible quote coverage is only 251/353 (71.1%), 102 exact repairs remain, and stress testing is not preregistered. Repair coverage and stress before any new branch-selection claim; never count these rows as forward proof.
+- Momentum continuation is a research-priority lane, not accepted profitability: 264 historical exact rows have PF 2.8554 and conservative clustered-bootstrap PF LB 1.71. Quote coverage now clears its 90% bar at 270/277 (97.47%), but seven exact quote pairs, 76 otherwise-eligible missing policy exits, and preregistered stress testing remain. Repair lifecycle and stress before any branch-selection claim; never count these rows as forward proof.
 - Continue only preregistered research, source repair, paper-shadow capture, and exact evidence collection allowed by current contracts.
 - Treat consumed evaluation windows as unavailable for tuning or family selection.
 - Keep historical/materializer/tracker rows separate from prospective forward proof.

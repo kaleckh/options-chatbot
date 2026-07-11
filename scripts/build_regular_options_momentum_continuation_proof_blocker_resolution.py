@@ -86,11 +86,11 @@ MIN_STRESS_PF = 1.0
 QUOTE_BLOCKERS = frozenset(
     {
         "entry_missing_leg_quote",
-        "entry_zero_or_nonpositive_bid_ask",
+        "entry_zero_or_nonpositive_executable_side",
         "entry_crossed_quote",
         "entry_debit_nonpositive",
         "exit_missing_leg_quote",
-        "exit_zero_or_nonpositive_bid_ask",
+        "exit_negative_executable_side",
         "exit_crossed_quote",
         "exit_value_negative",
     }
@@ -392,19 +392,19 @@ def _trusted_quote(
 
 
 def _quote_pair_status(
-    long_quote: dict[str, Any] | None, short_quote: dict[str, Any] | None
+    long_quote: dict[str, Any] | None,
+    short_quote: dict[str, Any] | None,
+    *,
+    phase: str,
 ) -> str:
     if not long_quote or not short_quote:
         return "missing_leg_quote"
-    if (
-        long_quote["bid"] <= 0
-        or long_quote["ask"] <= 0
-        or short_quote["bid"] <= 0
-        or short_quote["ask"] <= 0
-    ):
-        return "zero_or_nonpositive_bid_ask"
     if long_quote["ask"] < long_quote["bid"] or short_quote["ask"] < short_quote["bid"]:
         return "crossed_quote"
+    if phase == "entry" and (long_quote["ask"] <= 0 or short_quote["bid"] <= 0):
+        return "zero_or_nonpositive_executable_side"
+    if phase == "exit" and (long_quote["bid"] < 0 or short_quote["ask"] < 0):
+        return "negative_executable_side"
     return "resolved"
 
 
@@ -517,19 +517,28 @@ def _resolved_row(
         quote_date=entry_date,
         max_minute=entry_minute,
     )
-    exit_pair = _trusted_synchronized_quote_pair(
-        conn,
-        long_contract_symbol=long_contract,
-        short_contract_symbol=short_contract,
-        quote_date=row.get("exit_date"),
-        max_minute=None,
+    exit_date = row.get("exit_date")
+    exit_pair = (
+        _trusted_synchronized_quote_pair(
+            conn,
+            long_contract_symbol=long_contract,
+            short_contract_symbol=short_contract,
+            quote_date=exit_date,
+            max_minute=None,
+        )
+        if exit_date
+        else None
     )
     entry_long = _as_dict(entry_pair.get("long")) if entry_pair else None
     entry_short = _as_dict(entry_pair.get("short")) if entry_pair else None
     exit_long = _as_dict(exit_pair.get("long")) if exit_pair else None
     exit_short = _as_dict(exit_pair.get("short")) if exit_pair else None
-    entry_status = _quote_pair_status(entry_long, entry_short)
-    exit_status = _quote_pair_status(exit_long, exit_short)
+    entry_status = _quote_pair_status(entry_long, entry_short, phase="entry")
+    exit_status = (
+        _quote_pair_status(exit_long, exit_short, phase="exit")
+        if exit_date
+        else "not_requested_missing_policy_exit_date"
+    )
     resolution_blockers: set[str] = set()
 
     hard_original_blockers = {
@@ -582,7 +591,9 @@ def _resolved_row(
 
     if entry_status != "resolved":
         resolution_blockers.add(f"entry_{entry_status}")
-    if exit_status != "resolved":
+    if not exit_date:
+        resolution_blockers.add("missing_policy_exit_date")
+    elif exit_status != "resolved":
         resolution_blockers.add(f"exit_{exit_status}")
 
     entry_debit = None
@@ -607,7 +618,7 @@ def _resolved_row(
         "row_id": row.get("row_id"),
         "ticker": row.get("ticker"),
         "entry_date": entry_date,
-        "exit_date": row.get("exit_date"),
+        "exit_date": exit_date,
         "long_contract_symbol": long_contract,
         "short_contract_symbol": short_contract,
         "source_run": source_run,
@@ -755,6 +766,7 @@ def _status(
     metrics: dict[str, Any],
     blocker_counts: Counter[str],
     quote_coverage: float,
+    eligible_missing_exit_count: int,
     artifact_integrity_blockers: list[str],
 ) -> str:
     if artifact_integrity_blockers:
@@ -766,6 +778,8 @@ def _status(
         or blocker_counts.get("missing_point_in_time_qqq_momentum_confirmation")
     ):
         return "momentum_continuation_blocked_missing_local_proof_inputs"
+    if eligible_missing_exit_count:
+        return "momentum_continuation_blocked_incomplete_exit_policy_lifecycle"
     if quote_coverage < MIN_QUOTE_COVERAGE:
         return "momentum_continuation_blocked_incomplete_eligible_quote_coverage"
     if len(strict_rows) < MIN_STRICT_ROWS:
@@ -901,6 +915,20 @@ def build_report(
         if eligible_pre_quote_rows
         else 0.0
     )
+    eligible_pre_lifecycle_rows = [
+        row
+        for row in resolved_rows
+        if not (
+            set(_as_list(row.get("resolution_blockers")))
+            - QUOTE_BLOCKERS
+            - {"missing_policy_exit_date"}
+        )
+    ]
+    eligible_missing_exit_rows = [
+        row
+        for row in eligible_pre_lifecycle_rows
+        if "missing_policy_exit_date" in set(_as_list(row.get("resolution_blockers")))
+    ]
 
     quote_repair_rows = [
         {
@@ -937,6 +965,7 @@ def build_report(
             strict_metrics,
             blocker_counts,
             eligible_quote_coverage,
+            len(eligible_missing_exit_rows),
             artifact_integrity_blockers,
         ),
         **READ_ONLY_FLAGS,
@@ -1042,6 +1071,26 @@ def build_report(
             ),
             "quote_repair_rows": quote_repair_rows,
         },
+        "exit_policy_lifecycle_resolution": {
+            "policy": "missing_exit_date_among_rows_passing_all_other_strategy_and_quote_independent_filters",
+            "eligible_pre_lifecycle_row_count": len(eligible_pre_lifecycle_rows),
+            "eligible_missing_exit_row_count": len(eligible_missing_exit_rows),
+            "eligible_missing_exit_rows": [
+                {
+                    "row_id": row.get("row_id"),
+                    "ticker": row.get("ticker"),
+                    "entry_date": row.get("entry_date"),
+                    "long_contract_symbol": row.get("long_contract_symbol"),
+                    "short_contract_symbol": row.get("short_contract_symbol"),
+                    "source_run": row.get("source_run"),
+                    "original_denominator_status": row.get(
+                        "original_denominator_status"
+                    ),
+                    "original_reason_codes": row.get("original_reason_codes"),
+                }
+                for row in eligible_missing_exit_rows
+            ],
+        },
         "strict_research_metrics": strict_metrics,
         "side_aware_diagnostic_metrics": side_aware_metrics,
         "diagnostic_old_mark_comparison": {
@@ -1053,6 +1102,7 @@ def build_report(
             strict_metrics,
             blocker_counts,
             eligible_quote_coverage,
+            len(eligible_missing_exit_rows),
             artifact_integrity_blockers,
         ),
         "sample_rows": resolved_rows[:50],
@@ -1067,6 +1117,7 @@ def _blockers(
     metrics: dict[str, Any],
     blocker_counts: Counter[str],
     quote_coverage: float,
+    eligible_missing_exit_count: int,
     artifact_integrity_blockers: list[str],
 ) -> list[str]:
     blockers = list(artifact_integrity_blockers) + [
@@ -1076,8 +1127,13 @@ def _blockers(
             "missing_point_in_time_breadth_confirmation",
             "missing_point_in_time_spy_momentum_confirmation",
             "missing_point_in_time_qqq_momentum_confirmation",
+            "missing_policy_exit_date",
         )
-        if blocker_counts.get(item)
+        if (
+            eligible_missing_exit_count
+            if item == "missing_policy_exit_date"
+            else blocker_counts.get(item)
+        )
     ]
     if quote_coverage < MIN_QUOTE_COVERAGE:
         blockers.append("eligible_quote_coverage_below_90_pct")

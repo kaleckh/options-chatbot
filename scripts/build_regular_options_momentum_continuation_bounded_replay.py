@@ -721,14 +721,15 @@ def build_report(
     elif resolution.get("status") not in {
         "momentum_continuation_proof_candidate_for_review_not_forward_proof",
         "momentum_continuation_blocked_incomplete_eligible_quote_coverage",
+        "momentum_continuation_blocked_incomplete_exit_policy_lifecycle",
     }:
         blockers.extend(
             str(item) for item in _as_list(resolution.get("blockers")) if item
         )
-    elif (
-        resolution.get("status")
-        == "momentum_continuation_blocked_incomplete_eligible_quote_coverage"
-    ):
+    elif resolution.get("status") in {
+        "momentum_continuation_blocked_incomplete_eligible_quote_coverage",
+        "momentum_continuation_blocked_incomplete_exit_policy_lifecycle",
+    }:
         blockers.extend(
             str(item) for item in _as_list(resolution.get("blockers")) if item
         )

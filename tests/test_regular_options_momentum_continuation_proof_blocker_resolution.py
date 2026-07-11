@@ -556,6 +556,43 @@ class MomentumContinuationProofBlockerResolutionTests(unittest.TestCase):
         self.assertEqual(repair["short_contract_symbol"], "QQQ250912C00600000")
         self.assertEqual(repair["exit_date"], "2025-09-11")
 
+    def test_zero_short_bid_is_valid_on_exit_when_executable_sides_are_valid(
+        self,
+    ) -> None:
+        with WorkspaceTempDir(prefix="momentum-resolution") as tmp_dir:
+            paths = self._fixture_paths(Path(tmp_dir), [_trade()])
+            conn = sqlite3.connect(paths["options_db_path"])
+            conn.execute(
+                "update option_quote_snapshots set bid = 0 "
+                "where quote_date_et = '2025-09-11' and contract_symbol = ?",
+                ("QQQ250912C00600000",),
+            )
+            conn.commit()
+            conn.close()
+            report = resolution.build_report(**paths)
+
+        self.assertEqual(report["proof_qualified_rows_after_resolution"], 1)
+        self.assertEqual(
+            report["quote_coverage_resolution"]["eligible_quote_coverage"], 1.0
+        )
+
+    def test_missing_exit_date_is_lifecycle_not_quote_coverage(self) -> None:
+        with WorkspaceTempDir(prefix="momentum-resolution") as tmp_dir:
+            paths = self._fixture_paths(Path(tmp_dir), [_trade(exit_date=None)])
+            report = resolution.build_report(**paths)
+
+        self.assertEqual(
+            report["status"],
+            "momentum_continuation_blocked_incomplete_exit_policy_lifecycle",
+        )
+        self.assertIn("missing_policy_exit_date", report["blockers"])
+        self.assertEqual(
+            report["quote_coverage_resolution"]["eligible_pre_quote_row_count"], 0
+        )
+        self.assertEqual(
+            report["quote_coverage_resolution"]["quote_repair_row_count"], 0
+        )
+
     def test_invalid_source_and_denominator_mismatch_fail_closed(self) -> None:
         with WorkspaceTempDir(prefix="momentum-resolution") as tmp_dir:
             paths = self._fixture_paths(Path(tmp_dir), [_trade()])
