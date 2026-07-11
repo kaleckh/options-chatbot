@@ -4,13 +4,17 @@ import json
 import unittest
 from pathlib import Path
 
-from scripts import build_regular_options_momentum_continuation_research_replay as replay
+from scripts import (
+    build_regular_options_momentum_continuation_research_replay as replay,
+)
 from workspace_tempdir import WorkspaceTempDir
 
 
 def _write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf8")
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf8"
+    )
 
 
 def _trade(**overrides: object) -> dict:
@@ -41,7 +45,9 @@ def _trade(**overrides: object) -> dict:
 
 
 class MomentumContinuationResearchReplayTests(unittest.TestCase):
-    def _fixture_paths(self, tmp: Path, trades: list[dict]) -> tuple[Path, Path, Path, Path, Path]:
+    def _fixture_paths(
+        self, tmp: Path, trades: list[dict]
+    ) -> tuple[Path, Path, Path, Path, Path]:
         run_path = tmp / "runs" / "momentum_run.json"
         _write_json(
             run_path,
@@ -87,7 +93,9 @@ class MomentumContinuationResearchReplayTests(unittest.TestCase):
             },
         )
         selector = tmp / "selector.json"
-        _write_json(selector, {"top_ranked_candidate": {"concept_id": replay.CONCEPT_ID}})
+        _write_json(
+            selector, {"top_ranked_candidate": {"concept_id": replay.CONCEPT_ID}}
+        )
         goal = tmp / "goal.json"
         _write_json(
             goal,
@@ -109,7 +117,9 @@ class MomentumContinuationResearchReplayTests(unittest.TestCase):
     def test_proof_row_requires_all_point_in_time_and_side_aware_fields(self) -> None:
         with WorkspaceTempDir(prefix="momentum-replay") as tmp_dir:
             tmp = Path(tmp_dir)
-            prereg, selector, all_planned, goal, run_path = self._fixture_paths(tmp, [_trade()])
+            prereg, selector, all_planned, goal, run_path = self._fixture_paths(
+                tmp, [_trade()]
+            )
             report = replay.build_report(
                 preregistered_playbook_path=prereg,
                 selector_path=selector,
@@ -119,7 +129,10 @@ class MomentumContinuationResearchReplayTests(unittest.TestCase):
                 generated_at_utc="2026-06-23T00:00:00Z",
             )
 
-        self.assertEqual(report["status"], "implemented_research_replay_has_proof_rows_not_forward_proof")
+        self.assertEqual(
+            report["status"],
+            "implemented_research_replay_has_proof_rows_not_forward_proof",
+        )
         self.assertTrue(report["research_only_replay_harness_implemented"])
         self.assertTrue(report["historical_replay_performed"])
         self.assertFalse(report["lane_implementation_performed"])
@@ -127,7 +140,9 @@ class MomentumContinuationResearchReplayTests(unittest.TestCase):
         self.assertEqual(report["proof_qualified"]["row_count"], 1)
         self.assertEqual(report["proof_qualified"]["metrics"]["net_pnl_usd"], 203.4)
 
-    def test_missing_breadth_and_side_aware_exit_blocks_old_diagnostic_marks(self) -> None:
+    def test_missing_breadth_and_side_aware_exit_blocks_old_diagnostic_marks(
+        self,
+    ) -> None:
         with WorkspaceTempDir(prefix="momentum-replay") as tmp_dir:
             tmp = Path(tmp_dir)
             trade = _trade(
@@ -137,7 +152,9 @@ class MomentumContinuationResearchReplayTests(unittest.TestCase):
                 short_entry_quote_basis="mid",
                 spread_diagnostics_proof_role="diagnostic_only",
             )
-            prereg, selector, all_planned, goal, run_path = self._fixture_paths(tmp, [trade])
+            prereg, selector, all_planned, goal, run_path = self._fixture_paths(
+                tmp, [trade]
+            )
             report = replay.build_report(
                 preregistered_playbook_path=prereg,
                 selector_path=selector,
@@ -146,20 +163,58 @@ class MomentumContinuationResearchReplayTests(unittest.TestCase):
                 run_paths=[run_path],
             )
 
-        self.assertEqual(report["status"], "implemented_research_replay_no_proof_qualified_rows")
+        self.assertEqual(
+            report["status"], "implemented_research_replay_no_proof_qualified_rows"
+        )
         self.assertEqual(report["proof_qualified"]["row_count"], 0)
         self.assertEqual(report["diagnostic_only_existing_marks"]["row_count"], 1)
         sample = report["denominator"]["sample_rows"][0]
-        self.assertIn("missing_point_in_time_breadth_confirmation", sample["reason_codes"])
+        self.assertIn(
+            "missing_point_in_time_breadth_confirmation", sample["reason_codes"]
+        )
         self.assertIn("missing_side_aware_exit_bid_ask", sample["reason_codes"])
         self.assertIn("entry_contains_mid_quote_basis", sample["reason_codes"])
+
+    def test_missing_quote_date_preserves_exact_planned_policy_exit(self) -> None:
+        with WorkspaceTempDir(prefix="momentum-replay") as tmp_dir:
+            tmp = Path(tmp_dir)
+            trade = _trade(
+                exit_date=None,
+                missing_quote_date="2025-09-05",
+                exit_spread_bid_ask_value=None,
+                net_pnl_usd=None,
+            )
+            prereg, selector, all_planned, goal, run_path = self._fixture_paths(
+                tmp, [trade]
+            )
+            report = replay.build_report(
+                preregistered_playbook_path=prereg,
+                selector_path=selector,
+                all_planned_path=all_planned,
+                goal_loop_path=goal,
+                run_paths=[run_path],
+            )
+
+        sample = report["denominator"]["sample_rows"][0]
+        self.assertEqual(sample["exit_date"], "2025-09-05")
+        self.assertEqual(
+            sample["exit_date_source"],
+            "planned_policy_exit_missing_quote_date",
+        )
+        self.assertIn("missing_side_aware_exit_bid_ask", sample["reason_codes"])
 
     def test_protected_holdout_and_duplicate_rows_are_blocked(self) -> None:
         with WorkspaceTempDir(prefix="momentum-replay") as tmp_dir:
             tmp = Path(tmp_dir)
             duplicate = _trade()
-            holdout = _trade(date="2026-06-05", exit_date="2026-06-19", contract_symbol="QQQ260619C00581000")
-            prereg, selector, all_planned, goal, run_path = self._fixture_paths(tmp, [_trade(), duplicate, holdout])
+            holdout = _trade(
+                date="2026-06-05",
+                exit_date="2026-06-19",
+                contract_symbol="QQQ260619C00581000",
+            )
+            prereg, selector, all_planned, goal, run_path = self._fixture_paths(
+                tmp, [_trade(), duplicate, holdout]
+            )
             report = replay.build_report(
                 preregistered_playbook_path=prereg,
                 selector_path=selector,
@@ -176,7 +231,9 @@ class MomentumContinuationResearchReplayTests(unittest.TestCase):
     def test_write_outputs_writes_docs_and_latest(self) -> None:
         with WorkspaceTempDir(prefix="momentum-replay") as tmp_dir:
             tmp = Path(tmp_dir)
-            prereg, selector, all_planned, goal, run_path = self._fixture_paths(tmp, [_trade()])
+            prereg, selector, all_planned, goal, run_path = self._fixture_paths(
+                tmp, [_trade()]
+            )
             report = replay.build_report(
                 preregistered_playbook_path=prereg,
                 selector_path=selector,
@@ -184,7 +241,9 @@ class MomentumContinuationResearchReplayTests(unittest.TestCase):
                 goal_loop_path=goal,
                 run_paths=[run_path],
             )
-            artifacts = replay.write_outputs(report, output_dir=tmp / "out", docs_report=tmp / "docs" / "replay.md")
+            artifacts = replay.write_outputs(
+                report, output_dir=tmp / "out", docs_report=tmp / "docs" / "replay.md"
+            )
 
             self.assertTrue((tmp / "out" / "latest.json").exists())
             self.assertTrue((tmp / "out" / "latest.md").exists())

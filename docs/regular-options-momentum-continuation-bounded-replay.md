@@ -11,11 +11,11 @@ This generated report is read-only. It gates the bounded momentum-continuation r
 - Accepted profitability: `false`.
 - Historical rows are forward proof: `false`.
 - Strict exact rows: `264`.
-- Quote coverage: `0.9747`.
+- Quote coverage: `0.7649`.
 
 ## Replay Gate Blockers
 
-- `missing_policy_exit_date`
+- `eligible_quote_coverage_below_90_pct`
 - `preregistered_stress_test_not_implemented`
 
 ## Metrics

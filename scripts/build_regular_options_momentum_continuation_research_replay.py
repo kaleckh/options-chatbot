@@ -15,24 +15,61 @@ CONCEPT_ID = "breadth_confirmed_index_qqq_momentum_continuation_debit_spread_v1"
 STRUCTURE = "defined_risk_call_debit_spreads_only"
 
 DEFAULT_PREREGISTERED_PLAYBOOK = (
-    ROOT / "data" / "profitability-lab" / "regular-options-preregistered-momentum-continuation-playbook" / "latest.json"
+    ROOT
+    / "data"
+    / "profitability-lab"
+    / "regular-options-preregistered-momentum-continuation-playbook"
+    / "latest.json"
 )
 DEFAULT_SELECTOR = (
-    ROOT / "data" / "profitability-lab" / "regular-options-preregistered-playbook-readiness-selector" / "latest.json"
+    ROOT
+    / "data"
+    / "profitability-lab"
+    / "regular-options-preregistered-playbook-readiness-selector"
+    / "latest.json"
 )
 DEFAULT_ALL_PLANNED = (
-    ROOT / "data" / "profitability-lab" / "regular-options-autoresearch" / "all-planned-sleeves" / "latest.json"
+    ROOT
+    / "data"
+    / "profitability-lab"
+    / "regular-options-autoresearch"
+    / "all-planned-sleeves"
+    / "latest.json"
 )
 DEFAULT_GOAL_LOOP = ROOT / "data" / "forward-tracking" / "options_goal_loop_latest.json"
 DEFAULT_POINT_IN_TIME_VIX_BUCKET = (
-    ROOT / "data" / "profitability-lab" / "regular-options-point-in-time-vix-bucket" / "latest.json"
+    ROOT
+    / "data"
+    / "profitability-lab"
+    / "regular-options-point-in-time-vix-bucket"
+    / "latest.json"
 )
 DEFAULT_RUNS_DIR = ROOT / "data" / "options-validation" / "runs"
-DEFAULT_OUTPUT_DIR = ROOT / "data" / "profitability-lab" / "regular-options-momentum-continuation-research-replay"
-DEFAULT_DOCS_REPORT = ROOT / "docs" / "regular-options-momentum-continuation-research-replay.md"
+DEFAULT_OUTPUT_DIR = (
+    ROOT
+    / "data"
+    / "profitability-lab"
+    / "regular-options-momentum-continuation-research-replay"
+)
+DEFAULT_DOCS_REPORT = (
+    ROOT / "docs" / "regular-options-momentum-continuation-research-replay.md"
+)
 
 PERMITTED_RESEARCH_UNIVERSE = frozenset(
-    {"SPY", "QQQ", "IWM", "DIA", "AAPL", "GOOGL", "LLY", "JNJ", "XOM", "CVX", "COP", "NEM"}
+    {
+        "SPY",
+        "QQQ",
+        "IWM",
+        "DIA",
+        "AAPL",
+        "GOOGL",
+        "LLY",
+        "JNJ",
+        "XOM",
+        "CVX",
+        "COP",
+        "NEM",
+    }
 )
 INDEX_BREADTH_CARRIERS = frozenset({"SPY", "QQQ", "IWM", "DIA"})
 PROTECTED_HOLDOUT_START = date(2026, 6, 5)
@@ -150,7 +187,8 @@ def _vix_bucket_index(payload: dict[str, Any]) -> set[str]:
         row = _as_dict(item)
         if (
             row.get("point_in_time_valid") is True
-            and row.get("source_provenance_status") == "trusted_local_or_contract_declared"
+            and row.get("source_provenance_status")
+            == "trusted_local_or_contract_declared"
             and str(row.get("vix_bucket") or "").lower() in {"low", "mid", "high"}
             and row.get("bucket_date_et")
         ):
@@ -159,7 +197,13 @@ def _vix_bucket_index(payload: dict[str, Any]) -> set[str]:
 
 
 def _load_json(path: Path, *, required: bool) -> tuple[dict[str, Any], dict[str, Any]]:
-    meta = {"path": _rel(path), "required": required, "exists": path.exists(), "status": "missing", "error": None}
+    meta = {
+        "path": _rel(path),
+        "required": required,
+        "exists": path.exists(),
+        "status": "missing",
+        "error": None,
+    }
     if not path.exists():
         return {}, meta
     try:
@@ -189,7 +233,14 @@ def _source_meta_ok(meta: dict[str, Any]) -> bool:
 def _matches_momentum_run(row: dict[str, Any]) -> bool:
     text = " ".join(
         str(row.get(key) or "")
-        for key in ("variant_id", "sleeve_id", "lane_id", "description", "strategy_family", "run_path")
+        for key in (
+            "variant_id",
+            "sleeve_id",
+            "lane_id",
+            "description",
+            "strategy_family",
+            "run_path",
+        )
     ).lower()
     return any(term in text for term in MOMENTUM_RUN_TERMS)
 
@@ -208,7 +259,13 @@ def _candidate_run_paths(all_planned: dict[str, Any], runs_dir: Path) -> list[Pa
             path = ROOT / path
         paths.append(path)
     if not paths and runs_dir.exists():
-        paths.extend(sorted(runs_dir.glob("*_intraday.json"), key=lambda item: item.stat().st_mtime, reverse=True)[:20])
+        paths.extend(
+            sorted(
+                runs_dir.glob("*_intraday.json"),
+                key=lambda item: item.stat().st_mtime,
+                reverse=True,
+            )[:20]
+        )
     deduped: dict[str, Path] = {}
     for path in paths:
         deduped[str(path.resolve())] = path
@@ -231,7 +288,11 @@ def _variant_lookup(all_planned: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 def _has_any_key(row: dict[str, Any], terms: tuple[str, ...]) -> bool:
     lower_terms = tuple(term.lower() for term in terms)
-    return any(any(term in key.lower() for term in lower_terms) and row.get(key) not in (None, "") for key in row)
+    return any(
+        any(term in key.lower() for term in lower_terms)
+        and row.get(key) not in (None, "")
+        for key in row
+    )
 
 
 def _selected_spread(row: dict[str, Any]) -> dict[str, Any]:
@@ -240,12 +301,22 @@ def _selected_spread(row: dict[str, Any]) -> dict[str, Any]:
 
 def _long_contract(row: dict[str, Any]) -> Any:
     spread = _selected_spread(row)
-    return row.get("long_contract_symbol") or spread.get("long_contract_symbol") or row.get("contract_symbol")
+    return (
+        row.get("long_contract_symbol")
+        or spread.get("long_contract_symbol")
+        or row.get("contract_symbol")
+    )
 
 
 def _short_contract(row: dict[str, Any]) -> Any:
     spread = _selected_spread(row)
     return row.get("short_contract_symbol") or spread.get("short_contract_symbol")
+
+
+def _policy_exit_date(row: dict[str, Any]) -> Any:
+    return (
+        row.get("exit_date") or row.get("closed_date") or row.get("missing_quote_date")
+    )
 
 
 def _is_call_debit_spread(row: dict[str, Any]) -> bool:
@@ -254,7 +325,12 @@ def _is_call_debit_spread(row: dict[str, Any]) -> bool:
         and str(row.get("type") or row.get("option_type") or "").lower() == "call"
         and bool(_long_contract(row))
         and bool(_short_contract(row))
-        and _safe_float(row.get("net_debit") or row.get("entry_px") or row.get("entry_spread_ask_bid_debit")) is not None
+        and _safe_float(
+            row.get("net_debit")
+            or row.get("entry_px")
+            or row.get("entry_spread_ask_bid_debit")
+        )
+        is not None
     )
 
 
@@ -267,11 +343,21 @@ def _trusted_run(run: dict[str, Any]) -> bool:
 
 
 def _has_side_aware_entry(row: dict[str, Any]) -> bool:
-    return _safe_float(row.get("entry_spread_ask_bid_debit") or row.get("entry_side_aware_debit")) is not None
+    return (
+        _safe_float(
+            row.get("entry_spread_ask_bid_debit") or row.get("entry_side_aware_debit")
+        )
+        is not None
+    )
 
 
 def _has_side_aware_exit(row: dict[str, Any]) -> bool:
-    return _safe_float(row.get("exit_spread_bid_ask_value") or row.get("exit_side_aware_value")) is not None
+    return (
+        _safe_float(
+            row.get("exit_spread_bid_ask_value") or row.get("exit_side_aware_value")
+        )
+        is not None
+    )
 
 
 def _proof_formula() -> dict[str, str]:
@@ -289,7 +375,7 @@ def _dedupe_key(row: dict[str, Any]) -> str:
         for part in (
             row.get("ticker"),
             row.get("date") or row.get("entry_date"),
-            row.get("exit_date") or row.get("closed_date"),
+            _policy_exit_date(row),
             _long_contract(row),
             _short_contract(row),
         )
@@ -323,17 +409,28 @@ def _row_reasons(
         reasons.append("missing_side_aware_entry_bid_ask")
     if not _has_side_aware_exit(row):
         reasons.append("missing_side_aware_exit_bid_ask")
-    if not _has_any_key(row, ("vix",)) and str(row.get("date") or row.get("entry_date") or "")[:10] not in vix_bucket_dates:
+    if (
+        not _has_any_key(row, ("vix",))
+        and str(row.get("date") or row.get("entry_date") or "")[:10]
+        not in vix_bucket_dates
+    ):
         reasons.append("missing_point_in_time_vix_bucket")
     if not _has_any_key(row, ("breadth", "advance_decline", "adv_dec")):
         reasons.append("missing_point_in_time_breadth_confirmation")
     if _safe_float(row.get("spy_ret5")) is None:
         reasons.append("missing_point_in_time_spy_momentum_confirmation")
-    if ticker != "QQQ" and _safe_float(row.get("qqq_ret5")) is None and _safe_float(row.get("qqq_ret20")) is None:
+    if (
+        ticker != "QQQ"
+        and _safe_float(row.get("qqq_ret5")) is None
+        and _safe_float(row.get("qqq_ret20")) is None
+    ):
         reasons.append("missing_point_in_time_qqq_momentum_confirmation")
     if str(row.get("spread_diagnostics_proof_role") or "").lower() == "diagnostic_only":
         reasons.append("spread_diagnostics_marked_diagnostic_only")
-    if str(row.get("long_entry_quote_basis") or "").lower() == "mid" or str(row.get("short_entry_quote_basis") or "").lower() == "mid":
+    if (
+        str(row.get("long_entry_quote_basis") or "").lower() == "mid"
+        or str(row.get("short_entry_quote_basis") or "").lower() == "mid"
+    ):
         reasons.append("entry_contains_mid_quote_basis")
     if row.get("net_pnl_usd") in (None, ""):
         reasons.append("missing_net_usd_pnl")
@@ -363,20 +460,40 @@ def _denominator_status(reasons: list[str]) -> str:
     return "exact_entry_and_policy_exit_captured"
 
 
-def _denominator_row(row: dict[str, Any], *, run: dict[str, Any], run_path: Path, seen_keys: set[str], vix_bucket_dates: set[str]) -> dict[str, Any]:
-    reasons = _row_reasons(row, run=run, seen_keys=seen_keys, vix_bucket_dates=vix_bucket_dates)
+def _denominator_row(
+    row: dict[str, Any],
+    *,
+    run: dict[str, Any],
+    run_path: Path,
+    seen_keys: set[str],
+    vix_bucket_dates: set[str],
+) -> dict[str, Any]:
+    reasons = _row_reasons(
+        row, run=run, seen_keys=seen_keys, vix_bucket_dates=vix_bucket_dates
+    )
     status = _denominator_status(reasons)
     key = _dedupe_key(row)
     seen_keys.add(key)
-    entry_debit = _safe_float(row.get("entry_spread_ask_bid_debit") or row.get("entry_side_aware_debit"))
-    exit_value = _safe_float(row.get("exit_spread_bid_ask_value") or row.get("exit_side_aware_value"))
+    entry_debit = _safe_float(
+        row.get("entry_spread_ask_bid_debit") or row.get("entry_side_aware_debit")
+    )
+    exit_value = _safe_float(
+        row.get("exit_spread_bid_ask_value") or row.get("exit_side_aware_value")
+    )
     net_pnl = _safe_float(row.get("net_pnl_usd"))
     diagnostic_net_pnl = net_pnl if net_pnl is not None else None
     return {
         "row_id": key,
         "ticker": str(row.get("ticker") or "").upper(),
         "entry_date": row.get("date") or row.get("entry_date"),
-        "exit_date": row.get("exit_date") or row.get("closed_date"),
+        "exit_date": _policy_exit_date(row),
+        "exit_date_source": (
+            "observed_exit_date"
+            if row.get("exit_date") or row.get("closed_date")
+            else "planned_policy_exit_missing_quote_date"
+            if row.get("missing_quote_date")
+            else None
+        ),
         "long_contract_symbol": _long_contract(row),
         "short_contract_symbol": _short_contract(row),
         "source_run": _rel(run_path),
@@ -384,13 +501,22 @@ def _denominator_row(row: dict[str, Any], *, run: dict[str, Any], run_path: Path
         "denominator_status": status,
         "proof_qualified": status == "exact_entry_and_policy_exit_captured",
         "reason_codes": reasons,
-        "entry_debit_formula_value": round(entry_debit, 4) if entry_debit is not None else None,
-        "exit_value_formula_value": round(exit_value, 4) if exit_value is not None else None,
-        "proof_net_pnl_usd": round(net_pnl, 2) if status == "exact_entry_and_policy_exit_captured" and net_pnl is not None else None,
-        "diagnostic_net_pnl_usd": round(diagnostic_net_pnl, 2) if diagnostic_net_pnl is not None else None,
+        "entry_debit_formula_value": round(entry_debit, 4)
+        if entry_debit is not None
+        else None,
+        "exit_value_formula_value": round(exit_value, 4)
+        if exit_value is not None
+        else None,
+        "proof_net_pnl_usd": round(net_pnl, 2)
+        if status == "exact_entry_and_policy_exit_captured" and net_pnl is not None
+        else None,
+        "diagnostic_net_pnl_usd": round(diagnostic_net_pnl, 2)
+        if diagnostic_net_pnl is not None
+        else None,
         "diagnostic_pnl_pct": _safe_float(row.get("net_pnl_pct") or row.get("pnl_pct")),
         "truth_source": row.get("truth_source") or run.get("truth_source"),
-        "execution_realism": row.get("execution_realism") or run.get("execution_realism"),
+        "execution_realism": row.get("execution_realism")
+        or run.get("execution_realism"),
         "entry_fill_basis": row.get("entry_fill_basis"),
         "exit_fill_basis": row.get("exit_fill_basis"),
         "entry_quote_basis": {
@@ -400,7 +526,9 @@ def _denominator_row(row: dict[str, Any], *, run: dict[str, Any], run_path: Path
     }
 
 
-def _load_run_denominator_rows(run_paths: list[Path], *, vix_bucket_dates: set[str] | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def _load_run_denominator_rows(
+    run_paths: list[Path], *, vix_bucket_dates: set[str] | None = None
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     rows: list[dict[str, Any]] = []
     metas: list[dict[str, Any]] = []
     seen_keys: set[str] = set()
@@ -415,10 +543,26 @@ def _load_run_denominator_rows(run_paths: list[Path], *, vix_bucket_dates: set[s
             continue
         for trade in _as_list(run.get("trades")):
             source = _as_dict(trade)
-            rows.append(_denominator_row(source, run=run, run_path=path, seen_keys=seen_keys, vix_bucket_dates=vix_bucket_dates))
+            rows.append(
+                _denominator_row(
+                    source,
+                    run=run,
+                    run_path=path,
+                    seen_keys=seen_keys,
+                    vix_bucket_dates=vix_bucket_dates,
+                )
+            )
         for trade in _as_list(run.get("unpriced_trades")):
             source = _as_dict(trade)
-            rows.append(_denominator_row(source, run=run, run_path=path, seen_keys=seen_keys, vix_bucket_dates=vix_bucket_dates))
+            rows.append(
+                _denominator_row(
+                    source,
+                    run=run,
+                    run_path=path,
+                    seen_keys=seen_keys,
+                    vix_bucket_dates=vix_bucket_dates,
+                )
+            )
     return rows, metas
 
 
@@ -444,7 +588,9 @@ def _profit_metrics(rows: list[dict[str, Any]], field: str) -> dict[str, Any]:
         "avg_pnl_usd": round(sum(pnl) / len(pnl), 2) if pnl else None,
         "gross_win_usd": round(gross_win, 2),
         "gross_loss_usd": round(gross_loss, 2),
-        "profit_factor": round(profit_factor, 4) if profit_factor not in (None, float("inf")) else profit_factor,
+        "profit_factor": round(profit_factor, 4)
+        if profit_factor not in (None, float("inf"))
+        else profit_factor,
     }
 
 
@@ -452,15 +598,23 @@ def _top_blockers(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     counts: Counter[str] = Counter()
     for row in rows:
         counts.update(str(item) for item in _as_list(row.get("reason_codes")))
-    return [{"reason": reason, "row_count": count} for reason, count in counts.most_common()]
+    return [
+        {"reason": reason, "row_count": count} for reason, count in counts.most_common()
+    ]
 
 
-def _run_level_compatibility(all_planned: dict[str, Any], run_metas: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _run_level_compatibility(
+    all_planned: dict[str, Any], run_metas: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
     lookup = _variant_lookup(all_planned)
     rows = []
     for meta in run_metas:
         path = Path(str(meta.get("path") or ""))
-        abs_key = str((ROOT / path).resolve()) if not path.is_absolute() else str(path.resolve())
+        abs_key = (
+            str((ROOT / path).resolve())
+            if not path.is_absolute()
+            else str(path.resolve())
+        )
         variant = lookup.get(abs_key, {})
         novelty = _as_dict(variant.get("novelty_vs_core_plus_clean_reference"))
         robustness = _as_dict(variant.get("robustness"))
@@ -470,26 +624,42 @@ def _run_level_compatibility(all_planned: dict[str, Any], run_metas: list[dict[s
                 "run_path": meta.get("path"),
                 "variant_id": variant.get("variant_id"),
                 "trusted_intraday_source": meta.get("trusted_intraday_source"),
-                "exact_trade_count": _safe_int(metrics.get("exact_trade_count") or meta.get("trade_count")),
+                "exact_trade_count": _safe_int(
+                    metrics.get("exact_trade_count") or meta.get("trade_count")
+                ),
                 "quote_coverage_pct": _safe_float(metrics.get("quote_coverage_pct")),
                 "profit_factor": _safe_float(metrics.get("profit_factor")),
-                "stress_5pct_per_side_profit_factor": _safe_float(robustness.get("stress_5pct_per_side_profit_factor")),
-                "base_clean_trade_count": _safe_int(novelty.get("base_clean_trade_count"), BASE_CLEAN_STACK_TARGET),
-                "strict_new_trade_count": _safe_int(novelty.get("strict_new_trade_count")),
-                "with_candidate_trade_count": _safe_int(novelty.get("with_candidate_trade_count")),
+                "stress_5pct_per_side_profit_factor": _safe_float(
+                    robustness.get("stress_5pct_per_side_profit_factor")
+                ),
+                "base_clean_trade_count": _safe_int(
+                    novelty.get("base_clean_trade_count"), BASE_CLEAN_STACK_TARGET
+                ),
+                "strict_new_trade_count": _safe_int(
+                    novelty.get("strict_new_trade_count")
+                ),
+                "with_candidate_trade_count": _safe_int(
+                    novelty.get("with_candidate_trade_count")
+                ),
             }
         )
     return rows
 
 
-def _goal_state(goal_payload: dict[str, Any], goal_meta: dict[str, Any]) -> dict[str, Any]:
+def _goal_state(
+    goal_payload: dict[str, Any], goal_meta: dict[str, Any]
+) -> dict[str, Any]:
     accounting = _as_dict(goal_payload.get("forward_evidence_accounting"))
     return {
         "artifact_status": goal_meta["status"],
         "current_decision_state": goal_payload.get("current_decision_state"),
-        "post_freeze_strict_exact_completed_rows": accounting.get("post_freeze_strict_exact_completed_rows"),
+        "post_freeze_strict_exact_completed_rows": accounting.get(
+            "post_freeze_strict_exact_completed_rows"
+        ),
         "minimum_required": accounting.get("minimum_required"),
-        "strict_usd_pf_lower_bound_5pct": accounting.get("strict_usd_pf_lower_bound_5pct"),
+        "strict_usd_pf_lower_bound_5pct": accounting.get(
+            "strict_usd_pf_lower_bound_5pct"
+        ),
         "live_entry_allowed": accounting.get("live_entry_allowed"),
         "auto_track_allowed": accounting.get("auto_track_allowed"),
         "broker_order_allowed": accounting.get("broker_order_allowed"),
@@ -497,7 +667,9 @@ def _goal_state(goal_payload: dict[str, Any], goal_meta: dict[str, Any]) -> dict
     }
 
 
-def _overall_status(proof_rows: list[dict[str, Any]], denominator_rows: list[dict[str, Any]]) -> str:
+def _overall_status(
+    proof_rows: list[dict[str, Any]], denominator_rows: list[dict[str, Any]]
+) -> str:
     if not denominator_rows:
         return "implemented_research_replay_no_denominator_rows"
     if proof_rows:
@@ -516,17 +688,31 @@ def build_report(
     run_paths: list[Path] | None = None,
     generated_at_utc: str | None = None,
 ) -> dict[str, Any]:
-    preregistered, preregistered_meta = _load_json(preregistered_playbook_path, required=True)
+    preregistered, preregistered_meta = _load_json(
+        preregistered_playbook_path, required=True
+    )
     selector, selector_meta = _load_json(selector_path, required=True)
     all_planned, all_planned_meta = _load_json(all_planned_path, required=True)
     goal_loop, goal_loop_meta = _load_json(goal_loop_path, required=False)
-    point_in_time_vix_bucket, vix_meta = _load_json(point_in_time_vix_bucket_path, required=False)
+    point_in_time_vix_bucket, vix_meta = _load_json(
+        point_in_time_vix_bucket_path, required=False
+    )
     vix_bucket_dates = _vix_bucket_index(point_in_time_vix_bucket)
-    selected_paths = run_paths if run_paths is not None else _candidate_run_paths(all_planned, runs_dir)
-    denominator_rows, run_metas = _load_run_denominator_rows(selected_paths, vix_bucket_dates=vix_bucket_dates)
+    selected_paths = (
+        run_paths
+        if run_paths is not None
+        else _candidate_run_paths(all_planned, runs_dir)
+    )
+    denominator_rows, run_metas = _load_run_denominator_rows(
+        selected_paths, vix_bucket_dates=vix_bucket_dates
+    )
     proof_rows = [row for row in denominator_rows if row.get("proof_qualified") is True]
-    diagnostic_priced = [row for row in denominator_rows if row.get("diagnostic_net_pnl_usd") is not None]
-    status_counts = Counter(str(row.get("denominator_status")) for row in denominator_rows)
+    diagnostic_priced = [
+        row for row in denominator_rows if row.get("diagnostic_net_pnl_usd") is not None
+    ]
+    status_counts = Counter(
+        str(row.get("denominator_status")) for row in denominator_rows
+    )
     report = {
         "report_id": REPORT_ID,
         "generated_at_utc": generated_at_utc or _utc_now_iso(),
@@ -556,9 +742,9 @@ def build_report(
         "historical_rows_are_not_forward_proof": True,
         "forward_acceptance_target": {
             "profitable_strict_completed_rows_required": 30,
-            "current_post_freeze_strict_completed_rows": _goal_state(goal_loop, goal_loop_meta).get(
-                "post_freeze_strict_exact_completed_rows"
-            ),
+            "current_post_freeze_strict_completed_rows": _goal_state(
+                goal_loop, goal_loop_meta
+            ).get("post_freeze_strict_exact_completed_rows"),
             "accepted_profitability": False,
         },
         "proof_formula": _proof_formula(),
@@ -573,12 +759,20 @@ def build_report(
         "source_validations": {
             "preregistered_concept_matches": (
                 preregistered.get("concept_id") == CONCEPT_ID
-                or _as_dict(preregistered.get("concept")).get("concept_id") == CONCEPT_ID
+                or _as_dict(preregistered.get("concept")).get("concept_id")
+                == CONCEPT_ID
             ),
-            "selector_top_candidate_matches": _as_dict(selector.get("top_ranked_candidate")).get("concept_id") == CONCEPT_ID,
+            "selector_top_candidate_matches": _as_dict(
+                selector.get("top_ranked_candidate")
+            ).get("concept_id")
+            == CONCEPT_ID,
             "run_artifact_count": len(run_metas),
-            "trusted_intraday_run_artifact_count": sum(1 for item in run_metas if item.get("trusted_intraday_source")),
-            "point_in_time_vix_bucket_ready": _vix_artifact_ready(point_in_time_vix_bucket),
+            "trusted_intraday_run_artifact_count": sum(
+                1 for item in run_metas if item.get("trusted_intraday_source")
+            ),
+            "point_in_time_vix_bucket_ready": _vix_artifact_ready(
+                point_in_time_vix_bucket
+            ),
             "point_in_time_vix_bucket_date_count": len(vix_bucket_dates),
         },
         "eligible_universe": sorted(PERMITTED_RESEARCH_UNIVERSE),
@@ -623,7 +817,9 @@ def _validate_report(report: dict[str, Any]) -> None:
     if report.get("research_only_replay_harness_implemented") is not True:
         raise ValueError("research replay harness must be marked implemented")
     if report.get("lane_implementation_performed") is not False:
-        raise ValueError("research harness must not be marked as production lane implementation")
+        raise ValueError(
+            "research harness must not be marked as production lane implementation"
+        )
     if report.get("accepted_profitability") is not False:
         raise ValueError("historical research harness cannot accept profitability")
     if report.get("protected_holdout_consumed") is not False:
@@ -722,7 +918,9 @@ def render_markdown(report: dict[str, Any]) -> str:
             "",
         ]
     )
-    lines.extend(f"- `{action}`" for action in _as_list(report.get("forbidden_actions")))
+    lines.extend(
+        f"- `{action}`" for action in _as_list(report.get("forbidden_actions"))
+    )
     lines.append("")
     return "\n".join(lines)
 
@@ -751,7 +949,10 @@ def write_outputs(
     report_with_artifacts["artifacts"] = artifacts
     markdown = render_markdown(report_with_artifacts)
     for path in (json_path, latest_json):
-        path.write_text(json.dumps(report_with_artifacts, indent=2, sort_keys=True) + "\n", encoding="utf8")
+        path.write_text(
+            json.dumps(report_with_artifacts, indent=2, sort_keys=True) + "\n",
+            encoding="utf8",
+        )
     for path in (md_path, latest_md, docs_report):
         path.write_text(markdown, encoding="utf8")
     report["artifacts"] = artifacts
@@ -759,14 +960,24 @@ def write_outputs(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build the approved research-only momentum continuation replay harness.")
-    parser.add_argument("--preregistered-playbook", type=Path, default=DEFAULT_PREREGISTERED_PLAYBOOK)
+    parser = argparse.ArgumentParser(
+        description="Build the approved research-only momentum continuation replay harness."
+    )
+    parser.add_argument(
+        "--preregistered-playbook", type=Path, default=DEFAULT_PREREGISTERED_PLAYBOOK
+    )
     parser.add_argument("--selector", type=Path, default=DEFAULT_SELECTOR)
     parser.add_argument("--all-planned", type=Path, default=DEFAULT_ALL_PLANNED)
     parser.add_argument("--goal-loop", type=Path, default=DEFAULT_GOAL_LOOP)
-    parser.add_argument("--point-in-time-vix-bucket", type=Path, default=DEFAULT_POINT_IN_TIME_VIX_BUCKET)
+    parser.add_argument(
+        "--point-in-time-vix-bucket",
+        type=Path,
+        default=DEFAULT_POINT_IN_TIME_VIX_BUCKET,
+    )
     parser.add_argument("--runs-dir", type=Path, default=DEFAULT_RUNS_DIR)
-    parser.add_argument("--run", action="append", type=Path, dest="run_paths", default=None)
+    parser.add_argument(
+        "--run", action="append", type=Path, dest="run_paths", default=None
+    )
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--docs-report", type=Path, default=DEFAULT_DOCS_REPORT)
     parser.add_argument("--no-write", action="store_true")
@@ -783,7 +994,9 @@ def main(argv: list[str] | None = None) -> int:
         run_paths=args.run_paths,
     )
     if not args.no_write:
-        report["artifacts"] = write_outputs(report, output_dir=args.output_dir, docs_report=args.docs_report)
+        report["artifacts"] = write_outputs(
+            report, output_dir=args.output_dir, docs_report=args.docs_report
+        )
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:

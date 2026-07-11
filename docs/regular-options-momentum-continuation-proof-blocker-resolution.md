@@ -4,7 +4,7 @@ This report is generated from `scripts/build_regular_options_momentum_continuati
 
 ## Summary
 
-- Status: `momentum_continuation_blocked_incomplete_exit_policy_lifecycle`.
+- Status: `momentum_continuation_blocked_incomplete_eligible_quote_coverage`.
 - Concept: `breadth_confirmed_index_qqq_momentum_continuation_debit_spread_v1`.
 - Source denominator rows: `1291`.
 - Reconstructed denominator rows: `1291`.
@@ -32,9 +32,9 @@ This report is generated from `scripts/build_regular_options_momentum_continuati
 | --- | ---: |
 | `duplicate_within_research_harness` | 461 |
 | `entry_missing_leg_quote` | 227 |
-| `exit_missing_leg_quote` | 21 |
+| `exit_missing_leg_quote` | 189 |
 | `exit_value_negative` | 23 |
-| `missing_policy_exit_date` | 395 |
+| `missing_policy_exit_date` | 227 |
 | `rejected_no_breadth_confirmation` | 260 |
 | `rejected_no_qqq_momentum_confirmation` | 283 |
 | `rejected_no_spy_momentum_confirmation` | 214 |
@@ -43,7 +43,7 @@ This report is generated from `scripts/build_regular_options_momentum_continuati
 
 ## Final Blockers
 
-- `missing_policy_exit_date`
+- `eligible_quote_coverage_below_90_pct`
 - `preregistered_stress_test_not_implemented`
 
 ## Forbidden Actions
