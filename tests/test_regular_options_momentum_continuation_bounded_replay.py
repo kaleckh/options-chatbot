@@ -203,13 +203,13 @@ class MomentumContinuationBoundedReplayTests(unittest.TestCase):
         self.assertEqual(
             report["replay_gate_blockers"],
             [
-                "missing_policy_exit_date",
+                "eligible_quote_coverage_below_90_pct",
                 "preregistered_stress_test_not_implemented",
             ],
         )
         self.assertEqual(report["metrics"]["strict_new_exact_completed_rows"], 264)
         self.assertEqual(report["metrics"]["side_aware_quotes_resolved"], 875)
-        self.assertEqual(report["metrics"]["quote_coverage"], 0.9747)
+        self.assertEqual(report["metrics"]["quote_coverage"], 0.7649)
 
     def test_fixture_replay_uses_side_aware_debit_spread_formula_and_statuses(
         self,
