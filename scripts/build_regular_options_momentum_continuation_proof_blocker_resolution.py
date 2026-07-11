@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# ruff: noqa: E402
+
 import argparse
 import json
 import sqlite3
@@ -14,35 +16,85 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts import build_regular_options_momentum_continuation_research_replay as replay
+from scripts import (
+    build_regular_options_momentum_continuation_research_replay as replay,
+)
+from scripts.build_regular_options_point_in_time_market_regime_inputs import (
+    POINT_IN_TIME_SOURCE_MODE,
+)
+from scripts.evaluate_regular_options_autoresearch import (
+    block_bootstrap_confidence_for_values,
+)
 
 REPORT_ID = "regular_options_momentum_continuation_proof_blocker_resolution"
 CONCEPT_ID = "breadth_confirmed_index_qqq_momentum_continuation_debit_spread_v1"
 
 DEFAULT_SOURCE_REPLAY = (
-    ROOT / "data" / "profitability-lab" / "regular-options-momentum-continuation-research-replay" / "latest.json"
+    ROOT
+    / "data"
+    / "profitability-lab"
+    / "regular-options-momentum-continuation-research-replay"
+    / "latest.json"
 )
 DEFAULT_PREREGISTERED_PLAYBOOK = (
-    ROOT / "data" / "profitability-lab" / "regular-options-preregistered-momentum-continuation-playbook" / "latest.json"
+    ROOT
+    / "data"
+    / "profitability-lab"
+    / "regular-options-preregistered-momentum-continuation-playbook"
+    / "latest.json"
 )
 DEFAULT_POINT_IN_TIME_VIX_BUCKET = (
-    ROOT / "data" / "profitability-lab" / "regular-options-point-in-time-vix-bucket" / "latest.json"
+    ROOT
+    / "data"
+    / "profitability-lab"
+    / "regular-options-point-in-time-vix-bucket"
+    / "latest.json"
 )
 DEFAULT_POINT_IN_TIME_MARKET_REGIME_INPUTS = (
-    ROOT / "data" / "profitability-lab" / "regular-options-point-in-time-market-regime-inputs" / "latest.json"
+    ROOT
+    / "data"
+    / "profitability-lab"
+    / "regular-options-point-in-time-market-regime-inputs"
+    / "latest.json"
 )
 DEFAULT_ALL_PLANNED = (
-    ROOT / "data" / "profitability-lab" / "regular-options-autoresearch" / "all-planned-sleeves" / "latest.json"
+    ROOT
+    / "data"
+    / "profitability-lab"
+    / "regular-options-autoresearch"
+    / "all-planned-sleeves"
+    / "latest.json"
 )
 DEFAULT_OPTIONS_DB = ROOT / "data" / "options-validation" / "options_history.db"
 DEFAULT_RUNS_DIR = ROOT / "data" / "options-validation" / "runs"
-DEFAULT_OUTPUT_DIR = ROOT / "data" / "profitability-lab" / "regular-options-momentum-continuation-proof-blocker-resolution"
-DEFAULT_DOCS_REPORT = ROOT / "docs" / "regular-options-momentum-continuation-proof-blocker-resolution.md"
+DEFAULT_OUTPUT_DIR = (
+    ROOT
+    / "data"
+    / "profitability-lab"
+    / "regular-options-momentum-continuation-proof-blocker-resolution"
+)
+DEFAULT_DOCS_REPORT = (
+    ROOT / "docs" / "regular-options-momentum-continuation-proof-blocker-resolution.md"
+)
 
 CONTRACT_MULTIPLIER = 100
 MIN_STRICT_ROWS = 30
+MIN_QUOTE_COVERAGE = 0.90
 MIN_PF_LOWER_BOUND = 1.0
 MIN_STRESS_PF = 1.0
+
+QUOTE_BLOCKERS = frozenset(
+    {
+        "entry_missing_leg_quote",
+        "entry_zero_or_nonpositive_bid_ask",
+        "entry_crossed_quote",
+        "entry_debit_nonpositive",
+        "exit_missing_leg_quote",
+        "exit_zero_or_nonpositive_bid_ask",
+        "exit_crossed_quote",
+        "exit_value_negative",
+    }
+)
 
 READ_ONLY_FLAGS = {
     "read_only": True,
@@ -134,7 +186,13 @@ def _parse_utc(value: Any) -> datetime | None:
 
 
 def _load_json(path: Path, *, required: bool) -> tuple[dict[str, Any], dict[str, Any]]:
-    meta = {"path": _rel(path), "required": required, "exists": path.exists(), "status": "missing", "error": None}
+    meta = {
+        "path": _rel(path),
+        "required": required,
+        "exists": path.exists(),
+        "status": "missing",
+        "error": None,
+    }
     if not path.exists():
         return {}, meta
     try:
@@ -159,10 +217,22 @@ def _load_json(path: Path, *, required: bool) -> tuple[dict[str, Any], dict[str,
 
 def _source_replay_valid(source: dict[str, Any]) -> bool:
     return (
-        source.get("concept_id") == CONCEPT_ID
+        source.get("report_id")
+        == "regular_options_momentum_continuation_research_replay"
+        and source.get("concept_id") == CONCEPT_ID
         and source.get("research_only_replay_harness_implemented") is True
         and source.get("accepted_profitability") is False
         and _as_dict(source.get("proof_qualified")).get("row_count") == 0
+    )
+
+
+def _preregistered_playbook_valid(playbook: dict[str, Any]) -> bool:
+    return (
+        playbook.get("report_id")
+        == "regular_options_preregistered_momentum_continuation_playbook"
+        and playbook.get("status") == "preregistered_design_only"
+        and playbook.get("concept_id") == CONCEPT_ID
+        and playbook.get("accepted_profitability") is False
     )
 
 
@@ -209,11 +279,15 @@ def _market_regime_artifact_ready(payload: dict[str, Any]) -> bool:
         payload.get("status") == "point_in_time_market_regime_inputs_ready"
         and _as_list(payload.get("blockers")) == []
         and payload.get("point_in_time_market_regime_inputs_available") is True
-        and source_time_policy.get("source_time_mode") == "point_in_time_verified_daily_history"
-        and source_time_policy.get("historical_reconstruction_can_clear_point_in_time_blockers") is False
+        and source_time_policy.get("source_time_mode") == POINT_IN_TIME_SOURCE_MODE
+        and source_time_policy.get(
+            "historical_reconstruction_can_clear_point_in_time_blockers"
+        )
+        is False
         and _safe_float(coverage.get("date_coverage_pct")) is not None
         and (_safe_float(coverage.get("date_coverage_pct")) or 0.0) >= 90.0
-        and int(coverage.get("covered_month_count") or 0) >= min(20, int(coverage.get("requested_month_count") or 0))
+        and int(coverage.get("covered_month_count") or 0)
+        >= min(20, int(coverage.get("requested_month_count") or 0))
     )
 
 
@@ -223,10 +297,10 @@ def _valid_market_regime_row(row: dict[str, Any]) -> bool:
         return False
     return (
         row.get("point_in_time_valid") is True
-        and row.get("source_time_status") == "source_known_before_input_date"
+        and row.get("source_time_status") == POINT_IN_TIME_SOURCE_MODE
         and row.get("historical_prior_bar_reconstruction") is False
         and _as_list(row.get("blockers")) == []
-        and row.get("proof_eligible") is False
+        and row.get("proof_eligible") is True
         and isinstance(row.get("spy_momentum_confirmed"), bool)
         and isinstance(row.get("qqq_momentum_confirmed"), bool)
         and isinstance(row.get("breadth_confirmed"), bool)
@@ -254,9 +328,15 @@ def _entry_minute_for_run(path: Path) -> int:
     return 10 * 60 + 25
 
 
-def _reconstruct_denominator(all_planned_path: Path, runs_dir: Path, run_paths: list[Path] | None) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, int]]:
+def _reconstruct_denominator(
+    all_planned_path: Path, runs_dir: Path, run_paths: list[Path] | None
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, int]]:
     all_planned, _meta = replay._load_json(all_planned_path, required=True)
-    selected_paths = run_paths if run_paths is not None else replay._candidate_run_paths(all_planned, runs_dir)
+    selected_paths = (
+        run_paths
+        if run_paths is not None
+        else replay._candidate_run_paths(all_planned, runs_dir)
+    )
     rows, metas = replay._load_run_denominator_rows(selected_paths)
     entry_minutes = {_rel(path): _entry_minute_for_run(path) for path in selected_paths}
     return rows, metas, entry_minutes
@@ -311,14 +391,90 @@ def _trusted_quote(
     }
 
 
-def _quote_pair_status(long_quote: dict[str, Any] | None, short_quote: dict[str, Any] | None) -> str:
+def _quote_pair_status(
+    long_quote: dict[str, Any] | None, short_quote: dict[str, Any] | None
+) -> str:
     if not long_quote or not short_quote:
         return "missing_leg_quote"
-    if long_quote["bid"] <= 0 or long_quote["ask"] <= 0 or short_quote["bid"] <= 0 or short_quote["ask"] <= 0:
+    if (
+        long_quote["bid"] <= 0
+        or long_quote["ask"] <= 0
+        or short_quote["bid"] <= 0
+        or short_quote["ask"] <= 0
+    ):
         return "zero_or_nonpositive_bid_ask"
     if long_quote["ask"] < long_quote["bid"] or short_quote["ask"] < short_quote["bid"]:
         return "crossed_quote"
     return "resolved"
+
+
+def _trusted_synchronized_quote_pair(
+    conn: sqlite3.Connection | None,
+    *,
+    long_contract_symbol: str | None,
+    short_contract_symbol: str | None,
+    quote_date: str | None,
+    max_minute: int | None,
+) -> dict[str, Any] | None:
+    if (
+        conn is None
+        or not long_contract_symbol
+        or not short_contract_symbol
+        or not quote_date
+    ):
+        return None
+    minute_clause = ""
+    params: list[Any] = [long_contract_symbol, short_contract_symbol, quote_date]
+    if max_minute is not None:
+        minute_clause = "and long_quote.quote_minute_et <= ?"
+        params.append(max_minute)
+    row = conn.execute(
+        f"""
+        select
+            long_quote.bid as long_bid,
+            long_quote.ask as long_ask,
+            short_quote.bid as short_bid,
+            short_quote.ask as short_ask,
+            long_quote.quote_minute_et as quote_minute_et,
+            long_quote.as_of_utc as as_of_utc,
+            long_batch.source_label as source_label
+        from option_quote_snapshots long_quote
+        join option_quote_snapshots short_quote
+          on short_quote.quote_date_et = long_quote.quote_date_et
+         and short_quote.quote_minute_et = long_quote.quote_minute_et
+         and short_quote.as_of_utc = long_quote.as_of_utc
+        join import_batches long_batch on long_batch.id = long_quote.source_batch_id
+        join import_batches short_batch on short_batch.id = short_quote.source_batch_id
+        where long_quote.contract_symbol = ?
+          and short_quote.contract_symbol = ?
+          and long_quote.quote_date_et = ?
+          and long_quote.snapshot_kind = 'intraday'
+          and short_quote.snapshot_kind = 'intraday'
+          and long_batch.data_trust = 'trusted'
+          and short_batch.data_trust = 'trusted'
+          and long_batch.source_label = short_batch.source_label
+          and long_quote.bid is not null
+          and long_quote.ask is not null
+          and short_quote.bid is not null
+          and short_quote.ask is not null
+          {minute_clause}
+        order by long_quote.quote_minute_et desc, long_quote.as_of_utc desc
+        limit 1
+        """,
+        params,
+    ).fetchone()
+    if row is None:
+        return None
+    return {
+        "long": {"bid": float(row["long_bid"]), "ask": float(row["long_ask"])},
+        "short": {
+            "bid": float(row["short_bid"]),
+            "ask": float(row["short_ask"]),
+        },
+        "quote_minute_et": int(row["quote_minute_et"]),
+        "as_of_utc": str(row["as_of_utc"]),
+        "source_label": str(row["source_label"]),
+    }
 
 
 def _resolved_row(
@@ -334,7 +490,9 @@ def _resolved_row(
     entry_date = str(row.get("entry_date") or "")
     vix_bucket_row = vix_buckets_by_date.get(entry_date)
     market_regime_row = market_regime_by_date.get(entry_date)
-    point_in_time_vix_bucket_resolved = "missing_point_in_time_vix_bucket" in reasons and vix_bucket_row is not None
+    point_in_time_vix_bucket_resolved = (
+        "missing_point_in_time_vix_bucket" in reasons and vix_bucket_row is not None
+    )
     point_in_time_breadth_confirmation_resolved = (
         "missing_point_in_time_breadth_confirmation" in reasons
         and market_regime_row is not None
@@ -352,10 +510,24 @@ def _resolved_row(
     )
     long_contract = row.get("long_contract_symbol")
     short_contract = row.get("short_contract_symbol")
-    entry_long = _trusted_quote(conn, contract_symbol=long_contract, quote_date=entry_date, max_minute=entry_minute)
-    entry_short = _trusted_quote(conn, contract_symbol=short_contract, quote_date=entry_date, max_minute=entry_minute)
-    exit_long = _trusted_quote(conn, contract_symbol=long_contract, quote_date=row.get("exit_date"), max_minute=None)
-    exit_short = _trusted_quote(conn, contract_symbol=short_contract, quote_date=row.get("exit_date"), max_minute=None)
+    entry_pair = _trusted_synchronized_quote_pair(
+        conn,
+        long_contract_symbol=long_contract,
+        short_contract_symbol=short_contract,
+        quote_date=entry_date,
+        max_minute=entry_minute,
+    )
+    exit_pair = _trusted_synchronized_quote_pair(
+        conn,
+        long_contract_symbol=long_contract,
+        short_contract_symbol=short_contract,
+        quote_date=row.get("exit_date"),
+        max_minute=None,
+    )
+    entry_long = _as_dict(entry_pair.get("long")) if entry_pair else None
+    entry_short = _as_dict(entry_pair.get("short")) if entry_pair else None
+    exit_long = _as_dict(exit_pair.get("long")) if exit_pair else None
+    exit_short = _as_dict(exit_pair.get("short")) if exit_pair else None
     entry_status = _quote_pair_status(entry_long, entry_short)
     exit_status = _quote_pair_status(exit_long, exit_short)
     resolution_blockers: set[str] = set()
@@ -365,7 +537,6 @@ def _resolved_row(
         "duplicate_within_research_harness",
         "rejected_outside_preregistered_universe",
         "rejected_not_call_debit_spread",
-        "missing_net_usd_pnl",
     }
     resolution_blockers.update(reasons.intersection(hard_original_blockers))
 
@@ -376,19 +547,33 @@ def _resolved_row(
         "missing_point_in_time_qqq_momentum_confirmation",
     ):
         if point_in_time_blocker in reasons:
-            if point_in_time_blocker == "missing_point_in_time_vix_bucket" and vix_bucket_row is not None:
+            if (
+                point_in_time_blocker == "missing_point_in_time_vix_bucket"
+                and vix_bucket_row is not None
+            ):
                 continue
-            if point_in_time_blocker == "missing_point_in_time_breadth_confirmation" and market_regime_row is not None:
+            if (
+                point_in_time_blocker == "missing_point_in_time_breadth_confirmation"
+                and market_regime_row is not None
+            ):
                 if market_regime_row.get("breadth_confirmed") is True:
                     continue
                 resolution_blockers.add("rejected_no_breadth_confirmation")
                 continue
-            if point_in_time_blocker == "missing_point_in_time_spy_momentum_confirmation" and market_regime_row is not None:
+            if (
+                point_in_time_blocker
+                == "missing_point_in_time_spy_momentum_confirmation"
+                and market_regime_row is not None
+            ):
                 if market_regime_row.get("spy_momentum_confirmed") is True:
                     continue
                 resolution_blockers.add("rejected_no_spy_momentum_confirmation")
                 continue
-            if point_in_time_blocker == "missing_point_in_time_qqq_momentum_confirmation" and market_regime_row is not None:
+            if (
+                point_in_time_blocker
+                == "missing_point_in_time_qqq_momentum_confirmation"
+                and market_regime_row is not None
+            ):
                 if market_regime_row.get("qqq_momentum_confirmed") is True:
                     continue
                 resolution_blockers.add("rejected_no_qqq_momentum_confirmation")
@@ -413,7 +598,9 @@ def _resolved_row(
             resolution_blockers.add("exit_value_negative")
     if entry_debit is not None and exit_value is not None:
         diagnostic_fee = 2.6
-        side_aware_net = (exit_value - entry_debit) * CONTRACT_MULTIPLIER - diagnostic_fee
+        side_aware_net = (
+            exit_value - entry_debit
+        ) * CONTRACT_MULTIPLIER - diagnostic_fee
 
     proof_qualified = not resolution_blockers
     return {
@@ -427,30 +614,69 @@ def _resolved_row(
         "original_denominator_status": row.get("denominator_status"),
         "original_reason_codes": sorted(reasons),
         "resolution_blockers": sorted(resolution_blockers),
-        "point_in_time_inputs_resolved": not any(item.startswith("missing_point_in_time_") for item in resolution_blockers),
+        "point_in_time_inputs_resolved": not any(
+            item.startswith("missing_point_in_time_") for item in resolution_blockers
+        ),
         "point_in_time_vix_bucket_resolved": point_in_time_vix_bucket_resolved,
-        "point_in_time_vix_bucket_date_et": vix_bucket_row.get("bucket_date_et") if vix_bucket_row else None,
-        "point_in_time_vix_bucket": vix_bucket_row.get("vix_bucket") if vix_bucket_row else None,
-        "point_in_time_vix_known_at_utc": vix_bucket_row.get("known_at_utc") if vix_bucket_row else None,
+        "point_in_time_vix_bucket_date_et": vix_bucket_row.get("bucket_date_et")
+        if vix_bucket_row
+        else None,
+        "point_in_time_vix_bucket": vix_bucket_row.get("vix_bucket")
+        if vix_bucket_row
+        else None,
+        "point_in_time_vix_known_at_utc": vix_bucket_row.get("known_at_utc")
+        if vix_bucket_row
+        else None,
         "point_in_time_market_regime_inputs_resolved": market_regime_row is not None,
         "point_in_time_breadth_confirmation_resolved": point_in_time_breadth_confirmation_resolved,
         "point_in_time_spy_momentum_confirmation_resolved": point_in_time_spy_momentum_confirmation_resolved,
         "point_in_time_qqq_momentum_confirmation_resolved": point_in_time_qqq_momentum_confirmation_resolved,
-        "point_in_time_market_regime_input_date_et": market_regime_row.get("input_date_et") if market_regime_row else None,
-        "point_in_time_breadth_confirmed": market_regime_row.get("breadth_confirmed") if market_regime_row else None,
-        "point_in_time_spy_momentum_confirmed": market_regime_row.get("spy_momentum_confirmed") if market_regime_row else None,
-        "point_in_time_qqq_momentum_confirmed": market_regime_row.get("qqq_momentum_confirmed") if market_regime_row else None,
-        "point_in_time_breadth_ratio": market_regime_row.get("breadth_ratio") if market_regime_row else None,
+        "point_in_time_market_regime_input_date_et": market_regime_row.get(
+            "input_date_et"
+        )
+        if market_regime_row
+        else None,
+        "point_in_time_breadth_confirmed": market_regime_row.get("breadth_confirmed")
+        if market_regime_row
+        else None,
+        "point_in_time_spy_momentum_confirmed": market_regime_row.get(
+            "spy_momentum_confirmed"
+        )
+        if market_regime_row
+        else None,
+        "point_in_time_qqq_momentum_confirmed": market_regime_row.get(
+            "qqq_momentum_confirmed"
+        )
+        if market_regime_row
+        else None,
+        "point_in_time_breadth_ratio": market_regime_row.get("breadth_ratio")
+        if market_regime_row
+        else None,
         "side_aware_entry_quote_status": entry_status,
         "side_aware_exit_quote_status": exit_status,
-        "side_aware_quotes_resolved": entry_status == "resolved" and exit_status == "resolved",
-        "entry_quote_minute_et": entry_long.get("quote_minute_et") if entry_long else None,
-        "exit_quote_minute_et": exit_long.get("quote_minute_et") if exit_long else None,
-        "side_aware_entry_debit": round(entry_debit, 4) if entry_debit is not None else None,
-        "side_aware_exit_value": round(exit_value, 4) if exit_value is not None else None,
-        "side_aware_net_pnl_usd_diagnostic": round(side_aware_net, 2) if side_aware_net is not None else None,
+        "side_aware_quotes_resolved": entry_status == "resolved"
+        and exit_status == "resolved",
+        "entry_quote_minute_et": entry_pair.get("quote_minute_et")
+        if entry_pair
+        else None,
+        "entry_quote_as_of_utc": entry_pair.get("as_of_utc") if entry_pair else None,
+        "entry_quote_pair_synchronized": entry_pair is not None,
+        "exit_quote_minute_et": exit_pair.get("quote_minute_et") if exit_pair else None,
+        "exit_quote_as_of_utc": exit_pair.get("as_of_utc") if exit_pair else None,
+        "exit_quote_pair_synchronized": exit_pair is not None,
+        "side_aware_entry_debit": round(entry_debit, 4)
+        if entry_debit is not None
+        else None,
+        "side_aware_exit_value": round(exit_value, 4)
+        if exit_value is not None
+        else None,
+        "side_aware_net_pnl_usd_diagnostic": round(side_aware_net, 2)
+        if side_aware_net is not None
+        else None,
         "old_mark_net_pnl_usd_diagnostic": row.get("diagnostic_net_pnl_usd"),
-        "proof_net_pnl_usd": round(side_aware_net, 2) if proof_qualified and side_aware_net is not None else None,
+        "proof_net_pnl_usd": round(side_aware_net, 2)
+        if proof_qualified and side_aware_net is not None
+        else None,
         "proof_qualified_after_resolution": proof_qualified,
     }
 
@@ -462,7 +688,49 @@ def _profit_metrics(rows: list[dict[str, Any]], field: str) -> dict[str, Any]:
     losses = [value for value in pnl if value < 0]
     gross_win = sum(wins)
     gross_loss = abs(sum(losses))
-    pf = gross_win / gross_loss if gross_loss > 0 else (float("inf") if gross_win > 0 else None)
+    pf = (
+        gross_win / gross_loss
+        if gross_loss > 0
+        else (float("inf") if gross_win > 0 else None)
+    )
+    dated_values = [
+        (row, parsed, value)
+        for row in rows
+        if (value := _safe_float(row.get(field))) is not None
+        and (parsed := _parse_date(row.get("entry_date"))) is not None
+    ]
+    bootstrap_by_cluster = {
+        "ticker_week": block_bootstrap_confidence_for_values(
+            [
+                (
+                    f"{row.get('ticker')}:{parsed.isocalendar().year}-W{parsed.isocalendar().week:02d}",
+                    value,
+                )
+                for row, parsed, value in dated_values
+            ],
+            branch_id=f"{REPORT_ID}:{field}:ticker_week",
+        ),
+        "market_week": block_bootstrap_confidence_for_values(
+            [
+                (
+                    f"{parsed.isocalendar().year}-W{parsed.isocalendar().week:02d}",
+                    value,
+                )
+                for _row, parsed, value in dated_values
+            ],
+            branch_id=f"{REPORT_ID}:{field}:market_week",
+        ),
+        "entry_date": block_bootstrap_confidence_for_values(
+            [(parsed.isoformat(), value) for _row, parsed, value in dated_values],
+            branch_id=f"{REPORT_ID}:{field}:entry_date",
+        ),
+    }
+    bootstrap_lbs = [
+        value
+        for result in bootstrap_by_cluster.values()
+        if (value := _safe_float(result.get("pf_lb_5pct"))) is not None
+    ]
+    conservative_bootstrap_lb = min(bootstrap_lbs) if bootstrap_lbs else None
     return {
         "row_count": len(rows),
         "priced_row_count": len(pnl),
@@ -474,12 +742,23 @@ def _profit_metrics(rows: list[dict[str, Any]], field: str) -> dict[str, Any]:
         "gross_win_usd": round(gross_win, 2),
         "gross_loss_usd": round(gross_loss, 2),
         "profit_factor": round(pf, 4) if pf not in (None, float("inf")) else pf,
-        "bootstrap_pf_lower_bound_5pct": None,
-        "stress_pf": round(pf, 4) if pf not in (None, float("inf")) else pf,
+        "bootstrap_pf_lower_bound_5pct": conservative_bootstrap_lb,
+        "bootstrap_policy": "minimum_5pct_pf_lower_bound_across_ticker_week_market_week_and_entry_date_clusters",
+        "bootstrap_sensitivity": bootstrap_by_cluster,
+        "stress_pf": None,
+        "stress_test_status": "not_implemented_requires_preregistered_cost_and_liquidity_shocks",
     }
 
 
-def _status(strict_rows: list[dict[str, Any]], metrics: dict[str, Any], blocker_counts: Counter[str]) -> str:
+def _status(
+    strict_rows: list[dict[str, Any]],
+    metrics: dict[str, Any],
+    blocker_counts: Counter[str],
+    quote_coverage: float,
+    artifact_integrity_blockers: list[str],
+) -> str:
+    if artifact_integrity_blockers:
+        return "momentum_continuation_blocked_artifact_integrity_failure"
     if (
         blocker_counts.get("missing_point_in_time_vix_bucket")
         or blocker_counts.get("missing_point_in_time_breadth_confirmation")
@@ -487,15 +766,28 @@ def _status(strict_rows: list[dict[str, Any]], metrics: dict[str, Any], blocker_
         or blocker_counts.get("missing_point_in_time_qqq_momentum_confirmation")
     ):
         return "momentum_continuation_blocked_missing_local_proof_inputs"
+    if quote_coverage < MIN_QUOTE_COVERAGE:
+        return "momentum_continuation_blocked_incomplete_eligible_quote_coverage"
     if len(strict_rows) < MIN_STRICT_ROWS:
         return "momentum_continuation_rejected_negative_or_underpowered_after_proof_resolution"
     pf = _safe_float(metrics.get("profit_factor"))
     pf_lb = _safe_float(metrics.get("bootstrap_pf_lower_bound_5pct"))
     net = _safe_float(metrics.get("net_pnl_usd"))
     stress = _safe_float(metrics.get("stress_pf"))
-    if pf and pf > 1.0 and net and net > 0 and pf_lb and pf_lb > MIN_PF_LOWER_BOUND and stress and stress >= MIN_STRESS_PF:
+    if (
+        pf
+        and pf > 1.0
+        and net
+        and net > 0
+        and pf_lb
+        and pf_lb > MIN_PF_LOWER_BOUND
+        and stress
+        and stress >= MIN_STRESS_PF
+    ):
         return "momentum_continuation_proof_candidate_for_review_not_forward_proof"
-    return "momentum_continuation_rejected_negative_or_underpowered_after_proof_resolution"
+    return (
+        "momentum_continuation_rejected_negative_or_underpowered_after_proof_resolution"
+    )
 
 
 def build_report(
@@ -511,8 +803,12 @@ def build_report(
     generated_at_utc: str | None = None,
 ) -> dict[str, Any]:
     source_replay, source_meta = _load_json(source_replay_path, required=True)
-    preregistered, preregistered_meta = _load_json(preregistered_playbook_path, required=True)
-    point_in_time_vix_bucket, vix_meta = _load_json(point_in_time_vix_bucket_path, required=False)
+    preregistered, preregistered_meta = _load_json(
+        preregistered_playbook_path, required=True
+    )
+    point_in_time_vix_bucket, vix_meta = _load_json(
+        point_in_time_vix_bucket_path, required=False
+    )
     vix_buckets_by_date = _vix_bucket_index(point_in_time_vix_bucket)
     point_in_time_market_regime_inputs, market_regime_meta = _load_json(
         point_in_time_market_regime_inputs_path,
@@ -520,54 +816,158 @@ def build_report(
     )
     market_regime_by_date = _market_regime_index(point_in_time_market_regime_inputs)
     source_valid = _source_replay_valid(source_replay)
-    denominator_rows, run_metas, entry_minutes = _reconstruct_denominator(all_planned_path, runs_dir, run_paths)
+    denominator_rows, run_metas, entry_minutes = _reconstruct_denominator(
+        all_planned_path, runs_dir, run_paths
+    )
+    declared_denominator = _as_dict(source_replay.get("denominator")).get("row_count")
+    artifact_integrity_blockers: list[str] = []
+    if source_meta.get("status") != "loaded" or not source_valid:
+        artifact_integrity_blockers.append("invalid_source_replay_artifact")
+    if preregistered_meta.get(
+        "status"
+    ) != "loaded" or not _preregistered_playbook_valid(preregistered):
+        artifact_integrity_blockers.append("invalid_preregistered_playbook_artifact")
+    if declared_denominator != len(denominator_rows):
+        artifact_integrity_blockers.append(
+            "source_and_reconstructed_denominator_mismatch"
+        )
+    if not run_metas or any(meta.get("status") != "loaded" for meta in run_metas):
+        artifact_integrity_blockers.append("incomplete_or_invalid_run_artifacts")
+    artifact_integrity_blockers = sorted(set(artifact_integrity_blockers))
     conn = _connect_options_db(options_db_path)
     try:
         resolved_rows = [
-            _resolved_row(row, conn, entry_minutes, vix_buckets_by_date, market_regime_by_date)
+            _resolved_row(
+                row, conn, entry_minutes, vix_buckets_by_date, market_regime_by_date
+            )
             for row in denominator_rows
         ]
     finally:
         if conn is not None:
             conn.close()
-    strict_rows = [row for row in resolved_rows if row.get("proof_qualified_after_resolution") is True]
-    side_aware_rows = [row for row in resolved_rows if row.get("side_aware_quotes_resolved") is True]
-    point_rows = [row for row in resolved_rows if row.get("point_in_time_inputs_resolved") is True]
-    vix_resolved_rows = [row for row in resolved_rows if row.get("point_in_time_vix_bucket_resolved") is True]
-    market_regime_rows = [row for row in resolved_rows if row.get("point_in_time_market_regime_inputs_resolved") is True]
-    breadth_resolved_rows = [row for row in resolved_rows if row.get("point_in_time_breadth_confirmation_resolved") is True]
-    spy_resolved_rows = [row for row in resolved_rows if row.get("point_in_time_spy_momentum_confirmation_resolved") is True]
-    qqq_resolved_rows = [row for row in resolved_rows if row.get("point_in_time_qqq_momentum_confirmation_resolved") is True]
+    strict_rows = [
+        row
+        for row in resolved_rows
+        if row.get("proof_qualified_after_resolution") is True
+    ]
+    side_aware_rows = [
+        row for row in resolved_rows if row.get("side_aware_quotes_resolved") is True
+    ]
+    point_rows = [
+        row for row in resolved_rows if row.get("point_in_time_inputs_resolved") is True
+    ]
+    vix_resolved_rows = [
+        row
+        for row in resolved_rows
+        if row.get("point_in_time_vix_bucket_resolved") is True
+    ]
+    market_regime_rows = [
+        row
+        for row in resolved_rows
+        if row.get("point_in_time_market_regime_inputs_resolved") is True
+    ]
+    breadth_resolved_rows = [
+        row
+        for row in resolved_rows
+        if row.get("point_in_time_breadth_confirmation_resolved") is True
+    ]
+    spy_resolved_rows = [
+        row
+        for row in resolved_rows
+        if row.get("point_in_time_spy_momentum_confirmation_resolved") is True
+    ]
+    qqq_resolved_rows = [
+        row
+        for row in resolved_rows
+        if row.get("point_in_time_qqq_momentum_confirmation_resolved") is True
+    ]
     blocker_counts: Counter[str] = Counter()
     for row in resolved_rows:
-        blocker_counts.update(str(item) for item in _as_list(row.get("resolution_blockers")))
+        blocker_counts.update(
+            str(item) for item in _as_list(row.get("resolution_blockers"))
+        )
+    eligible_pre_quote_rows = [
+        row
+        for row in resolved_rows
+        if not (set(_as_list(row.get("resolution_blockers"))) - QUOTE_BLOCKERS)
+    ]
+    eligible_side_aware_rows = [
+        row
+        for row in eligible_pre_quote_rows
+        if row.get("side_aware_quotes_resolved") is True
+    ]
+    eligible_quote_coverage = (
+        len(eligible_side_aware_rows) / len(eligible_pre_quote_rows)
+        if eligible_pre_quote_rows
+        else 0.0
+    )
+
+    quote_repair_rows = [
+        {
+            "row_id": row.get("row_id"),
+            "ticker": row.get("ticker"),
+            "entry_date": row.get("entry_date"),
+            "exit_date": row.get("exit_date"),
+            "long_contract_symbol": row.get("long_contract_symbol"),
+            "short_contract_symbol": row.get("short_contract_symbol"),
+            "quote_blockers": sorted(
+                set(_as_list(row.get("resolution_blockers"))).intersection(
+                    QUOTE_BLOCKERS
+                )
+            ),
+        }
+        for row in eligible_pre_quote_rows
+        if row.get("side_aware_quotes_resolved") is not True
+    ]
+    quote_repair_blocker_counts: Counter[str] = Counter()
+    for row in quote_repair_rows:
+        quote_repair_blocker_counts.update(row["quote_blockers"])
     strict_metrics = _profit_metrics(strict_rows, "proof_net_pnl_usd")
-    side_aware_metrics = _profit_metrics(side_aware_rows, "side_aware_net_pnl_usd_diagnostic")
-    diagnostic_metrics = _as_dict(_as_dict(source_replay.get("diagnostic_only_existing_marks")).get("metrics"))
+    side_aware_metrics = _profit_metrics(
+        side_aware_rows, "side_aware_net_pnl_usd_diagnostic"
+    )
+    diagnostic_metrics = _as_dict(
+        _as_dict(source_replay.get("diagnostic_only_existing_marks")).get("metrics")
+    )
     report = {
         "report_id": REPORT_ID,
         "generated_at_utc": generated_at_utc or _utc_now_iso(),
-        "status": _status(strict_rows, strict_metrics, blocker_counts),
+        "status": _status(
+            strict_rows,
+            strict_metrics,
+            blocker_counts,
+            eligible_quote_coverage,
+            artifact_integrity_blockers,
+        ),
         **READ_ONLY_FLAGS,
         "scope": "approved_research_only_momentum_continuation_proof_blocker_resolution",
         "concept_id": CONCEPT_ID,
-        "source_denominator_rows": _as_dict(source_replay.get("denominator")).get("row_count"),
+        "source_denominator_rows": declared_denominator,
         "reconstructed_denominator_rows": len(denominator_rows),
-        "proof_qualified_rows_before_resolution": _as_dict(source_replay.get("proof_qualified")).get("row_count"),
+        "proof_qualified_rows_before_resolution": _as_dict(
+            source_replay.get("proof_qualified")
+        ).get("row_count"),
         "proof_qualified_rows_after_resolution": len(strict_rows),
         "historical_rows_are_forward_proof": False,
         "source_replay_valid": source_valid,
+        "artifact_integrity_blockers": artifact_integrity_blockers,
         "source_artifacts": {
             "source_replay": source_meta,
             "preregistered_playbook": preregistered_meta,
             "point_in_time_vix_bucket": vix_meta,
             "point_in_time_market_regime_inputs": market_regime_meta,
             "run_artifacts": run_metas,
-            "options_db": {"path": _rel(options_db_path), "exists": options_db_path.exists(), "opened_read_only": options_db_path.exists()},
+            "options_db": {
+                "path": _rel(options_db_path),
+                "exists": options_db_path.exists(),
+                "opened_read_only": options_db_path.exists(),
+            },
         },
         "point_in_time_vix_bucket_resolution": {
             "artifact_status": point_in_time_vix_bucket.get("status"),
-            "artifact_ready_for_stale_blocker_clear": _vix_artifact_ready(point_in_time_vix_bucket),
+            "artifact_ready_for_stale_blocker_clear": _vix_artifact_ready(
+                point_in_time_vix_bucket
+            ),
             "artifact_blockers": _as_list(point_in_time_vix_bucket.get("blockers")),
             "valid_bucket_date_count": len(vix_buckets_by_date),
             "resolved_row_count": len(vix_resolved_rows),
@@ -583,9 +983,15 @@ def build_report(
         },
         "point_in_time_market_regime_input_resolution": {
             "artifact_status": point_in_time_market_regime_inputs.get("status"),
-            "artifact_ready_for_stale_blocker_clear": _market_regime_artifact_ready(point_in_time_market_regime_inputs),
-            "artifact_blockers": _as_list(point_in_time_market_regime_inputs.get("blockers")),
-            "source_time_policy": _as_dict(point_in_time_market_regime_inputs.get("source_time_policy")),
+            "artifact_ready_for_stale_blocker_clear": _market_regime_artifact_ready(
+                point_in_time_market_regime_inputs
+            ),
+            "artifact_blockers": _as_list(
+                point_in_time_market_regime_inputs.get("blockers")
+            ),
+            "source_time_policy": _as_dict(
+                point_in_time_market_regime_inputs.get("source_time_policy")
+            ),
             "historical_reconstruction_can_clear_point_in_time_blockers": _as_dict(
                 point_in_time_market_regime_inputs.get("source_time_policy")
             ).get("historical_reconstruction_can_clear_point_in_time_blockers"),
@@ -624,13 +1030,31 @@ def build_report(
             "proof_qualified_candidate_rows": len(strict_rows),
             "blocker_counts": dict(sorted(blocker_counts.items())),
         },
+        "quote_coverage_resolution": {
+            "policy": "synchronized_trusted_bid_ask_pairs_among_rows_passing_all_non_quote_filters",
+            "minimum_required": MIN_QUOTE_COVERAGE,
+            "eligible_pre_quote_row_count": len(eligible_pre_quote_rows),
+            "eligible_side_aware_row_count": len(eligible_side_aware_rows),
+            "eligible_quote_coverage": round(eligible_quote_coverage, 4),
+            "quote_repair_row_count": len(quote_repair_rows),
+            "quote_repair_blocker_counts": dict(
+                sorted(quote_repair_blocker_counts.items())
+            ),
+            "quote_repair_rows": quote_repair_rows,
+        },
         "strict_research_metrics": strict_metrics,
         "side_aware_diagnostic_metrics": side_aware_metrics,
         "diagnostic_old_mark_comparison": {
             "source_metrics": diagnostic_metrics,
             "not_counted_as_proof": True,
         },
-        "blockers": _blockers(strict_rows, strict_metrics, blocker_counts),
+        "blockers": _blockers(
+            strict_rows,
+            strict_metrics,
+            blocker_counts,
+            eligible_quote_coverage,
+            artifact_integrity_blockers,
+        ),
         "sample_rows": resolved_rows[:50],
         "forbidden_actions": list(FORBIDDEN_ACTIONS),
     }
@@ -638,8 +1062,25 @@ def build_report(
     return report
 
 
-def _blockers(strict_rows: list[dict[str, Any]], metrics: dict[str, Any], blocker_counts: Counter[str]) -> list[str]:
-    blockers = sorted(blocker_counts)
+def _blockers(
+    strict_rows: list[dict[str, Any]],
+    metrics: dict[str, Any],
+    blocker_counts: Counter[str],
+    quote_coverage: float,
+    artifact_integrity_blockers: list[str],
+) -> list[str]:
+    blockers = list(artifact_integrity_blockers) + [
+        item
+        for item in (
+            "missing_point_in_time_vix_bucket",
+            "missing_point_in_time_breadth_confirmation",
+            "missing_point_in_time_spy_momentum_confirmation",
+            "missing_point_in_time_qqq_momentum_confirmation",
+        )
+        if blocker_counts.get(item)
+    ]
+    if quote_coverage < MIN_QUOTE_COVERAGE:
+        blockers.append("eligible_quote_coverage_below_90_pct")
     if len(strict_rows) < MIN_STRICT_ROWS:
         blockers.append("strict_rows_below_30_after_resolution")
     pf_lb = _safe_float(metrics.get("bootstrap_pf_lower_bound_5pct"))
@@ -648,6 +1089,8 @@ def _blockers(strict_rows: list[dict[str, Any]], metrics: dict[str, Any], blocke
     net = _safe_float(metrics.get("net_pnl_usd"))
     if net is None or net <= 0:
         blockers.append("net_usd_not_positive_after_resolution")
+    if metrics.get("stress_test_status") != "implemented":
+        blockers.append("preregistered_stress_test_not_implemented")
     return sorted(set(blockers))
 
 
@@ -658,7 +1101,9 @@ def _validate_report(report: dict[str, Any]) -> None:
     if report.get("concept_id") != CONCEPT_ID:
         raise ValueError("wrong concept")
     if report.get("accepted_profitability") is not False:
-        raise ValueError("historical proof-blocker resolution cannot accept profitability")
+        raise ValueError(
+            "historical proof-blocker resolution cannot accept profitability"
+        )
     if report.get("historical_rows_are_forward_proof") is not False:
         raise ValueError("historical rows cannot become forward proof")
 
@@ -737,7 +1182,10 @@ def write_outputs(
     report_with_artifacts["artifacts"] = artifacts
     markdown = render_markdown(report_with_artifacts)
     for path in (json_path, latest_json):
-        path.write_text(json.dumps(report_with_artifacts, indent=2, sort_keys=True) + "\n", encoding="utf8")
+        path.write_text(
+            json.dumps(report_with_artifacts, indent=2, sort_keys=True) + "\n",
+            encoding="utf8",
+        )
     for path in (md_path, latest_md, docs_report):
         path.write_text(markdown, encoding="utf8")
     report["artifacts"] = artifacts
@@ -745,15 +1193,29 @@ def write_outputs(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build a read-only momentum-continuation proof-blocker resolution audit.")
+    parser = argparse.ArgumentParser(
+        description="Build a read-only momentum-continuation proof-blocker resolution audit."
+    )
     parser.add_argument("--source-replay", type=Path, default=DEFAULT_SOURCE_REPLAY)
-    parser.add_argument("--preregistered-playbook", type=Path, default=DEFAULT_PREREGISTERED_PLAYBOOK)
-    parser.add_argument("--point-in-time-vix-bucket", type=Path, default=DEFAULT_POINT_IN_TIME_VIX_BUCKET)
-    parser.add_argument("--point-in-time-market-regime-inputs", type=Path, default=DEFAULT_POINT_IN_TIME_MARKET_REGIME_INPUTS)
+    parser.add_argument(
+        "--preregistered-playbook", type=Path, default=DEFAULT_PREREGISTERED_PLAYBOOK
+    )
+    parser.add_argument(
+        "--point-in-time-vix-bucket",
+        type=Path,
+        default=DEFAULT_POINT_IN_TIME_VIX_BUCKET,
+    )
+    parser.add_argument(
+        "--point-in-time-market-regime-inputs",
+        type=Path,
+        default=DEFAULT_POINT_IN_TIME_MARKET_REGIME_INPUTS,
+    )
     parser.add_argument("--all-planned", type=Path, default=DEFAULT_ALL_PLANNED)
     parser.add_argument("--options-db", type=Path, default=DEFAULT_OPTIONS_DB)
     parser.add_argument("--runs-dir", type=Path, default=DEFAULT_RUNS_DIR)
-    parser.add_argument("--run", action="append", type=Path, dest="run_paths", default=None)
+    parser.add_argument(
+        "--run", action="append", type=Path, dest="run_paths", default=None
+    )
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--docs-report", type=Path, default=DEFAULT_DOCS_REPORT)
     parser.add_argument("--no-write", action="store_true")
@@ -770,7 +1232,9 @@ def main(argv: list[str] | None = None) -> int:
         run_paths=args.run_paths,
     )
     if not args.no_write:
-        report["artifacts"] = write_outputs(report, output_dir=args.output_dir, docs_report=args.docs_report)
+        report["artifacts"] = write_outputs(
+            report, output_dir=args.output_dir, docs_report=args.docs_report
+        )
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:

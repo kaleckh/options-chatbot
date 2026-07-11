@@ -22,6 +22,12 @@ The 2024-06 through 2026-05 snapshot is selection-conditioned and consumed. It m
 
 Before economic reevaluation, profile the currently impractical full adapter, establish the missing manifest-bound point-in-time corpus, implement production scanner/exit/ranking/allocation replay, complete the preregistered fresh F2/top-three/one-shot registry path, implement the forward entry quote-store verifier, and only then collect untouched exact forward completions. Do not tune on the consumed windows or reinterpret the frozen early-close contract silently.
 
+## 2026-07-10: Momentum Evidence Uses Eligible Coverage And Conservative Clustering
+
+Durable decision: momentum quote coverage is synchronized trusted bid/ask availability among rows that pass every non-quote strategy filter, not all replay rows and not only completed rows. Crossed, missing, zero/nonpositive, nonpositive-debit, and negative-exit quote failures remain in that eligible denominator and generate exact contract/date repair demand. Source replay, preregistration, run artifacts, denominator parity, and bounded-resolution arithmetic fail closed before candidate status.
+
+Historical momentum diagnostics use the minimum 5% PF lower bound across ticker-week, market-week, and entry-date block bootstraps. Raw PF is not a stress test; until cost/liquidity shocks are preregistered and implemented, stress remains an explicit blocker. Historical positives remain consumed research evidence, never accepted profitability or forward proof.
+
 ## 2026-07-10: Schema-v5 Living History And Gateboard Freshness Are Structural
 
 Durable decision: WORKLOG and DECISIONS have stable class expectations (`episode` and `decision`) whose activation is recorded through hash-chained events; expectation rows alone cannot silently redefine them. Ghost graph/retrieval/expectation cleanup is transactional. Schema initialization serializes WAL setup and retries bounded lock contention rather than racing initialization.

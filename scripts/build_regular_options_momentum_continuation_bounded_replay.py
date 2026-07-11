@@ -19,21 +19,50 @@ CONCEPT_ID = "breadth_confirmed_index_qqq_momentum_continuation_debit_spread_v1"
 EXPECTED_STRUCTURE = "defined_risk_call_debit_spreads_only"
 
 DEFAULT_SELECTOR = (
-    ROOT / "data" / "profitability-lab" / "regular-options-preregistered-playbook-readiness-selector" / "latest.json"
+    ROOT
+    / "data"
+    / "profitability-lab"
+    / "regular-options-preregistered-playbook-readiness-selector"
+    / "latest.json"
 )
 DEFAULT_PREREGISTERED_PLAYBOOK = (
-    ROOT / "data" / "profitability-lab" / "regular-options-preregistered-momentum-continuation-playbook" / "latest.json"
+    ROOT
+    / "data"
+    / "profitability-lab"
+    / "regular-options-preregistered-momentum-continuation-playbook"
+    / "latest.json"
 )
 DEFAULT_SOURCE_REPLAY = (
-    ROOT / "data" / "profitability-lab" / "regular-options-momentum-continuation-research-replay" / "latest.json"
+    ROOT
+    / "data"
+    / "profitability-lab"
+    / "regular-options-momentum-continuation-research-replay"
+    / "latest.json"
 )
 DEFAULT_PROOF_BLOCKER_RESOLUTION = (
-    ROOT / "data" / "profitability-lab" / "regular-options-momentum-continuation-proof-blocker-resolution" / "latest.json"
+    ROOT
+    / "data"
+    / "profitability-lab"
+    / "regular-options-momentum-continuation-proof-blocker-resolution"
+    / "latest.json"
 )
 DEFAULT_HOLDOUT_CONTRACT = ROOT / "data" / "contracts" / "forward-holdout-contract.json"
-DEFAULT_CLEAN_BASE_STACK = ROOT / "data" / "profitability-lab" / "regular-options-historical-walk-forward" / "latest.json"
-DEFAULT_OUTPUT_DIR = ROOT / "data" / "profitability-lab" / "regular-options-momentum-continuation-bounded-replay"
-DEFAULT_DOCS_REPORT = ROOT / "docs" / "regular-options-momentum-continuation-bounded-replay.md"
+DEFAULT_CLEAN_BASE_STACK = (
+    ROOT
+    / "data"
+    / "profitability-lab"
+    / "regular-options-historical-walk-forward"
+    / "latest.json"
+)
+DEFAULT_OUTPUT_DIR = (
+    ROOT
+    / "data"
+    / "profitability-lab"
+    / "regular-options-momentum-continuation-bounded-replay"
+)
+DEFAULT_DOCS_REPORT = (
+    ROOT / "docs" / "regular-options-momentum-continuation-bounded-replay.md"
+)
 
 CONTRACT_MULTIPLIER = 100
 MIN_HISTORICAL_EXACT_ROWS = 200
@@ -154,7 +183,13 @@ def _parse_date(value: Any) -> date | None:
 
 
 def _load_json(path: Path, *, required: bool) -> tuple[dict[str, Any], dict[str, Any]]:
-    meta = {"path": _rel(path), "required": required, "exists": path.exists(), "status": "missing", "error": None}
+    meta = {
+        "path": _rel(path),
+        "required": required,
+        "exists": path.exists(),
+        "status": "missing",
+        "error": None,
+    }
     if not path.exists():
         return {}, meta
     try:
@@ -180,8 +215,21 @@ def _load_json(path: Path, *, required: bool) -> tuple[dict[str, Any], dict[str,
 
 def _load_rows(path: Path | None) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     if path is None:
-        return [], {"path": None, "required": False, "exists": False, "status": "not_requested", "row_count": 0}
-    meta = {"path": _rel(path), "required": False, "exists": path.exists(), "status": "missing", "row_count": 0, "malformed_rows": 0}
+        return [], {
+            "path": None,
+            "required": False,
+            "exists": False,
+            "status": "not_requested",
+            "row_count": 0,
+        }
+    meta = {
+        "path": _rel(path),
+        "required": False,
+        "exists": path.exists(),
+        "status": "missing",
+        "row_count": 0,
+        "malformed_rows": 0,
+    }
     if not path.exists():
         return [], meta
     text = path.read_text(encoding="utf8").strip()
@@ -253,11 +301,28 @@ def _preregistration_valid(playbook: dict[str, Any]) -> tuple[bool, list[str]]:
 
 def _strict_new_identity(row: dict[str, Any]) -> str:
     ticker = str(row.get("ticker") or row.get("underlying") or "").upper().strip()
-    entry = str(row.get("entry_date") or row.get("selection_date") or row.get("date") or "").strip()
+    entry = str(
+        row.get("entry_date") or row.get("selection_date") or row.get("date") or ""
+    ).strip()
     expiration = str(row.get("expiration") or row.get("expiry") or "").strip()
-    long_leg = str(row.get("long_call_contract") or row.get("long_contract_symbol") or row.get("contract_symbol") or row.get("long_call_strike") or "").strip()
-    short_leg = str(row.get("short_call_contract") or row.get("short_contract_symbol") or row.get("short_call_strike") or "").strip()
-    basis = str(row.get("quote_basis") or row.get("entry_quote_basis") or "trusted_opra_nbbo_bid_ask").strip()
+    long_leg = str(
+        row.get("long_call_contract")
+        or row.get("long_contract_symbol")
+        or row.get("contract_symbol")
+        or row.get("long_call_strike")
+        or ""
+    ).strip()
+    short_leg = str(
+        row.get("short_call_contract")
+        or row.get("short_contract_symbol")
+        or row.get("short_call_strike")
+        or ""
+    ).strip()
+    basis = str(
+        row.get("quote_basis")
+        or row.get("entry_quote_basis")
+        or "trusted_opra_nbbo_bid_ask"
+    ).strip()
     if not ticker or not entry:
         return ""
     return "|".join([CONCEPT_ID, ticker, entry, expiration, long_leg, short_leg, basis])
@@ -274,10 +339,18 @@ def _base_stack_identity_set(base_stack: dict[str, Any]) -> set[str]:
     return identities
 
 
-def _fixture_status(row: dict[str, Any], *, protected_start: str, seen: set[str], base_identities: set[str]) -> tuple[str, list[str], float | None]:
+def _fixture_status(
+    row: dict[str, Any],
+    *,
+    protected_start: str,
+    seen: set[str],
+    base_identities: set[str],
+) -> tuple[str, list[str], float | None]:
     blockers: list[str] = []
     identity = _strict_new_identity(row)
-    entry_date = _parse_date(row.get("entry_date") or row.get("selection_date") or row.get("date"))
+    entry_date = _parse_date(
+        row.get("entry_date") or row.get("selection_date") or row.get("date")
+    )
     holdout_date = _parse_date(protected_start)
     if row.get("candidate") is False:
         return "no_candidate", ["no_candidate"], None
@@ -288,22 +361,55 @@ def _fixture_status(row: dict[str, Any], *, protected_start: str, seen: set[str]
     elif holdout_date is not None and entry_date >= holdout_date:
         return "protected_holdout_blocked", ["protected_holdout_blocked"], None
     if row.get("trend_confirmed") is False:
-        return "rejected_no_trend_confirmation", ["rejected_no_trend_confirmation"], None
+        return (
+            "rejected_no_trend_confirmation",
+            ["rejected_no_trend_confirmation"],
+            None,
+        )
     if row.get("breadth_confirmed") is False:
-        return "rejected_no_breadth_confirmation", ["rejected_no_breadth_confirmation"], None
-    if str(row.get("vix_bucket") or "").lower() not in {"low", "mid", "low_mid", "low-mid"}:
+        return (
+            "rejected_no_breadth_confirmation",
+            ["rejected_no_breadth_confirmation"],
+            None,
+        )
+    if str(row.get("vix_bucket") or "").lower() not in {
+        "low",
+        "mid",
+        "low_mid",
+        "low-mid",
+    }:
         return "rejected_vix_bucket", ["rejected_vix_bucket"], None
     long_strike = _safe_float(row.get("long_call_strike"))
     short_strike = _safe_float(row.get("short_call_strike"))
-    if long_strike is not None and short_strike is not None and long_strike >= short_strike:
-        return "malformed_candidate", ["long_call_strike_must_be_below_short_call_strike"], None
-    width = short_strike - long_strike if long_strike is not None and short_strike is not None else None
+    if (
+        long_strike is not None
+        and short_strike is not None
+        and long_strike >= short_strike
+    ):
+        return (
+            "malformed_candidate",
+            ["long_call_strike_must_be_below_short_call_strike"],
+            None,
+        )
+    width = (
+        short_strike - long_strike
+        if long_strike is not None and short_strike is not None
+        else None
+    )
     if width is not None and width <= 0:
         return "rejected_width_or_liquidity", ["nonpositive_width"], None
-    entry_long_ask = _safe_float(_first_present(row, "long_call_ask", "entry_long_call_ask"))
-    entry_short_bid = _safe_float(_first_present(row, "short_call_bid", "entry_short_call_bid"))
-    exit_long_bid = _safe_float(_first_present(row, "long_call_bid_exit", "exit_long_call_bid"))
-    exit_short_ask = _safe_float(_first_present(row, "short_call_ask_exit", "exit_short_call_ask"))
+    entry_long_ask = _safe_float(
+        _first_present(row, "long_call_ask", "entry_long_call_ask")
+    )
+    entry_short_bid = _safe_float(
+        _first_present(row, "short_call_bid", "entry_short_call_bid")
+    )
+    exit_long_bid = _safe_float(
+        _first_present(row, "long_call_bid_exit", "exit_long_call_bid")
+    )
+    exit_short_ask = _safe_float(
+        _first_present(row, "short_call_ask_exit", "exit_short_call_ask")
+    )
     if entry_long_ask is None or entry_short_bid is None:
         return "missing_leg_quote", ["missing_entry_leg_quote"], None
     if entry_long_ask <= 0 or entry_short_bid <= 0:
@@ -312,7 +418,11 @@ def _fixture_status(row: dict[str, Any], *, protected_start: str, seen: set[str]
     if entry_debit <= 0:
         return "rejected_width_or_liquidity", ["entry_debit_nonpositive"], None
     if row.get("open_waiting_policy_exit") is True:
-        return "open_waiting_policy_exit_or_expiry", ["open_waiting_policy_exit_or_expiry"], None
+        return (
+            "open_waiting_policy_exit_or_expiry",
+            ["open_waiting_policy_exit_or_expiry"],
+            None,
+        )
     fees = _safe_float(row.get("fees_usd")) or 0.0
     slippage = _safe_float(row.get("slippage_usd")) or 0.0
     if exit_long_bid is not None and exit_short_ask is not None:
@@ -322,8 +432,14 @@ def _fixture_status(row: dict[str, Any], *, protected_start: str, seen: set[str]
         net = (exit_value - entry_debit) * CONTRACT_MULTIPLIER - fees - slippage
         return "exact_exit_captured", [], net
     underlying_expiry = _safe_float(row.get("underlying_expiry_price"))
-    if underlying_expiry is not None and long_strike is not None and short_strike is not None:
-        settlement_value = max(underlying_expiry - long_strike, 0.0) - max(underlying_expiry - short_strike, 0.0)
+    if (
+        underlying_expiry is not None
+        and long_strike is not None
+        and short_strike is not None
+    ):
+        settlement_value = max(underlying_expiry - long_strike, 0.0) - max(
+            underlying_expiry - short_strike, 0.0
+        )
         net = (settlement_value - entry_debit) * CONTRACT_MULTIPLIER - fees - slippage
         return "expired_settled_exact", [], net
     if row.get("entry_only") is True:
@@ -331,12 +447,19 @@ def _fixture_status(row: dict[str, Any], *, protected_start: str, seen: set[str]
     return "missing_exit", ["missing_policy_exit_quote_or_expiry_settlement"], None
 
 
-def _classify_fixture_rows(rows: list[dict[str, Any]], *, protected_start: str, base_identities: set[str]) -> list[dict[str, Any]]:
+def _classify_fixture_rows(
+    rows: list[dict[str, Any]], *, protected_start: str, base_identities: set[str]
+) -> list[dict[str, Any]]:
     classified: list[dict[str, Any]] = []
     seen: set[str] = set()
     for index, row in enumerate(rows, start=1):
         identity = _strict_new_identity(row)
-        status, blockers, net = _fixture_status(row, protected_start=protected_start, seen=seen, base_identities=base_identities)
+        status, blockers, net = _fixture_status(
+            row,
+            protected_start=protected_start,
+            seen=seen,
+            base_identities=base_identities,
+        )
         if identity:
             seen.add(identity)
         classified.append(
@@ -344,7 +467,9 @@ def _classify_fixture_rows(rows: list[dict[str, Any]], *, protected_start: str, 
                 "row_number": index,
                 "strict_new_identity": identity,
                 "ticker": str(row.get("ticker") or row.get("underlying") or "").upper(),
-                "entry_date": row.get("entry_date") or row.get("selection_date") or row.get("date"),
+                "entry_date": row.get("entry_date")
+                or row.get("selection_date")
+                or row.get("date"),
                 "expiration": row.get("expiration") or row.get("expiry"),
                 "denominator_status": status,
                 "blockers": blockers,
@@ -354,14 +479,20 @@ def _classify_fixture_rows(rows: list[dict[str, Any]], *, protected_start: str, 
     return classified
 
 
-def _profit_metrics(rows: list[dict[str, Any]], *, field: str = "net_pnl_usd") -> dict[str, Any]:
+def _profit_metrics(
+    rows: list[dict[str, Any]], *, field: str = "net_pnl_usd"
+) -> dict[str, Any]:
     values = [_safe_float(row.get(field)) for row in rows]
     pnl = [value for value in values if value is not None]
     wins = [value for value in pnl if value > 0]
     losses = [value for value in pnl if value < 0]
     gross_profit = sum(wins)
     gross_loss = abs(sum(losses))
-    pf = gross_profit / gross_loss if gross_loss > 0 else (float("inf") if gross_profit > 0 else None)
+    pf = (
+        gross_profit / gross_loss
+        if gross_loss > 0
+        else (float("inf") if gross_profit > 0 else None)
+    )
     return {
         "row_count": len(rows),
         "priced_row_count": len(pnl),
@@ -379,14 +510,21 @@ def _profit_metrics(rows: list[dict[str, Any]], *, field: str = "net_pnl_usd") -
 
 
 def _fixture_metrics(rows: list[dict[str, Any]], blockers: list[str]) -> dict[str, Any]:
-    exact = [row for row in rows if row.get("denominator_status") in {"exact_exit_captured", "expired_settled_exact"}]
+    exact = [
+        row
+        for row in rows
+        if row.get("denominator_status")
+        in {"exact_exit_captured", "expired_settled_exact"}
+    ]
     status_counts = Counter(str(row.get("denominator_status")) for row in rows)
     profit = _profit_metrics(exact)
     return {
         "total_denominator_rows": len(rows),
         "denominator_counts": dict(sorted(status_counts.items())),
         "exact_completed_rows": len(exact),
-        "strict_new_exact_completed_rows": sum(1 for row in exact if row.get("strict_new_identity")),
+        "strict_new_exact_completed_rows": sum(
+            1 for row in exact if row.get("strict_new_identity")
+        ),
         "minimum_historical_exact_rows": MIN_HISTORICAL_EXACT_ROWS,
         "latest_audit_30_row_bar_met": len(exact) >= MIN_LATEST_AUDIT_EXACT_ROWS,
         "quote_coverage": round(len(exact) / len(rows), 4) if rows else 0.0,
@@ -396,24 +534,46 @@ def _fixture_metrics(rows: list[dict[str, Any]], blockers: list[str]) -> dict[st
     }
 
 
-def _resolution_metrics(source_replay: dict[str, Any], resolution: dict[str, Any], blockers: list[str]) -> dict[str, Any]:
+def _resolution_metrics(
+    source_replay: dict[str, Any], resolution: dict[str, Any], blockers: list[str]
+) -> dict[str, Any]:
     counts = _as_dict(resolution.get("resolution_counts"))
     strict_metrics = _as_dict(resolution.get("strict_research_metrics"))
     side_aware_metrics = _as_dict(resolution.get("side_aware_diagnostic_metrics"))
-    old_mark_metrics = _as_dict(_as_dict(source_replay.get("diagnostic_only_existing_marks")).get("metrics"))
-    denominator_rows = _safe_float(source_replay.get("source_denominator_rows")) or _safe_float(_as_dict(source_replay.get("denominator")).get("row_count")) or 0
-    proof_rows = _safe_float(resolution.get("proof_qualified_rows_after_resolution")) or 0
+    old_mark_metrics = _as_dict(
+        _as_dict(source_replay.get("diagnostic_only_existing_marks")).get("metrics")
+    )
+    denominator_rows = (
+        _safe_float(source_replay.get("source_denominator_rows"))
+        or _safe_float(_as_dict(source_replay.get("denominator")).get("row_count"))
+        or 0
+    )
+    proof_rows = (
+        _safe_float(resolution.get("proof_qualified_rows_after_resolution")) or 0
+    )
     side_rows = _safe_float(counts.get("side_aware_quotes_resolved")) or 0
+    quote_resolution = _as_dict(resolution.get("quote_coverage_resolution"))
+    eligible_quote_coverage = _safe_float(
+        quote_resolution.get("eligible_quote_coverage")
+    )
+    quote_coverage = (
+        eligible_quote_coverage
+        if eligible_quote_coverage is not None
+        else (side_rows / denominator_rows if denominator_rows else 0.0)
+    )
     return {
         "total_denominator_rows": int(denominator_rows),
         "exact_completed_rows": int(proof_rows),
         "strict_new_exact_completed_rows": int(proof_rows),
         "minimum_historical_exact_rows": MIN_HISTORICAL_EXACT_ROWS,
         "latest_audit_30_row_bar_met": int(proof_rows) >= MIN_LATEST_AUDIT_EXACT_ROWS,
-        "quote_coverage": round(side_rows / denominator_rows, 4) if denominator_rows else 0.0,
+        "quote_coverage": round(quote_coverage, 4),
+        "quote_coverage_resolution": quote_resolution,
         "point_in_time_inputs_resolved": counts.get("point_in_time_inputs_resolved"),
         "side_aware_quotes_resolved": counts.get("side_aware_quotes_resolved"),
-        "proof_qualified_rows_after_resolution": resolution.get("proof_qualified_rows_after_resolution"),
+        "proof_qualified_rows_after_resolution": resolution.get(
+            "proof_qualified_rows_after_resolution"
+        ),
         "blocker_counts": counts.get("blocker_counts") or {},
         "strict_research_metrics": strict_metrics,
         "side_aware_diagnostic_metrics": side_aware_metrics,
@@ -431,10 +591,43 @@ def _source_replay_valid(source_replay: dict[str, Any]) -> bool:
 
 
 def _resolution_valid(resolution: dict[str, Any]) -> bool:
+    counts = _as_dict(resolution.get("resolution_counts"))
+    quote_resolution = _as_dict(resolution.get("quote_coverage_resolution"))
+    eligible = _safe_float(quote_resolution.get("eligible_pre_quote_row_count"))
+    quoted = _safe_float(quote_resolution.get("eligible_side_aware_row_count"))
+    coverage = _safe_float(quote_resolution.get("eligible_quote_coverage"))
+    expected_coverage = quoted / eligible if eligible and quoted is not None else 0.0
+    proof_rows = _safe_float(resolution.get("proof_qualified_rows_after_resolution"))
+    counted_proof_rows = _safe_float(counts.get("proof_qualified_candidate_rows"))
+    blockers = [str(item) for item in _as_list(resolution.get("blockers")) if item]
+    status = str(resolution.get("status") or "")
+    status_consistent = (
+        status == "momentum_continuation_proof_candidate_for_review_not_forward_proof"
+        and not blockers
+        and coverage is not None
+        and coverage >= MIN_QUOTE_COVERAGE
+    ) or (
+        status != "momentum_continuation_proof_candidate_for_review_not_forward_proof"
+        and bool(blockers)
+    )
     return (
-        resolution.get("concept_id") == CONCEPT_ID
+        resolution.get("report_id")
+        == "regular_options_momentum_continuation_proof_blocker_resolution"
+        and resolution.get("concept_id") == CONCEPT_ID
         and resolution.get("accepted_profitability") is False
         and resolution.get("historical_rows_are_forward_proof") is False
+        and resolution.get("read_only") is True
+        and resolution.get("broker_order_allowed") is False
+        and eligible is not None
+        and eligible >= 0
+        and quoted is not None
+        and 0 <= quoted <= eligible
+        and coverage is not None
+        and 0 <= coverage <= 1
+        and abs(coverage - round(expected_coverage, 4)) < 0.0001
+        and proof_rows is not None
+        and proof_rows == counted_proof_rows
+        and status_consistent
     )
 
 
@@ -444,10 +637,26 @@ def _status_from_metrics(metrics: dict[str, Any], blockers: list[str]) -> str:
     exact = int(metrics.get("strict_new_exact_completed_rows") or 0)
     quote_coverage = _safe_float(metrics.get("quote_coverage")) or 0.0
     strict_metrics = _as_dict(metrics.get("strict_research_metrics"))
-    net = _safe_float(metrics.get("net_pnl_usd")) if "net_pnl_usd" in metrics else _safe_float(strict_metrics.get("net_pnl_usd"))
-    pf = _safe_float(metrics.get("profit_factor")) if "profit_factor" in metrics else _safe_float(strict_metrics.get("profit_factor"))
-    pf_lb = _safe_float(metrics.get("bootstrap_pf_lower_bound_5pct")) if "bootstrap_pf_lower_bound_5pct" in metrics else _safe_float(strict_metrics.get("bootstrap_pf_lower_bound_5pct"))
-    stress = _safe_float(metrics.get("stress_pf")) if "stress_pf" in metrics else _safe_float(strict_metrics.get("stress_pf"))
+    net = (
+        _safe_float(metrics.get("net_pnl_usd"))
+        if "net_pnl_usd" in metrics
+        else _safe_float(strict_metrics.get("net_pnl_usd"))
+    )
+    pf = (
+        _safe_float(metrics.get("profit_factor"))
+        if "profit_factor" in metrics
+        else _safe_float(strict_metrics.get("profit_factor"))
+    )
+    pf_lb = (
+        _safe_float(metrics.get("bootstrap_pf_lower_bound_5pct"))
+        if "bootstrap_pf_lower_bound_5pct" in metrics
+        else _safe_float(strict_metrics.get("bootstrap_pf_lower_bound_5pct"))
+    )
+    stress = (
+        _safe_float(metrics.get("stress_pf"))
+        if "stress_pf" in metrics
+        else _safe_float(strict_metrics.get("stress_pf"))
+    )
     if (
         exact >= MIN_HISTORICAL_EXACT_ROWS
         and exact >= MIN_LATEST_AUDIT_EXACT_ROWS
@@ -479,24 +688,63 @@ def build_report(
     selector, selector_meta = _load_json(selector_path, required=True)
     playbook, playbook_meta = _load_json(preregistered_playbook_path, required=True)
     source_replay, source_replay_meta = _load_json(source_replay_path, required=True)
-    resolution, resolution_meta = _load_json(proof_blocker_resolution_path, required=True)
+    resolution, resolution_meta = _load_json(
+        proof_blocker_resolution_path, required=True
+    )
     holdout, holdout_meta = _load_json(holdout_contract_path, required=True)
-    clean_base_stack, clean_base_meta = _load_json(clean_base_stack_path, required=False)
+    clean_base_stack, clean_base_meta = _load_json(
+        clean_base_stack_path, required=False
+    )
     fixture_rows, fixture_meta = _load_rows(fixture_candidates_path)
 
     blockers: list[str] = []
-    selector_ok, selector_reasons = _selector_valid(selector) if selector_meta["status"] == "loaded" else (False, ["missing_readiness_selector"])
-    prereg_ok, prereg_reasons = _preregistration_valid(playbook) if playbook_meta["status"] == "loaded" else (False, ["missing_preregistration_artifact"])
+    selector_ok, selector_reasons = (
+        _selector_valid(selector)
+        if selector_meta["status"] == "loaded"
+        else (False, ["missing_readiness_selector"])
+    )
+    prereg_ok, prereg_reasons = (
+        _preregistration_valid(playbook)
+        if playbook_meta["status"] == "loaded"
+        else (False, ["missing_preregistration_artifact"])
+    )
     if not selector_ok:
         blockers.extend(selector_reasons)
     if not prereg_ok:
         blockers.extend(prereg_reasons)
-    if source_replay_meta["status"] != "loaded" or not _source_replay_valid(source_replay):
+    if source_replay_meta["status"] != "loaded" or not _source_replay_valid(
+        source_replay
+    ):
         blockers.append("missing_or_invalid_momentum_research_replay")
     if resolution_meta["status"] != "loaded" or not _resolution_valid(resolution):
         blockers.append("missing_or_invalid_momentum_proof_blocker_resolution")
-    elif resolution.get("status") != "momentum_continuation_proof_candidate_for_review_not_forward_proof":
-        blockers.extend(str(item) for item in _as_list(resolution.get("blockers")) if item)
+    elif resolution.get("status") not in {
+        "momentum_continuation_proof_candidate_for_review_not_forward_proof",
+        "momentum_continuation_blocked_incomplete_eligible_quote_coverage",
+    }:
+        blockers.extend(
+            str(item) for item in _as_list(resolution.get("blockers")) if item
+        )
+    elif (
+        resolution.get("status")
+        == "momentum_continuation_blocked_incomplete_eligible_quote_coverage"
+    ):
+        blockers.extend(
+            str(item) for item in _as_list(resolution.get("blockers")) if item
+        )
+    elif (
+        _as_dict(resolution.get("quote_coverage_resolution"))
+        and (
+            _safe_float(
+                _as_dict(resolution.get("quote_coverage_resolution")).get(
+                    "eligible_quote_coverage"
+                )
+            )
+            or 0.0
+        )
+        < MIN_QUOTE_COVERAGE
+    ):
+        blockers.append("eligible_quote_coverage_below_90_pct")
     blockers = sorted(set(blockers))
 
     protected_start = _protected_holdout_start(holdout)
@@ -505,11 +753,21 @@ def build_report(
     historical_replay_performed = False
     existing_resolution_consumed = False
     if fixture_rows and not blockers:
-        replay_rows = _classify_fixture_rows(fixture_rows, protected_start=protected_start, base_identities=base_identities)
+        replay_rows = _classify_fixture_rows(
+            fixture_rows,
+            protected_start=protected_start,
+            base_identities=base_identities,
+        )
         metrics = _fixture_metrics(replay_rows, blockers)
         historical_replay_performed = True
     elif fixture_rows and blockers:
-        replay_rows = [{"denominator_status": "replay_gate_blocked", "blockers": blockers, "source_rows_not_replayed": len(fixture_rows)}]
+        replay_rows = [
+            {
+                "denominator_status": "replay_gate_blocked",
+                "blockers": blockers,
+                "source_rows_not_replayed": len(fixture_rows),
+            }
+        ]
         metrics = _fixture_metrics(replay_rows, blockers)
     else:
         metrics = _resolution_metrics(source_replay, resolution, blockers)
@@ -520,13 +778,21 @@ def build_report(
         "report_id": REPORT_ID,
         "generated_at_utc": generated_at_utc or _utc_now_iso(),
         "status": status,
-        **{**READ_ONLY_FLAGS, "historical_replay_performed": historical_replay_performed},
+        **{
+            **READ_ONLY_FLAGS,
+            "historical_replay_performed": historical_replay_performed,
+        },
         "existing_resolution_consumed": existing_resolution_consumed,
         "scope": "read_only_momentum_continuation_bounded_replay_gate",
         "concept_id": CONCEPT_ID,
         "structure": EXPECTED_STRUCTURE,
         "protected_holdout_start": protected_start,
-        "research_universe": sorted(_as_list(_as_dict(playbook.get("concept")).get("permitted_research_universe")) or []),
+        "research_universe": sorted(
+            _as_list(
+                _as_dict(playbook.get("concept")).get("permitted_research_universe")
+            )
+            or []
+        ),
         "proof_formula": {
             "entry_debit": "long_call_ask - short_call_bid",
             "exit_value": "long_call_bid - short_call_ask",
@@ -551,8 +817,12 @@ def build_report(
             "selector_reasons": selector_reasons,
             "preregistration_valid": prereg_ok,
             "preregistration_reasons": prereg_reasons,
-            "source_replay_valid": _source_replay_valid(source_replay) if source_replay else False,
-            "proof_blocker_resolution_valid": _resolution_valid(resolution) if resolution else False,
+            "source_replay_valid": _source_replay_valid(source_replay)
+            if source_replay
+            else False,
+            "proof_blocker_resolution_valid": _resolution_valid(resolution)
+            if resolution
+            else False,
         },
         "historical_rows_are_forward_proof": False,
         "accepted_profitability_reason": "blocked until strict exact point-in-time rows clear the replay gate and then produce fresh forward proof",
@@ -612,7 +882,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
     ]
     if report.get("replay_gate_blockers"):
-        lines.extend(f"- `{item}`" for item in _as_list(report.get("replay_gate_blockers")))
+        lines.extend(
+            f"- `{item}`" for item in _as_list(report.get("replay_gate_blockers"))
+        )
     else:
         lines.append("- None.")
     lines.extend(
@@ -642,7 +914,12 @@ def render_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def write_outputs(report: dict[str, Any], *, output_dir: Path = DEFAULT_OUTPUT_DIR, docs_report: Path = DEFAULT_DOCS_REPORT) -> dict[str, str]:
+def write_outputs(
+    report: dict[str, Any],
+    *,
+    output_dir: Path = DEFAULT_OUTPUT_DIR,
+    docs_report: Path = DEFAULT_DOCS_REPORT,
+) -> dict[str, str]:
     output_dir.mkdir(parents=True, exist_ok=True)
     docs_report.parent.mkdir(parents=True, exist_ok=True)
     stamp = _utc_stamp()
@@ -661,7 +938,10 @@ def write_outputs(report: dict[str, Any], *, output_dir: Path = DEFAULT_OUTPUT_D
     report_with_artifacts["artifacts"] = artifacts
     markdown = render_markdown(report_with_artifacts)
     for path in (json_path, latest_json):
-        path.write_text(json.dumps(report_with_artifacts, indent=2, sort_keys=True) + "\n", encoding="utf8")
+        path.write_text(
+            json.dumps(report_with_artifacts, indent=2, sort_keys=True) + "\n",
+            encoding="utf8",
+        )
     for path in (md_path, latest_md, docs_report):
         path.write_text(markdown, encoding="utf8")
     report["artifacts"] = artifacts
@@ -669,13 +949,25 @@ def write_outputs(report: dict[str, Any], *, output_dir: Path = DEFAULT_OUTPUT_D
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Run the read-only momentum-continuation bounded replay gate.")
+    parser = argparse.ArgumentParser(
+        description="Run the read-only momentum-continuation bounded replay gate."
+    )
     parser.add_argument("--selector", type=Path, default=DEFAULT_SELECTOR)
-    parser.add_argument("--preregistered-playbook", type=Path, default=DEFAULT_PREREGISTERED_PLAYBOOK)
+    parser.add_argument(
+        "--preregistered-playbook", type=Path, default=DEFAULT_PREREGISTERED_PLAYBOOK
+    )
     parser.add_argument("--source-replay", type=Path, default=DEFAULT_SOURCE_REPLAY)
-    parser.add_argument("--proof-blocker-resolution", type=Path, default=DEFAULT_PROOF_BLOCKER_RESOLUTION)
-    parser.add_argument("--holdout-contract", type=Path, default=DEFAULT_HOLDOUT_CONTRACT)
-    parser.add_argument("--clean-base-stack", type=Path, default=DEFAULT_CLEAN_BASE_STACK)
+    parser.add_argument(
+        "--proof-blocker-resolution",
+        type=Path,
+        default=DEFAULT_PROOF_BLOCKER_RESOLUTION,
+    )
+    parser.add_argument(
+        "--holdout-contract", type=Path, default=DEFAULT_HOLDOUT_CONTRACT
+    )
+    parser.add_argument(
+        "--clean-base-stack", type=Path, default=DEFAULT_CLEAN_BASE_STACK
+    )
     parser.add_argument("--fixture-candidates", type=Path, default=None)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--docs-report", type=Path, default=DEFAULT_DOCS_REPORT)
@@ -692,7 +984,9 @@ def main(argv: list[str] | None = None) -> int:
         fixture_candidates_path=args.fixture_candidates,
     )
     if not args.no_write:
-        report["artifacts"] = write_outputs(report, output_dir=args.output_dir, docs_report=args.docs_report)
+        report["artifacts"] = write_outputs(
+            report, output_dir=args.output_dir, docs_report=args.docs_report
+        )
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:

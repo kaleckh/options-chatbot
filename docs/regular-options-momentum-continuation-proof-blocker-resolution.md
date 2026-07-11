@@ -4,27 +4,27 @@ This report is generated from `scripts/build_regular_options_momentum_continuati
 
 ## Summary
 
-- Status: `momentum_continuation_blocked_missing_local_proof_inputs`.
+- Status: `momentum_continuation_blocked_incomplete_eligible_quote_coverage`.
 - Concept: `breadth_confirmed_index_qqq_momentum_continuation_debit_spread_v1`.
 - Source denominator rows: `1291`.
 - Reconstructed denominator rows: `1291`.
 - Proof rows before resolution: `0`.
-- Proof rows after resolution: `0`.
+- Proof rows after resolution: `248`.
 - Accepted profitability: `false`.
 - Historical rows are forward proof: `false`.
 
 ## Resolution Counts
 
-- Point-in-time inputs resolved: `0`.
+- Point-in-time inputs resolved: `1291`.
 - Point-in-time VIX buckets resolved: `1291`.
-- Point-in-time market-regime input rows resolved: `0`.
-- Point-in-time breadth confirmations resolved: `0`.
-- Point-in-time SPY momentum confirmations resolved: `0`.
-- Point-in-time QQQ momentum confirmations resolved: `0`.
+- Point-in-time market-regime input rows resolved: `1291`.
+- Point-in-time breadth confirmations resolved: `1031`.
+- Point-in-time SPY momentum confirmations resolved: `181`.
+- Point-in-time QQQ momentum confirmations resolved: `797`.
 - Side-aware quotes resolved: `783`.
-- Proof-qualified candidate rows: `0`.
-- Strict research metrics: `{"avg_pnl_usd": null, "bootstrap_pf_lower_bound_5pct": null, "gross_loss_usd": 0, "gross_win_usd": 0, "loss_count": 0, "net_pnl_usd": null, "priced_row_count": 0, "profit_factor": null, "row_count": 0, "stress_pf": null, "win_count": 0, "win_rate_pct": null}`.
-- Side-aware diagnostic metrics: `{"avg_pnl_usd": 201.07, "bootstrap_pf_lower_bound_5pct": null, "gross_loss_usd": 121252.6, "gross_win_usd": 278693.8, "loss_count": 281, "net_pnl_usd": 157441.2, "priced_row_count": 783, "profit_factor": 2.2985, "row_count": 783, "stress_pf": 2.2985, "win_count": 502, "win_rate_pct": 64.11}`.
+- Proof-qualified candidate rows: `248`.
+- Strict research metrics: `{"avg_pnl_usd": 288.8, "bootstrap_pf_lower_bound_5pct": 2.24, "bootstrap_policy": "minimum_5pct_pf_lower_bound_across_ticker_week_market_week_and_entry_date_clusters", "bootstrap_sensitivity": {"entry_date": {"avg_net_lb_5pct": 208.23, "avg_net_point": 288.8, "branch_id": "regular_options_momentum_continuation_proof_blocker_resolution:proof_net_pnl_usd:entry_date", "cluster_count": 87, "draws": 10000, "method": "cluster_block_bootstrap", "n_trades": 248, "no_loss_sample": false, "pf_defined_draws": 10000, "pf_lb_5pct": 2.88, "pf_point": 4.08, "pf_ub_95pct": 5.94, "statistical_confidence": "confident_positive"}, "market_week": {"avg_net_lb_5pct": 151.43, "avg_net_point": 288.8, "branch_id": "regular_options_momentum_continuation_proof_blocker_resolution:proof_net_pnl_usd:market_week", "cluster_count": 27, "draws": 10000, "method": "cluster_block_bootstrap", "n_trades": 248, "no_loss_sample": false, "pf_defined_draws": 10000, "pf_lb_5pct": 2.24, "pf_point": 4.08, "pf_ub_95pct": 7.7, "statistical_confidence": "confident_positive"}, "ticker_week": {"avg_net_lb_5pct": 158.4, "avg_net_point": 288.8, "branch_id": "regular_options_momentum_continuation_proof_blocker_resolution:proof_net_pnl_usd:ticker_week", "cluster_count": 94, "draws": 10000, "method": "cluster_block_bootstrap", "n_trades": 248, "no_loss_sample": false, "pf_defined_draws": 10000, "pf_lb_5pct": 2.36, "pf_point": 4.08, "pf_ub_95pct": 7.34, "statistical_confidence": "confident_positive"}}, "gross_loss_usd": 23242.0, "gross_win_usd": 94864.2, "loss_count": 75, "net_pnl_usd": 71622.2, "priced_row_count": 248, "profit_factor": 4.0816, "row_count": 248, "stress_pf": null, "stress_test_status": "not_implemented_requires_preregistered_cost_and_liquidity_shocks", "win_count": 173, "win_rate_pct": 69.76}`.
+- Side-aware diagnostic metrics: `{"avg_pnl_usd": 201.37, "bootstrap_pf_lower_bound_5pct": 1.47, "bootstrap_policy": "minimum_5pct_pf_lower_bound_across_ticker_week_market_week_and_entry_date_clusters", "bootstrap_sensitivity": {"entry_date": {"avg_net_lb_5pct": 134.09, "avg_net_point": 201.37, "branch_id": "regular_options_momentum_continuation_proof_blocker_resolution:side_aware_net_pnl_usd_diagnostic:entry_date", "cluster_count": 151, "draws": 10000, "method": "cluster_block_bootstrap", "n_trades": 783, "no_loss_sample": false, "pf_defined_draws": 10000, "pf_lb_5pct": 1.74, "pf_point": 2.3, "pf_ub_95pct": 3.02, "statistical_confidence": "confident_positive"}, "market_week": {"avg_net_lb_5pct": 88.78, "avg_net_point": 201.37, "branch_id": "regular_options_momentum_continuation_proof_blocker_resolution:side_aware_net_pnl_usd_diagnostic:market_week", "cluster_count": 41, "draws": 10000, "method": "cluster_block_bootstrap", "n_trades": 783, "no_loss_sample": false, "pf_defined_draws": 10000, "pf_lb_5pct": 1.47, "pf_point": 2.3, "pf_ub_95pct": 3.58, "statistical_confidence": "confident_positive"}, "ticker_week": {"avg_net_lb_5pct": 95.01, "avg_net_point": 201.37, "branch_id": "regular_options_momentum_continuation_proof_blocker_resolution:side_aware_net_pnl_usd_diagnostic:ticker_week", "cluster_count": 196, "draws": 10000, "method": "cluster_block_bootstrap", "n_trades": 783, "no_loss_sample": false, "pf_defined_draws": 10000, "pf_lb_5pct": 1.51, "pf_point": 2.3, "pf_ub_95pct": 3.55, "statistical_confidence": "confident_positive"}}, "gross_loss_usd": 121317.6, "gross_win_usd": 278993.8, "loss_count": 281, "net_pnl_usd": 157676.2, "priced_row_count": 783, "profit_factor": 2.2997, "row_count": 783, "stress_pf": null, "stress_test_status": "not_implemented_requires_preregistered_cost_and_liquidity_shocks", "win_count": 502, "win_rate_pct": 64.11}`.
 
 ## Blocker Counts
 
@@ -32,32 +32,19 @@ This report is generated from `scripts/build_regular_options_momentum_continuati
 | --- | ---: |
 | `duplicate_within_research_harness` | 461 |
 | `entry_missing_leg_quote` | 227 |
-| `exit_missing_leg_quote` | 413 |
+| `exit_missing_leg_quote` | 416 |
 | `exit_value_negative` | 6 |
-| `exit_zero_or_nonpositive_bid_ask` | 95 |
-| `missing_net_usd_pnl` | 395 |
-| `missing_point_in_time_breadth_confirmation` | 1291 |
-| `missing_point_in_time_qqq_momentum_confirmation` | 1080 |
-| `missing_point_in_time_spy_momentum_confirmation` | 395 |
+| `exit_zero_or_nonpositive_bid_ask` | 92 |
+| `rejected_no_breadth_confirmation` | 260 |
+| `rejected_no_qqq_momentum_confirmation` | 283 |
+| `rejected_no_spy_momentum_confirmation` | 214 |
 | `rejected_not_call_debit_spread` | 290 |
 | `rejected_outside_preregistered_universe` | 277 |
 
 ## Final Blockers
 
-- `bootstrap_pf_lower_bound_not_above_1_after_resolution`
-- `duplicate_within_research_harness`
-- `entry_missing_leg_quote`
-- `exit_missing_leg_quote`
-- `exit_value_negative`
-- `exit_zero_or_nonpositive_bid_ask`
-- `missing_net_usd_pnl`
-- `missing_point_in_time_breadth_confirmation`
-- `missing_point_in_time_qqq_momentum_confirmation`
-- `missing_point_in_time_spy_momentum_confirmation`
-- `net_usd_not_positive_after_resolution`
-- `rejected_not_call_debit_spread`
-- `rejected_outside_preregistered_universe`
-- `strict_rows_below_30_after_resolution`
+- `eligible_quote_coverage_below_90_pct`
+- `preregistered_stress_test_not_implemented`
 
 ## Forbidden Actions
 

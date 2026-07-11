@@ -14,6 +14,7 @@ This live worklog is a concise handoff. The complete dated pre-compaction log is
 - Final root integration passed 168/168 across 13 audit modules; post-repair forward tracker/Phase 1–2 passed 35/35 while the current workspace scan-health artifact was blocked because positive-path tests now inject hermetic temporary health evidence. Fresh passed 128 tests plus 28 subtests; final FRESH/VRP passed 61 plus 20 subtests; VRP passed 14/14. Ruff, focused format checks, `py_compile`, scoped diff hygiene, and no-write fail-closed readbacks passed. No provider, network, real DB, broker, live, promotion, or holdout action occurred.
 - Terminated one stale read-only historical regeneration after about 9.5 hours and 21,152 CPU seconds without an artifact update; its loaded pre-fix code could no longer produce valid current output. A repaired one-date no-write smoke completed in 2.6 seconds and blocked with explicit point-in-time, manifest, scanner, and production-parity reasons. Final report: `docs/regular-options-main-lane-audit-2026-07-10.md`.
 - Closed schema-v5 assurance at 136 tests with hash-chained class expectations, transactional ghost cleanup, serialized WAL setup, and coherent gateboard provenance. Final ingest/bootstrap, restore, maintenance `RUN-20260710-c1aae9a5`, options dream `DREAMRUN-20260710-d64378a5`, and global dream sequences 2-3 passed; all three memory tasks report result `0`.
+- Repaired the momentum-continuation proof resolver against the current point-in-time regime contract and exact synchronized trusted quote pairs. It now resolves 1,291/1,291 PIT rows and reports 248 historical exact rows, PF 4.0816, net +$71,622.20, and conservative clustered-bootstrap PF LB 2.24, but remains blocked at 251/353 eligible quote pairs (71.1%), 102 repair rows, no preregistered stress test, and 0/30 forward proof. Independent review drove crossed-quote denominator, source/preregistration/run/denominator integrity, exact repair identifiers, forged-resolution, and bootstrap-sensitivity controls; Ruff and 49 related tests pass.
 
 ## 2026-07-09
 
@@ -34,10 +35,6 @@ This live worklog is a concise handoff. The complete dated pre-compaction log is
 
 ## Current Handoff
 
-- Keep regular options fail-closed. Do not use the old historical dollar loss as production portfolio P&L or the recent/filtered gains as validation; follow the dependency order in `docs/regular-options-main-lane-audit-2026-07-10.md`.
-- Do not retire the 105.1 GiB pre-vacuum backup until the documented gates pass together.
-- The agent-control mirror repair, fresh restore-valid backup, and 3-daily/4-weekly retention apply are complete; continue using the guarded dry-run command for future maintenance.
-- Preserve the v3/v4, repaired-session, verified-v5, and `20260710T141639Z-ed16ac30` pre-ghost-repair safety points documented in the v5 audit. Do not rewrite them in place.
-- Nonblocking follow-up: cache shared living-history source snapshots during refresh to avoid `O(nodes x source-read)` CPU; current maintenance still finishes in about six minutes within its 30-minute task limit.
-- Run full docs, memory, agent-control, and repository verification after compaction; preserve concurrent audit changes.
-- Current trading/release posture remains fail-closed. This work changes storage and retrieval hygiene, not proof or broker authority.
+- Keep trading/release fail-closed; follow `docs/regular-options-main-lane-audit-2026-07-10.md` and the momentum coverage/stress blockers above.
+- Retain the pre-vacuum backup and named v3/v4/v5 safety points until their documented gates pass; use guarded maintenance dry runs.
+- Preserve concurrent changes. Cache living-history source reads later; current six-minute maintenance remains within its limit.

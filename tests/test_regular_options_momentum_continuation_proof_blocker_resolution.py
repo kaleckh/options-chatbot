@@ -3,15 +3,20 @@ from __future__ import annotations
 import json
 import sqlite3
 import unittest
+from datetime import date, timedelta
 from pathlib import Path
 
-from scripts import build_regular_options_momentum_continuation_proof_blocker_resolution as resolution
+from scripts import (
+    build_regular_options_momentum_continuation_proof_blocker_resolution as resolution,
+)
 from workspace_tempdir import WorkspaceTempDir
 
 
 def _write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf8")
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf8"
+    )
 
 
 def _trade(**overrides: object) -> dict:
@@ -108,7 +113,9 @@ def _make_db(path: Path) -> None:
     conn.close()
 
 
-def _vix_bucket(path: Path, *, ready: bool = True, dates: list[str] | None = None) -> None:
+def _vix_bucket(
+    path: Path, *, ready: bool = True, dates: list[str] | None = None
+) -> None:
     rows = []
     for entry_date in dates or ["2025-08-14"]:
         rows.append(
@@ -131,7 +138,9 @@ def _vix_bucket(path: Path, *, ready: bool = True, dates: list[str] | None = Non
         path,
         {
             "report_id": "regular_options_point_in_time_vix_bucket",
-            "status": "point_in_time_vix_bucket_ready" if ready else "blocked_point_in_time_vix_bucket_validation",
+            "status": "point_in_time_vix_bucket_ready"
+            if ready
+            else "blocked_point_in_time_vix_bucket_validation",
             "point_in_time_vix_low_mid_bucket_available": ready,
             "blockers": [] if ready else ["point_in_time_vix_row_validation_failed"],
             "bucket_rows": rows,
@@ -155,7 +164,11 @@ def _market_regime_inputs(
             {
                 "input_date_et": entry_date,
                 "point_in_time_valid": not historical_reconstruction,
-                "source_time_status": "historical_prior_bar_reconstruction" if historical_reconstruction else "source_known_before_input_date",
+                "source_time_status": (
+                    "historical_prior_bar_reconstruction"
+                    if historical_reconstruction
+                    else resolution.POINT_IN_TIME_SOURCE_MODE
+                ),
                 "historical_prior_bar_reconstruction": historical_reconstruction,
                 "spy_momentum_confirmed": spy,
                 "qqq_momentum_confirmed": qqq,
@@ -163,32 +176,45 @@ def _market_regime_inputs(
                 "breadth_ratio": 0.77 if breadth else 0.31,
                 "available_symbol_count": 13,
                 "above_prior_50_sma_symbol_count": 10 if breadth else 4,
-                "blockers": ["market_regime_source_time_not_point_in_time"] if historical_reconstruction else [],
-                "proof_eligible": False,
+                "blockers": ["market_regime_source_time_not_point_in_time"]
+                if historical_reconstruction
+                else [],
+                "proof_eligible": not historical_reconstruction,
             }
         )
     source_time_mode = (
         "historical_prior_bar_reconstruction"
         if historical_reconstruction
-        else "point_in_time_verified_daily_history"
+        else resolution.POINT_IN_TIME_SOURCE_MODE
     )
     _write_json(
         path,
         {
             "report_id": "regular_options_point_in_time_market_regime_inputs",
-            "status": "point_in_time_market_regime_inputs_ready" if ready and not historical_reconstruction else "blocked_point_in_time_market_regime_inputs",
-            "blockers": [] if ready and not historical_reconstruction else ["market_regime_source_time_not_point_in_time"],
-            "point_in_time_market_regime_inputs_available": ready and not historical_reconstruction,
+            "status": "point_in_time_market_regime_inputs_ready"
+            if ready and not historical_reconstruction
+            else "blocked_point_in_time_market_regime_inputs",
+            "blockers": []
+            if ready and not historical_reconstruction
+            else ["market_regime_source_time_not_point_in_time"],
+            "point_in_time_market_regime_inputs_available": ready
+            and not historical_reconstruction,
             "source_time_policy": {
                 "source_time_mode": source_time_mode,
                 "historical_reconstruction_can_clear_point_in_time_blockers": False,
             },
             "coverage": {
                 "requested_month_count": 1,
-                "covered_month_count": 1 if ready and not historical_reconstruction else 0,
+                "covered_month_count": 1
+                if ready and not historical_reconstruction
+                else 0,
                 "requested_date_count": len(rows),
-                "covered_date_count": len(rows) if ready and not historical_reconstruction else 0,
-                "date_coverage_pct": 100.0 if ready and not historical_reconstruction else 0.0,
+                "covered_date_count": len(rows)
+                if ready and not historical_reconstruction
+                else 0,
+                "date_coverage_pct": 100.0
+                if ready and not historical_reconstruction
+                else 0.0,
             },
             "input_rows": rows,
         },
@@ -211,21 +237,35 @@ class MomentumContinuationProofBlockerResolutionTests(unittest.TestCase):
             },
         )
         all_planned = tmp / "all_planned.json"
-        _write_json(all_planned, {"variants": [{"variant_id": "fixture_momentum", "run_path": str(run)}]})
+        _write_json(
+            all_planned,
+            {"variants": [{"variant_id": "fixture_momentum", "run_path": str(run)}]},
+        )
         source_replay = tmp / "source_replay.json"
         _write_json(
             source_replay,
             {
+                "report_id": "regular_options_momentum_continuation_research_replay",
                 "concept_id": resolution.CONCEPT_ID,
                 "research_only_replay_harness_implemented": True,
                 "accepted_profitability": False,
                 "denominator": {"row_count": len(trades)},
                 "proof_qualified": {"row_count": 0},
-                "diagnostic_only_existing_marks": {"metrics": {"row_count": len(trades), "profit_factor": 0.75}},
+                "diagnostic_only_existing_marks": {
+                    "metrics": {"row_count": len(trades), "profit_factor": 0.75}
+                },
             },
         )
         prereg = tmp / "prereg.json"
-        _write_json(prereg, {"status": "preregistered_design_only", "concept_id": resolution.CONCEPT_ID})
+        _write_json(
+            prereg,
+            {
+                "report_id": "regular_options_preregistered_momentum_continuation_playbook",
+                "status": "preregistered_design_only",
+                "concept_id": resolution.CONCEPT_ID,
+                "accepted_profitability": False,
+            },
+        )
         vix_bucket = tmp / "vix_bucket.json"
         _vix_bucket(vix_bucket)
         market_regime = tmp / "missing_market_regime.json"
@@ -244,7 +284,9 @@ class MomentumContinuationProofBlockerResolutionTests(unittest.TestCase):
     def test_resolves_strict_row_when_all_inputs_and_quotes_exist(self) -> None:
         with WorkspaceTempDir(prefix="momentum-resolution") as tmp_dir:
             paths = self._fixture_paths(Path(tmp_dir), [_trade()])
-            report = resolution.build_report(generated_at_utc="2026-06-23T00:00:00Z", **paths)
+            report = resolution.build_report(
+                generated_at_utc="2026-06-23T00:00:00Z", **paths
+            )
 
         self.assertEqual(report["proof_qualified_rows_after_resolution"], 1)
         self.assertEqual(report["resolution_counts"]["side_aware_quotes_resolved"], 1)
@@ -258,11 +300,20 @@ class MomentumContinuationProofBlockerResolutionTests(unittest.TestCase):
             paths = self._fixture_paths(Path(tmp_dir), [trade])
             report = resolution.build_report(**paths)
 
-        self.assertEqual(report["status"], "momentum_continuation_blocked_missing_local_proof_inputs")
+        self.assertEqual(
+            report["status"], "momentum_continuation_blocked_missing_local_proof_inputs"
+        )
         self.assertEqual(report["proof_qualified_rows_after_resolution"], 0)
         self.assertEqual(report["resolution_counts"]["side_aware_quotes_resolved"], 1)
-        self.assertEqual(report["resolution_counts"]["point_in_time_vix_bucket_resolved"], 1)
-        self.assertEqual(report["source_artifacts"]["point_in_time_market_regime_inputs"]["path"], str(Path(paths["point_in_time_market_regime_inputs_path"]).as_posix()).replace("\\", "/"))
+        self.assertEqual(
+            report["resolution_counts"]["point_in_time_vix_bucket_resolved"], 1
+        )
+        self.assertEqual(
+            report["source_artifacts"]["point_in_time_market_regime_inputs"]["path"],
+            str(
+                Path(paths["point_in_time_market_regime_inputs_path"]).as_posix()
+            ).replace("\\", "/"),
+        )
         blockers = report["resolution_counts"]["blocker_counts"]
         self.assertNotIn("missing_point_in_time_vix_bucket", blockers)
         self.assertEqual(blockers["missing_point_in_time_breadth_confirmation"], 1)
@@ -275,7 +326,9 @@ class MomentumContinuationProofBlockerResolutionTests(unittest.TestCase):
             report = resolution.build_report(**paths)
 
         blockers = report["resolution_counts"]["blocker_counts"]
-        self.assertEqual(report["resolution_counts"]["point_in_time_vix_bucket_resolved"], 0)
+        self.assertEqual(
+            report["resolution_counts"]["point_in_time_vix_bucket_resolved"], 0
+        )
         self.assertEqual(blockers["missing_point_in_time_vix_bucket"], 1)
         self.assertEqual(blockers["missing_point_in_time_breadth_confirmation"], 1)
 
@@ -287,11 +340,15 @@ class MomentumContinuationProofBlockerResolutionTests(unittest.TestCase):
             report = resolution.build_report(**paths)
 
         blockers = report["resolution_counts"]["blocker_counts"]
-        self.assertEqual(report["resolution_counts"]["point_in_time_vix_bucket_resolved"], 0)
+        self.assertEqual(
+            report["resolution_counts"]["point_in_time_vix_bucket_resolved"], 0
+        )
         self.assertEqual(blockers["missing_point_in_time_vix_bucket"], 1)
         self.assertEqual(blockers["missing_point_in_time_breadth_confirmation"], 1)
 
-    def test_ready_market_regime_artifact_clears_true_confirmation_blockers(self) -> None:
+    def test_ready_market_regime_artifact_clears_true_confirmation_blockers(
+        self,
+    ) -> None:
         with WorkspaceTempDir(prefix="momentum-resolution") as tmp_dir:
             tmp = Path(tmp_dir)
             trade = _trade(
@@ -312,11 +369,26 @@ class MomentumContinuationProofBlockerResolutionTests(unittest.TestCase):
         self.assertNotIn("missing_point_in_time_breadth_confirmation", blockers)
         self.assertNotIn("missing_point_in_time_spy_momentum_confirmation", blockers)
         self.assertNotIn("missing_point_in_time_qqq_momentum_confirmation", blockers)
-        self.assertEqual(report["resolution_counts"]["point_in_time_breadth_confirmation_resolved"], 1)
-        self.assertEqual(report["resolution_counts"]["point_in_time_spy_momentum_confirmation_resolved"], 1)
-        self.assertEqual(report["resolution_counts"]["point_in_time_qqq_momentum_confirmation_resolved"], 1)
+        self.assertEqual(
+            report["resolution_counts"]["point_in_time_breadth_confirmation_resolved"],
+            1,
+        )
+        self.assertEqual(
+            report["resolution_counts"][
+                "point_in_time_spy_momentum_confirmation_resolved"
+            ],
+            1,
+        )
+        self.assertEqual(
+            report["resolution_counts"][
+                "point_in_time_qqq_momentum_confirmation_resolved"
+            ],
+            1,
+        )
 
-    def test_false_market_regime_confirmations_become_rejections_not_missing_passes(self) -> None:
+    def test_false_market_regime_confirmations_become_rejections_not_missing_passes(
+        self,
+    ) -> None:
         with WorkspaceTempDir(prefix="momentum-resolution") as tmp_dir:
             tmp = Path(tmp_dir)
             trade = _trade(
@@ -342,7 +414,9 @@ class MomentumContinuationProofBlockerResolutionTests(unittest.TestCase):
         self.assertEqual(blockers["rejected_no_qqq_momentum_confirmation"], 1)
         self.assertEqual(report["proof_qualified_rows_after_resolution"], 0)
 
-    def test_blocked_market_regime_artifact_preserves_missing_confirmation_blockers(self) -> None:
+    def test_blocked_market_regime_artifact_preserves_missing_confirmation_blockers(
+        self,
+    ) -> None:
         with WorkspaceTempDir(prefix="momentum-resolution") as tmp_dir:
             tmp = Path(tmp_dir)
             trade = _trade(
@@ -360,12 +434,19 @@ class MomentumContinuationProofBlockerResolutionTests(unittest.TestCase):
             report = resolution.build_report(**paths)
 
         blockers = report["resolution_counts"]["blocker_counts"]
-        self.assertEqual(report["point_in_time_market_regime_input_resolution"]["artifact_ready_for_stale_blocker_clear"], False)
+        self.assertEqual(
+            report["point_in_time_market_regime_input_resolution"][
+                "artifact_ready_for_stale_blocker_clear"
+            ],
+            False,
+        )
         self.assertEqual(blockers["missing_point_in_time_breadth_confirmation"], 1)
         self.assertEqual(blockers["missing_point_in_time_spy_momentum_confirmation"], 1)
         self.assertEqual(blockers["missing_point_in_time_qqq_momentum_confirmation"], 1)
 
-    def test_missing_market_regime_date_preserves_missing_confirmation_blockers(self) -> None:
+    def test_missing_market_regime_date_preserves_missing_confirmation_blockers(
+        self,
+    ) -> None:
         with WorkspaceTempDir(prefix="momentum-resolution") as tmp_dir:
             tmp = Path(tmp_dir)
             trade = _trade(
@@ -383,13 +464,25 @@ class MomentumContinuationProofBlockerResolutionTests(unittest.TestCase):
             report = resolution.build_report(**paths)
 
         blockers = report["resolution_counts"]["blocker_counts"]
-        self.assertEqual(report["point_in_time_market_regime_input_resolution"]["valid_input_date_count"], 1)
-        self.assertEqual(report["point_in_time_market_regime_input_resolution"]["resolved_row_count"], 0)
+        self.assertEqual(
+            report["point_in_time_market_regime_input_resolution"][
+                "valid_input_date_count"
+            ],
+            1,
+        )
+        self.assertEqual(
+            report["point_in_time_market_regime_input_resolution"][
+                "resolved_row_count"
+            ],
+            0,
+        )
         self.assertEqual(blockers["missing_point_in_time_breadth_confirmation"], 1)
         self.assertEqual(blockers["missing_point_in_time_spy_momentum_confirmation"], 1)
         self.assertEqual(blockers["missing_point_in_time_qqq_momentum_confirmation"], 1)
 
-    def test_historical_market_regime_reconstruction_cannot_clear_point_in_time_blockers(self) -> None:
+    def test_historical_market_regime_reconstruction_cannot_clear_point_in_time_blockers(
+        self,
+    ) -> None:
         with WorkspaceTempDir(prefix="momentum-resolution") as tmp_dir:
             tmp = Path(tmp_dir)
             trade = _trade(
@@ -408,11 +501,15 @@ class MomentumContinuationProofBlockerResolutionTests(unittest.TestCase):
 
         blockers = report["resolution_counts"]["blocker_counts"]
         self.assertEqual(
-            report["point_in_time_market_regime_input_resolution"]["source_time_policy"]["source_time_mode"],
+            report["point_in_time_market_regime_input_resolution"][
+                "source_time_policy"
+            ]["source_time_mode"],
             "historical_prior_bar_reconstruction",
         )
         self.assertEqual(
-            report["point_in_time_market_regime_input_resolution"]["historical_reconstruction_can_clear_point_in_time_blockers"],
+            report["point_in_time_market_regime_input_resolution"][
+                "historical_reconstruction_can_clear_point_in_time_blockers"
+            ],
             False,
         )
         self.assertEqual(blockers["missing_point_in_time_breadth_confirmation"], 1)
@@ -426,16 +523,109 @@ class MomentumContinuationProofBlockerResolutionTests(unittest.TestCase):
             report = resolution.build_report(**paths)
 
         self.assertEqual(report["resolution_counts"]["side_aware_quotes_resolved"], 0)
-        self.assertIn("entry_missing_leg_quote", report["blockers"])
+        self.assertIn("eligible_quote_coverage_below_90_pct", report["blockers"])
+        self.assertEqual(
+            report["quote_coverage_resolution"]["quote_repair_blocker_counts"],
+            {"entry_missing_leg_quote": 1, "exit_missing_leg_quote": 1},
+        )
+
+    def test_crossed_quote_remains_in_eligible_denominator_and_repair_queue(
+        self,
+    ) -> None:
+        with WorkspaceTempDir(prefix="momentum-resolution") as tmp_dir:
+            paths = self._fixture_paths(Path(tmp_dir), [_trade()])
+            conn = sqlite3.connect(paths["options_db_path"])
+            conn.execute(
+                "update option_quote_snapshots set bid = 10.2, ask = 10.1 "
+                "where quote_date_et = '2025-08-14' and contract_symbol = ?",
+                ("QQQ250912C00581000",),
+            )
+            conn.commit()
+            conn.close()
+            report = resolution.build_report(**paths)
+
+        coverage = report["quote_coverage_resolution"]
+        self.assertEqual(coverage["eligible_pre_quote_row_count"], 1)
+        self.assertEqual(coverage["eligible_side_aware_row_count"], 0)
+        self.assertEqual(coverage["eligible_quote_coverage"], 0.0)
+        self.assertEqual(
+            coverage["quote_repair_blocker_counts"], {"entry_crossed_quote": 1}
+        )
+        repair = coverage["quote_repair_rows"][0]
+        self.assertEqual(repair["long_contract_symbol"], "QQQ250912C00581000")
+        self.assertEqual(repair["short_contract_symbol"], "QQQ250912C00600000")
+        self.assertEqual(repair["exit_date"], "2025-09-11")
+
+    def test_invalid_source_and_denominator_mismatch_fail_closed(self) -> None:
+        with WorkspaceTempDir(prefix="momentum-resolution") as tmp_dir:
+            paths = self._fixture_paths(Path(tmp_dir), [_trade()])
+            source = json.loads(paths["source_replay_path"].read_text(encoding="utf8"))
+            source["concept_id"] = "wrong"
+            source["denominator"]["row_count"] = 99
+            _write_json(paths["source_replay_path"], source)
+            report = resolution.build_report(**paths)
+
+        self.assertEqual(
+            report["status"],
+            "momentum_continuation_blocked_artifact_integrity_failure",
+        )
+        self.assertIn("invalid_source_replay_artifact", report["blockers"])
+        self.assertIn(
+            "source_and_reconstructed_denominator_mismatch", report["blockers"]
+        )
         self.assertFalse(report["quotes_imported"])
         self.assertFalse(report["evidence_stores_mutated"])
+
+    def test_quote_resolution_requires_exact_synchronized_pair(self) -> None:
+        with WorkspaceTempDir(prefix="momentum-resolution") as tmp_dir:
+            paths = self._fixture_paths(Path(tmp_dir), [_trade()])
+            conn = sqlite3.connect(paths["options_db_path"])
+            conn.execute(
+                "update option_quote_snapshots set as_of_utc = '2025-08-14T16:00:01Z' where contract_symbol = 'QQQ250912C00600000' and quote_date_et = '2025-08-14'"
+            )
+            conn.commit()
+            conn.close()
+            report = resolution.build_report(**paths)
+
+        self.assertEqual(report["proof_qualified_rows_after_resolution"], 0)
+        self.assertEqual(report["resolution_counts"]["side_aware_quotes_resolved"], 0)
+        self.assertEqual(
+            report["resolution_counts"]["blocker_counts"]["entry_missing_leg_quote"],
+            1,
+        )
+
+    def test_profit_metrics_compute_cluster_bootstrap_lower_bound(self) -> None:
+        start = date(2025, 1, 6)
+        rows = [
+            {
+                "ticker": f"T{index}",
+                "entry_date": (start + timedelta(days=7 * index)).isoformat(),
+                "proof_net_pnl_usd": 100.0 if index < 30 else -20.0,
+            }
+            for index in range(40)
+        ]
+
+        metrics = resolution._profit_metrics(rows, "proof_net_pnl_usd")
+
+        self.assertGreater(metrics["bootstrap_pf_lower_bound_5pct"], 1.0)
+        self.assertEqual(
+            metrics["bootstrap_sensitivity"]["ticker_week"]["method"],
+            "cluster_block_bootstrap",
+        )
+        self.assertEqual(
+            metrics["bootstrap_policy"],
+            "minimum_5pct_pf_lower_bound_across_ticker_week_market_week_and_entry_date_clusters",
+        )
+        self.assertIsNone(metrics["stress_pf"])
 
     def test_write_outputs_writes_latest_and_docs(self) -> None:
         with WorkspaceTempDir(prefix="momentum-resolution") as tmp_dir:
             tmp = Path(tmp_dir)
             paths = self._fixture_paths(tmp, [_trade()])
             report = resolution.build_report(**paths)
-            artifacts = resolution.write_outputs(report, output_dir=tmp / "out", docs_report=tmp / "docs" / "report.md")
+            artifacts = resolution.write_outputs(
+                report, output_dir=tmp / "out", docs_report=tmp / "docs" / "report.md"
+            )
 
             self.assertTrue((tmp / "out" / "latest.json").exists())
             self.assertTrue((tmp / "out" / "latest.md").exists())
