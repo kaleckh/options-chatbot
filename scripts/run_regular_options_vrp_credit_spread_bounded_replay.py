@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# ruff: noqa: E402
+
 import argparse
 import json
 import sys
@@ -13,7 +15,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts import build_regular_options_vrp_credit_spread_structure_harness as structure_harness
+from scripts import (
+    build_regular_options_vrp_credit_spread_structure_harness as structure_harness,
+)
 
 
 REPORT_ID = "regular_options_vrp_credit_spread_bounded_replay"
@@ -36,8 +40,15 @@ DEFAULT_STRUCTURE_HARNESS = (
 )
 DEFAULT_HOLDOUT_CONTRACT = ROOT / "data" / "contracts" / "forward-holdout-contract.json"
 DEFAULT_QUOTES_DB = ROOT / "data" / "options-validation" / "options_history.db"
-DEFAULT_OUTPUT_DIR = ROOT / "data" / "profitability-lab" / "regular-options-vrp-credit-spread-bounded-replay"
-DEFAULT_DOCS_REPORT = ROOT / "docs" / "regular-options-vrp-credit-spread-bounded-replay.md"
+DEFAULT_OUTPUT_DIR = (
+    ROOT
+    / "data"
+    / "profitability-lab"
+    / "regular-options-vrp-credit-spread-bounded-replay"
+)
+DEFAULT_DOCS_REPORT = (
+    ROOT / "docs" / "regular-options-vrp-credit-spread-bounded-replay.md"
+)
 
 READ_ONLY_FLAGS = {
     "read_only": True,
@@ -110,7 +121,13 @@ def _safe_float(value: Any) -> float | None:
 
 
 def _load_json(path: Path, *, required: bool) -> tuple[dict[str, Any], dict[str, Any]]:
-    meta = {"path": _rel(path), "required": required, "exists": path.exists(), "status": "missing", "error": None}
+    meta = {
+        "path": _rel(path),
+        "required": required,
+        "exists": path.exists(),
+        "status": "missing",
+        "error": None,
+    }
     if not path.exists():
         return {}, meta
     try:
@@ -136,8 +153,21 @@ def _load_json(path: Path, *, required: bool) -> tuple[dict[str, Any], dict[str,
 
 def _load_rows(path: Path | None) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     if path is None:
-        return [], {"path": None, "required": False, "exists": False, "status": "not_requested", "row_count": 0}
-    meta = {"path": _rel(path), "required": False, "exists": path.exists(), "status": "missing", "row_count": 0, "malformed_rows": 0}
+        return [], {
+            "path": None,
+            "required": False,
+            "exists": False,
+            "status": "not_requested",
+            "row_count": 0,
+        }
+    meta = {
+        "path": _rel(path),
+        "required": False,
+        "exists": path.exists(),
+        "status": "missing",
+        "row_count": 0,
+        "malformed_rows": 0,
+    }
     if not path.exists():
         return [], meta
     rows: list[dict[str, Any]] = []
@@ -149,7 +179,11 @@ def _load_rows(path: Path | None) -> tuple[list[dict[str, Any]], dict[str, Any]]
     try:
         if text.startswith("["):
             payload = json.loads(text)
-            rows = [row for row in payload if isinstance(row, dict)] if isinstance(payload, list) else []
+            rows = (
+                [row for row in payload if isinstance(row, dict)]
+                if isinstance(payload, list)
+                else []
+            )
             malformed = 0 if isinstance(payload, list) else 1
         else:
             for line in text.splitlines():
@@ -192,15 +226,30 @@ def _protected_holdout_start(holdout: dict[str, Any]) -> str:
 
 
 def _candidate_geometry_ready(playbook: dict[str, Any]) -> bool:
-    geometry = _as_dict(playbook.get("candidate_geometry") or _as_dict(playbook.get("concept")).get("candidate_geometry"))
-    required = ("dte_min", "dte_max", "short_put_moneyness_or_delta", "long_put_distance", "exit_policy")
-    return all(key in geometry and geometry.get(key) not in (None, "") for key in required)
+    geometry = _as_dict(
+        playbook.get("candidate_geometry")
+        or _as_dict(playbook.get("concept")).get("candidate_geometry")
+    )
+    required = (
+        "dte_min",
+        "dte_max",
+        "short_put_moneyness_or_delta",
+        "long_put_distance",
+        "exit_policy",
+    )
+    return all(
+        key in geometry and geometry.get(key) not in (None, "") for key in required
+    )
 
 
-def _classify_rows(rows: list[dict[str, Any]], *, protected_holdout_start: str) -> list[dict[str, Any]]:
+def _classify_rows(
+    rows: list[dict[str, Any]], *, protected_holdout_start: str
+) -> list[dict[str, Any]]:
     classified: list[dict[str, Any]] = []
     for index, row in enumerate(rows, start=1):
-        result = structure_harness.classify_candidate(row, protected_holdout_start=protected_holdout_start)
+        result = structure_harness.classify_candidate(
+            row, protected_holdout_start=protected_holdout_start
+        )
         classified.append(
             {
                 "row_number": index,
@@ -213,7 +262,11 @@ def _classify_rows(rows: list[dict[str, Any]], *, protected_holdout_start: str) 
 
 
 def _metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    exact = [row for row in rows if row.get("denominator_status") in {"exact_closed", "expired_settled"}]
+    exact = [
+        row
+        for row in rows
+        if row.get("denominator_status") in {"exact_closed", "expired_settled"}
+    ]
     pnl = [_safe_float(row.get("net_pnl_usd")) for row in exact]
     pnl = [value for value in pnl if value is not None]
     wins = [value for value in pnl if value > 0]
@@ -230,26 +283,42 @@ def _metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "net_usd_total": round(sum(pnl), 2),
         "avg_net_usd": round(sum(pnl) / len(pnl), 2) if pnl else None,
         "win_rate": round(len(wins) / len(pnl), 4) if pnl else None,
-        "point_profit_factor": round(gross_profit / gross_loss, 4) if gross_loss else None,
+        "point_profit_factor": round(gross_profit / gross_loss, 4)
+        if gross_loss
+        else None,
         "bootstrap_pf_lower_bound_5pct": None,
         "stress_pf": None,
         "quote_coverage": round(len(exact) / len(rows), 4) if rows else 0.0,
         "zero_bid_or_untradable_count": status_counts.get("zero_bid_untradable", 0),
         "missing_quote_count": status_counts.get("missing_required_quote", 0),
         "assignment_or_expiration_blocked_count": sum(
-            1 for row in rows if _as_dict(row.get("assignment_expiration")).get("blocker")
+            1
+            for row in rows
+            if _as_dict(row.get("assignment_expiration")).get("blocker")
         ),
-        "protected_holdout_blocked_count": status_counts.get("protected_holdout_blocked", 0),
-        "largest_ticker_share": round(max(ticker_counts.values()) / len(exact), 4) if exact and ticker_counts else 0.0,
-        "largest_entry_month_share": round(max(month_counts.values()) / len(exact), 4) if exact and month_counts else 0.0,
-        "largest_winner_dependency": round(max(wins) / gross_profit, 4) if wins and gross_profit else 0.0,
+        "protected_holdout_blocked_count": status_counts.get(
+            "protected_holdout_blocked", 0
+        ),
+        "largest_ticker_share": round(max(ticker_counts.values()) / len(exact), 4)
+        if exact and ticker_counts
+        else 0.0,
+        "largest_entry_month_share": round(max(month_counts.values()) / len(exact), 4)
+        if exact and month_counts
+        else 0.0,
+        "largest_winner_dependency": round(max(wins) / gross_profit, 4)
+        if wins and gross_profit
+        else 0.0,
     }
 
 
 def _status_from_metrics(metrics: dict[str, Any], blockers: list[str]) -> str:
     if blockers:
         return "blocked_vrp_credit_spread_bounded_replay_gate"
-    if metrics["exact_closed_or_settled_rows"] >= 30 and metrics["net_usd_total"] > 0 and (metrics["point_profit_factor"] or 0) > 1.18:
+    if (
+        metrics["exact_closed_or_settled_rows"] >= 30
+        and metrics["net_usd_total"] > 0
+        and (metrics["point_profit_factor"] or 0) > 1.18
+    ):
         return "historical_candidate_for_future_forward_shadow"
     return "falsified_vrp_credit_spread_replay"
 
@@ -268,7 +337,11 @@ def build_report(
     harness_report, harness_meta = _load_json(structure_harness_path, required=True)
     holdout, holdout_meta = _load_json(holdout_contract_path, required=True)
     fixture_rows, fixture_meta = _load_rows(fixture_candidates_path)
-    prereg_valid, prereg_reasons = _preregistration_valid(playbook) if playbook_meta["status"] == "loaded" else (False, ["missing_preregistration_artifact"])
+    prereg_valid, prereg_reasons = (
+        _preregistration_valid(playbook)
+        if playbook_meta["status"] == "loaded"
+        else (False, ["missing_preregistration_artifact"])
+    )
     protected_start = _protected_holdout_start(holdout)
     blockers: list[str] = []
     replay_rows: list[dict[str, Any]] = []
@@ -278,27 +351,47 @@ def build_report(
     if harness_meta["status"] != "loaded":
         blockers.append("missing_vrp_credit_spread_structure_harness")
     elif harness_report.get("status") != "ready_for_bounded_read_only_vrp_replay":
-        blockers.extend(str(item) for item in _as_list(harness_report.get("remaining_blockers")) if item)
+        blockers.extend(
+            str(item)
+            for item in _as_list(harness_report.get("remaining_blockers"))
+            if item
+        )
     if not _candidate_geometry_ready(playbook):
         blockers.append("missing_preregistered_candidate_geometry")
     if not DEFAULT_QUOTES_DB.exists() and quotes_db_path == DEFAULT_QUOTES_DB:
         blockers.append("missing_existing_trusted_quote_store")
+    if fixture_candidates_path is None and not blockers:
+        blockers.append("missing_native_vrp_candidate_generation_engine")
     if fixture_rows and not blockers:
-        replay_rows = _classify_rows(fixture_rows, protected_holdout_start=protected_start)
+        replay_rows = _classify_rows(
+            fixture_rows, protected_holdout_start=protected_start
+        )
         historical_replay_performed = True
     elif fixture_rows and blockers:
-        replay_rows = [{"denominator_status": "replay_gate_blocked", "blockers": blockers, "source_rows_not_replayed": len(fixture_rows)}]
+        replay_rows = [
+            {
+                "denominator_status": "replay_gate_blocked",
+                "blockers": blockers,
+                "source_rows_not_replayed": len(fixture_rows),
+            }
+        ]
     metrics = _metrics(replay_rows)
     status = _status_from_metrics(metrics, sorted(set(blockers)))
     report = {
         "report_id": REPORT_ID,
         "generated_at_utc": generated_at,
         "status": status,
-        **{**READ_ONLY_FLAGS, "historical_replay_performed": historical_replay_performed},
+        **{
+            **READ_ONLY_FLAGS,
+            "historical_replay_performed": historical_replay_performed,
+        },
         "scope": "read_only_vrp_credit_spread_bounded_replay_gate",
         "concept_id": playbook.get("concept_id") if playbook else None,
         "structure": playbook.get("structure") if playbook else None,
-        "historical_window": _as_dict(playbook.get("historical_research_window") or _as_dict(playbook.get("concept")).get("historical_research_window")),
+        "historical_window": _as_dict(
+            playbook.get("historical_research_window")
+            or _as_dict(playbook.get("concept")).get("historical_research_window")
+        ),
         "protected_holdout_start": protected_start,
         "replay_gate_blockers": sorted(set(blockers)),
         "replay_rows": replay_rows,
@@ -334,8 +427,13 @@ def _validate_report(report: dict[str, Any]) -> None:
             continue
         if report.get(key) is not expected:
             raise ValueError(f"read-only flag mismatch for {key}")
-    if report.get("accepted_profitability") is not False or report.get("promotion_ready") is not False:
-        raise ValueError("historical replay gate cannot mark accepted profitability or promotion")
+    if (
+        report.get("accepted_profitability") is not False
+        or report.get("promotion_ready") is not False
+    ):
+        raise ValueError(
+            "historical replay gate cannot mark accepted profitability or promotion"
+        )
 
 
 def _fmt_bool(value: Any) -> str:
@@ -361,7 +459,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
     ]
     if report.get("replay_gate_blockers"):
-        lines.extend(f"- `{item}`" for item in _as_list(report.get("replay_gate_blockers")))
+        lines.extend(
+            f"- `{item}`" for item in _as_list(report.get("replay_gate_blockers"))
+        )
     else:
         lines.append("- None.")
     metrics = _as_dict(report.get("metrics"))
@@ -385,7 +485,12 @@ def render_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def write_outputs(report: dict[str, Any], *, output_dir: Path = DEFAULT_OUTPUT_DIR, docs_report: Path = DEFAULT_DOCS_REPORT) -> dict[str, str]:
+def write_outputs(
+    report: dict[str, Any],
+    *,
+    output_dir: Path = DEFAULT_OUTPUT_DIR,
+    docs_report: Path = DEFAULT_DOCS_REPORT,
+) -> dict[str, str]:
     output_dir.mkdir(parents=True, exist_ok=True)
     docs_report.parent.mkdir(parents=True, exist_ok=True)
     stamp = _utc_stamp()
@@ -404,7 +509,10 @@ def write_outputs(report: dict[str, Any], *, output_dir: Path = DEFAULT_OUTPUT_D
     report_with_artifacts["artifacts"] = artifacts
     markdown = render_markdown(report_with_artifacts)
     for path in (json_path, latest_json):
-        path.write_text(json.dumps(report_with_artifacts, indent=2, sort_keys=True) + "\n", encoding="utf8")
+        path.write_text(
+            json.dumps(report_with_artifacts, indent=2, sort_keys=True) + "\n",
+            encoding="utf8",
+        )
     for path in (md_path, latest_md, docs_report):
         path.write_text(markdown, encoding="utf8")
     report["artifacts"] = artifacts
@@ -412,10 +520,18 @@ def write_outputs(report: dict[str, Any], *, output_dir: Path = DEFAULT_OUTPUT_D
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Run the read-only VRP credit-spread bounded replay gate.")
-    parser.add_argument("--preregistered-playbook", type=Path, default=DEFAULT_PREREGISTERED_PLAYBOOK)
-    parser.add_argument("--structure-harness", type=Path, default=DEFAULT_STRUCTURE_HARNESS)
-    parser.add_argument("--holdout-contract", type=Path, default=DEFAULT_HOLDOUT_CONTRACT)
+    parser = argparse.ArgumentParser(
+        description="Run the read-only VRP credit-spread bounded replay gate."
+    )
+    parser.add_argument(
+        "--preregistered-playbook", type=Path, default=DEFAULT_PREREGISTERED_PLAYBOOK
+    )
+    parser.add_argument(
+        "--structure-harness", type=Path, default=DEFAULT_STRUCTURE_HARNESS
+    )
+    parser.add_argument(
+        "--holdout-contract", type=Path, default=DEFAULT_HOLDOUT_CONTRACT
+    )
     parser.add_argument("--quotes-db", type=Path, default=DEFAULT_QUOTES_DB)
     parser.add_argument("--fixture-candidates", type=Path, default=None)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
@@ -432,7 +548,9 @@ def main(argv: list[str] | None = None) -> int:
         fixture_candidates_path=args.fixture_candidates,
     )
     if not args.no_write:
-        report["artifacts"] = write_outputs(report, output_dir=args.output_dir, docs_report=args.docs_report)
+        report["artifacts"] = write_outputs(
+            report, output_dir=args.output_dir, docs_report=args.docs_report
+        )
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:

@@ -12,8 +12,15 @@ ROOT = Path(__file__).resolve().parents[1]
 REPORT_ID = "regular_options_preregistered_playbook_readiness_selector"
 
 DEFAULT_GOAL_LOOP = ROOT / "data" / "forward-tracking" / "options_goal_loop_latest.json"
-DEFAULT_OUTPUT_DIR = ROOT / "data" / "profitability-lab" / "regular-options-preregistered-playbook-readiness-selector"
-DEFAULT_DOCS_REPORT = ROOT / "docs" / "regular-options-preregistered-playbook-readiness-selector.md"
+DEFAULT_OUTPUT_DIR = (
+    ROOT
+    / "data"
+    / "profitability-lab"
+    / "regular-options-preregistered-playbook-readiness-selector"
+)
+DEFAULT_DOCS_REPORT = (
+    ROOT / "docs" / "regular-options-preregistered-playbook-readiness-selector.md"
+)
 
 READ_ONLY_FLAGS = {
     "read_only": True,
@@ -58,9 +65,17 @@ PLAYBOOKS = (
         "key": "momentum_continuation_debit_spread",
         "concept_id": "breadth_confirmed_index_qqq_momentum_continuation_debit_spread_v1",
         "label": "Breadth-confirmed index/QQQ momentum continuation debit spread",
-        "path": ROOT / "data" / "profitability-lab" / "regular-options-preregistered-momentum-continuation-playbook" / "latest.json",
+        "path": ROOT
+        / "data"
+        / "profitability-lab"
+        / "regular-options-preregistered-momentum-continuation-playbook"
+        / "latest.json",
         "expected_structure": "defined_risk_call_debit_spreads_only",
-        "readiness_path": ROOT / "data" / "profitability-lab" / "regular-options-momentum-continuation-bounded-replay" / "latest.json",
+        "readiness_path": ROOT
+        / "data"
+        / "profitability-lab"
+        / "regular-options-momentum-continuation-bounded-replay"
+        / "latest.json",
         "complexity_score": 1,
         "engine_notes": [
             "defined-risk call debit spread",
@@ -72,81 +87,177 @@ PLAYBOOKS = (
         "key": "vrp_put_credit_spread",
         "concept_id": "low_mid_vix_index_put_credit_spread_vrp_v1",
         "label": "Low/mid VIX index put credit spread VRP",
-        "path": ROOT / "data" / "profitability-lab" / "regular-options-preregistered-vrp-credit-spread-playbook" / "latest.json",
+        "path": ROOT
+        / "data"
+        / "profitability-lab"
+        / "regular-options-preregistered-vrp-credit-spread-playbook"
+        / "latest.json",
         "expected_structure": "defined_risk_put_credit_spreads_only",
-        "readiness_path": ROOT / "data" / "profitability-lab" / "regular-options-vrp-credit-spread-bounded-replay" / "latest.json",
+        "readiness_path": ROOT
+        / "data"
+        / "profitability-lab"
+        / "regular-options-vrp-credit-spread-bounded-replay"
+        / "latest.json",
         "complexity_score": 4,
-        "engine_notes": ["credit-spread side-aware pricing", "assignment/expiration", "margin/max-loss convention"],
+        "engine_notes": [
+            "credit-spread side-aware pricing",
+            "assignment/expiration",
+            "margin/max-loss convention",
+        ],
     },
     {
         "key": "term_structure_calendar_diagonal",
         "concept_id": "low_mid_vix_index_calendar_term_structure_dislocation_v1",
         "label": "Low/mid VIX index calendar or diagonal term-structure dislocation",
-        "path": ROOT / "data" / "profitability-lab" / "regular-options-preregistered-term-structure-calendar-playbook" / "latest.json",
+        "path": ROOT
+        / "data"
+        / "profitability-lab"
+        / "regular-options-preregistered-term-structure-calendar-playbook"
+        / "latest.json",
         "expected_structure": "defined_risk_calendar_or_diagonal_debit_spreads_only",
-        "readiness_path": ROOT / "data" / "profitability-lab" / "regular-options-term-structure-calendar-bounded-replay" / "latest.json",
+        "readiness_path": ROOT
+        / "data"
+        / "profitability-lab"
+        / "regular-options-term-structure-calendar-bounded-replay"
+        / "latest.json",
         "complexity_score": 5,
-        "engine_notes": ["multi-expiry pricing", "front-leg roll/expiry", "strict-new dedupe"],
+        "engine_notes": [
+            "multi-expiry pricing",
+            "front-leg roll/expiry",
+            "strict-new dedupe",
+        ],
     },
     {
         "key": "skew_broken_wing_put_fly",
         "concept_id": "low_mid_vix_index_skew_broken_wing_put_fly_v1",
         "label": "Low/mid VIX index skew broken-wing put butterfly",
-        "path": ROOT / "data" / "profitability-lab" / "regular-options-preregistered-skew-broken-wing-playbook" / "latest.json",
+        "path": ROOT
+        / "data"
+        / "profitability-lab"
+        / "regular-options-preregistered-skew-broken-wing-playbook"
+        / "latest.json",
         "expected_structure": "defined_risk_broken_wing_put_butterflies_only",
-        "readiness_path": ROOT / "data" / "profitability-lab" / "regular-options-skew-broken-wing-bounded-replay" / "latest.json",
+        "readiness_path": ROOT
+        / "data"
+        / "profitability-lab"
+        / "regular-options-skew-broken-wing-bounded-replay"
+        / "latest.json",
         "complexity_score": 6,
-        "engine_notes": ["three-leg/four-leg pricing", "skew inputs", "max-loss convention"],
+        "engine_notes": [
+            "three-leg/four-leg pricing",
+            "skew inputs",
+            "max-loss convention",
+        ],
     },
     {
         "key": "macro_event_long_strangle",
         "concept_id": "low_mid_vix_macro_event_long_strangle_v1",
         "label": "Low/mid VIX macro-event long straddle/strangle",
-        "path": ROOT / "data" / "profitability-lab" / "regular-options-preregistered-macro-event-long-strangle-playbook" / "latest.json",
+        "path": ROOT
+        / "data"
+        / "profitability-lab"
+        / "regular-options-preregistered-macro-event-long-strangle-playbook"
+        / "latest.json",
         "expected_structure": "defined_risk_long_straddles_or_strangles_only",
-        "readiness_path": ROOT / "data" / "profitability-lab" / "regular-options-macro-event-long-strangle-replay-readiness" / "latest.json",
+        "readiness_path": ROOT
+        / "data"
+        / "profitability-lab"
+        / "regular-options-macro-event-long-strangle-replay-readiness"
+        / "latest.json",
         "complexity_score": 5,
-        "engine_notes": ["event calendar dependency", "two-leg long premium pricing", "event-window leakage guard"],
+        "engine_notes": [
+            "event calendar dependency",
+            "two-leg long premium pricing",
+            "event-window leakage guard",
+        ],
     },
     {
         "key": "post_event_iv_crush_iron_condor",
         "concept_id": "post_event_iv_crush_index_iron_condor_v1",
         "label": "Post-event IV-crush index iron condor or iron butterfly",
-        "path": ROOT / "data" / "profitability-lab" / "regular-options-preregistered-post-event-iv-crush-iron-condor-playbook" / "latest.json",
+        "path": ROOT
+        / "data"
+        / "profitability-lab"
+        / "regular-options-preregistered-post-event-iv-crush-iron-condor-playbook"
+        / "latest.json",
         "expected_structure": "defined_risk_short_iron_condors_or_iron_butterflies_only",
-        "readiness_path": ROOT / "data" / "profitability-lab" / "regular-options-post-event-iv-crush-replay-readiness" / "latest.json",
+        "readiness_path": ROOT
+        / "data"
+        / "profitability-lab"
+        / "regular-options-post-event-iv-crush-replay-readiness"
+        / "latest.json",
         "complexity_score": 7,
-        "engine_notes": ["four-leg credit pricing", "event calendar dependency", "margin/max-loss and assignment/expiration"],
+        "engine_notes": [
+            "four-leg credit pricing",
+            "event calendar dependency",
+            "margin/max-loss and assignment/expiration",
+        ],
     },
     {
         "key": "flow_extreme_ratio_backspread",
         "concept_id": "index_flow_extreme_mean_reversion_ratio_backspread_v1",
         "label": "Index flow-extreme mean-reversion ratio/backspread",
-        "path": ROOT / "data" / "profitability-lab" / "regular-options-preregistered-flow-extreme-ratio-backspread-playbook" / "latest.json",
+        "path": ROOT
+        / "data"
+        / "profitability-lab"
+        / "regular-options-preregistered-flow-extreme-ratio-backspread-playbook"
+        / "latest.json",
         "expected_structure": "defined_risk_ratio_spreads_or_backspreads_only",
-        "readiness_path": ROOT / "data" / "profitability-lab" / "regular-options-flow-extreme-ratio-backspread-replay-readiness" / "latest.json",
+        "readiness_path": ROOT
+        / "data"
+        / "profitability-lab"
+        / "regular-options-flow-extreme-ratio-backspread-replay-readiness"
+        / "latest.json",
         "complexity_score": 8,
-        "engine_notes": ["ratio/backspread pricing", "undefined-risk rejection", "flow input dependency"],
+        "engine_notes": [
+            "ratio/backspread pricing",
+            "undefined-risk rejection",
+            "flow input dependency",
+        ],
     },
     {
         "key": "dispersion_proxy_hybrid",
         "concept_id": "index_constituent_dispersion_proxy_defined_risk_hybrid_v1",
         "label": "Index constituent dispersion-proxy debit/credit hybrid",
-        "path": ROOT / "data" / "profitability-lab" / "regular-options-preregistered-dispersion-proxy-hybrid-playbook" / "latest.json",
+        "path": ROOT
+        / "data"
+        / "profitability-lab"
+        / "regular-options-preregistered-dispersion-proxy-hybrid-playbook"
+        / "latest.json",
         "expected_structure": "defined_risk_index_constituent_debit_credit_hybrid_pairs_only",
-        "readiness_path": ROOT / "data" / "profitability-lab" / "regular-options-dispersion-proxy-hybrid-replay-readiness" / "latest.json",
+        "readiness_path": ROOT
+        / "data"
+        / "profitability-lab"
+        / "regular-options-dispersion-proxy-hybrid-bounded-replay"
+        / "latest.json",
         "complexity_score": 9,
-        "engine_notes": ["paired index/constituent legs", "pair denominator mapping", "source-quality scope for constituents"],
+        "engine_notes": [
+            "paired index/constituent legs",
+            "pair denominator mapping",
+            "source-quality scope for constituents",
+        ],
     },
     {
         "key": "pmcc_diagonal_income",
         "concept_id": "low_mid_vix_index_pmcc_diagonal_income_v1",
         "label": "Low/mid VIX index PMCC-style diagonal income",
-        "path": ROOT / "data" / "profitability-lab" / "regular-options-preregistered-pmcc-diagonal-playbook" / "latest.json",
+        "path": ROOT
+        / "data"
+        / "profitability-lab"
+        / "regular-options-preregistered-pmcc-diagonal-playbook"
+        / "latest.json",
         "expected_structure": "defined_risk_pmcc_style_call_diagonals_only",
-        "readiness_path": ROOT / "data" / "profitability-lab" / "regular-options-pmcc-diagonal-replay-readiness" / "latest.json",
+        "readiness_path": ROOT
+        / "data"
+        / "profitability-lab"
+        / "regular-options-pmcc-diagonal-replay-readiness"
+        / "latest.json",
         "complexity_score": 7,
-        "engine_notes": ["long-dated/short-dated call diagonal", "roll ledger", "assignment/ex-dividend and max-loss convention"],
+        "engine_notes": [
+            "long-dated/short-dated call diagonal",
+            "roll ledger",
+            "assignment/ex-dividend and max-loss convention",
+        ],
     },
 )
 
@@ -175,7 +286,13 @@ def _as_list(value: Any) -> list[Any]:
 
 
 def _load_json(path: Path, *, required: bool) -> tuple[dict[str, Any], dict[str, Any]]:
-    meta = {"path": _rel(path), "required": required, "exists": path.exists(), "status": "missing", "error": None}
+    meta = {
+        "path": _rel(path),
+        "required": required,
+        "exists": path.exists(),
+        "status": "missing",
+        "error": None,
+    }
     if not path.exists():
         return {}, meta
     try:
@@ -198,7 +315,9 @@ def _load_json(path: Path, *, required: bool) -> tuple[dict[str, Any], dict[str,
     return payload, meta
 
 
-def _artifact_valid(payload: dict[str, Any], spec: dict[str, Any]) -> tuple[bool, list[str]]:
+def _artifact_valid(
+    payload: dict[str, Any], spec: dict[str, Any]
+) -> tuple[bool, list[str]]:
     reasons: list[str] = []
     concept = _as_dict(payload.get("concept"))
     concept_id = payload.get("concept_id") or concept.get("concept_id")
@@ -210,23 +329,42 @@ def _artifact_valid(payload: dict[str, Any], spec: dict[str, Any]) -> tuple[bool
         reasons.append("unexpected_status")
     if structure != spec["expected_structure"]:
         reasons.append("unexpected_structure")
-    for key in ("accepted_profitability", "lane_implementation_performed", "scanner_policy_changed", "strategy_logic_changed"):
+    for key in (
+        "accepted_profitability",
+        "lane_implementation_performed",
+        "scanner_policy_changed",
+        "strategy_logic_changed",
+    ):
         if payload.get(key) is not False:
             reasons.append(f"{key}_not_false")
     return not reasons, reasons
 
 
-def _readiness_blockers(readiness_payload: dict[str, Any], readiness_meta: dict[str, Any]) -> list[str]:
+def _readiness_blockers(
+    readiness_payload: dict[str, Any], readiness_meta: dict[str, Any]
+) -> list[str]:
     if readiness_meta["status"] != "loaded":
         return []
     blockers: list[str] = []
     for key in ("blockers", "remaining_blockers", "replay_gate_blockers"):
-        blockers.extend(str(item) for item in _as_list(readiness_payload.get(key)) if item)
+        blockers.extend(
+            str(item) for item in _as_list(readiness_payload.get(key)) if item
+        )
     return sorted(set(blockers))
 
 
-def _classify_design(spec: dict[str, Any], payload: dict[str, Any], meta: dict[str, Any], readiness_payload: dict[str, Any], readiness_meta: dict[str, Any]) -> dict[str, Any]:
-    valid, validation_reasons = _artifact_valid(payload, spec) if meta["status"] == "loaded" else (False, ["missing_preregistered_design_artifact"])
+def _classify_design(
+    spec: dict[str, Any],
+    payload: dict[str, Any],
+    meta: dict[str, Any],
+    readiness_payload: dict[str, Any],
+    readiness_meta: dict[str, Any],
+) -> dict[str, Any]:
+    valid, validation_reasons = (
+        _artifact_valid(payload, spec)
+        if meta["status"] == "loaded"
+        else (False, ["missing_preregistered_design_artifact"])
+    )
     concept = _as_dict(payload.get("concept"))
     readiness_blockers = _readiness_blockers(readiness_payload, readiness_meta)
     if not valid:
@@ -249,20 +387,32 @@ def _classify_design(spec: dict[str, Any], payload: dict[str, Any], meta: dict[s
         "key": spec["key"],
         "concept_id": spec["concept_id"],
         "label": spec["label"],
-        "structure": payload.get("structure") or concept.get("structure") if payload else spec["expected_structure"],
+        "structure": payload.get("structure") or concept.get("structure")
+        if payload
+        else spec["expected_structure"],
         "artifact_status": meta["status"],
         "artifact_path": meta["path"],
         "validation_valid": valid,
         "validation_reasons": validation_reasons,
         "readiness_status": readiness_status,
-        "readiness_artifact_status": readiness_meta["status"] if readiness_meta else "not_configured",
-        "readiness_artifact_path": readiness_meta.get("path") if readiness_meta else None,
+        "readiness_artifact_status": readiness_meta["status"]
+        if readiness_meta
+        else "not_configured",
+        "readiness_artifact_path": readiness_meta.get("path")
+        if readiness_meta
+        else None,
         "blockers": blockers,
         "complexity_score": spec["complexity_score"],
         "engine_notes": list(spec["engine_notes"]),
-        "accepted_profitability": payload.get("accepted_profitability") if payload else None,
-        "historical_replay_performed": payload.get("historical_replay_performed") if payload else None,
-        "lane_implementation_performed": payload.get("lane_implementation_performed") if payload else None,
+        "accepted_profitability": payload.get("accepted_profitability")
+        if payload
+        else None,
+        "historical_replay_performed": payload.get("historical_replay_performed")
+        if payload
+        else None,
+        "lane_implementation_performed": payload.get("lane_implementation_performed")
+        if payload
+        else None,
     }
 
 
@@ -274,7 +424,14 @@ def _rank_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         "blocked_by_known_readiness_audit": 3,
         "duplicate_or_lower_priority": 4,
     }
-    return sorted(rows, key=lambda row: (status_rank.get(str(row.get("readiness_status")), 99), int(row["complexity_score"]), str(row["key"])))
+    return sorted(
+        rows,
+        key=lambda row: (
+            status_rank.get(str(row.get("readiness_status")), 99),
+            int(row["complexity_score"]),
+            str(row["key"]),
+        ),
+    )
 
 
 def _research_only_task_boundary(row: dict[str, Any] | None) -> str | None:
@@ -288,15 +445,21 @@ def _research_only_task_boundary(row: dict[str, Any] | None) -> str | None:
     )
 
 
-def _goal_state(goal_payload: dict[str, Any], goal_meta: dict[str, Any]) -> dict[str, Any]:
+def _goal_state(
+    goal_payload: dict[str, Any], goal_meta: dict[str, Any]
+) -> dict[str, Any]:
     accounting = _as_dict(goal_payload.get("forward_evidence_accounting"))
     return {
         "artifact_status": goal_meta["status"],
         "current_decision_state": goal_payload.get("current_decision_state"),
-        "post_freeze_strict_exact_completed_rows": accounting.get("post_freeze_strict_exact_completed_rows"),
+        "post_freeze_strict_exact_completed_rows": accounting.get(
+            "post_freeze_strict_exact_completed_rows"
+        ),
         "minimum_required": accounting.get("minimum_required"),
         "cohort_log_status": accounting.get("cohort_log_status"),
-        "strict_usd_pf_lower_bound_5pct": accounting.get("strict_usd_pf_lower_bound_5pct"),
+        "strict_usd_pf_lower_bound_5pct": accounting.get(
+            "strict_usd_pf_lower_bound_5pct"
+        ),
         "live_entry_allowed": accounting.get("live_entry_allowed"),
         "auto_track_allowed": accounting.get("auto_track_allowed"),
         "broker_order_allowed": accounting.get("broker_order_allowed"),
@@ -304,26 +467,48 @@ def _goal_state(goal_payload: dict[str, Any], goal_meta: dict[str, Any]) -> dict
     }
 
 
-def build_report(*, goal_loop_path: Path = DEFAULT_GOAL_LOOP, generated_at_utc: str | None = None) -> dict[str, Any]:
+def build_report(
+    *, goal_loop_path: Path = DEFAULT_GOAL_LOOP, generated_at_utc: str | None = None
+) -> dict[str, Any]:
     goal_payload, goal_meta = _load_json(goal_loop_path, required=False)
     source_artifacts: dict[str, Any] = {"goal_loop": goal_meta}
     rows: list[dict[str, Any]] = []
     for spec in PLAYBOOKS:
         payload, meta = _load_json(spec["path"], required=True)
         readiness_payload: dict[str, Any] = {}
-        readiness_meta: dict[str, Any] = {"status": "not_configured", "path": None, "required": False, "exists": False, "error": None}
+        readiness_meta: dict[str, Any] = {
+            "status": "not_configured",
+            "path": None,
+            "required": False,
+            "exists": False,
+            "error": None,
+        }
         if spec.get("readiness_path"):
-            readiness_payload, readiness_meta = _load_json(spec["readiness_path"], required=False)
+            readiness_payload, readiness_meta = _load_json(
+                spec["readiness_path"], required=False
+            )
         source_artifacts[spec["key"]] = {"playbook": meta, "readiness": readiness_meta}
-        rows.append(_classify_design(spec, payload, meta, readiness_payload, readiness_meta))
+        rows.append(
+            _classify_design(spec, payload, meta, readiness_payload, readiness_meta)
+        )
 
     ranked = _rank_rows(rows)
-    candidate = next((row for row in ranked if row["readiness_status"] == "candidate_for_research_only_implementation_approval"), None)
+    candidate = next(
+        (
+            row
+            for row in ranked
+            if row["readiness_status"]
+            == "candidate_for_research_only_implementation_approval"
+        ),
+        None,
+    )
     missing = [row["key"] for row in rows if row["artifact_status"] != "loaded"]
     report = {
         "report_id": REPORT_ID,
         "generated_at_utc": generated_at_utc or _utc_now_iso(),
-        "status": "candidate_selected_for_research_only_implementation_approval" if candidate else "no_research_implementation_candidate_ready_without_blocker",
+        "status": "candidate_selected_for_research_only_implementation_approval"
+        if candidate
+        else "no_research_implementation_candidate_ready_without_blocker",
         **READ_ONLY_FLAGS,
         "scope": "read_only_preregistered_playbook_implementation_readiness_selector",
         "goal_state": _goal_state(goal_payload, goal_meta),
@@ -331,7 +516,9 @@ def build_report(*, goal_loop_path: Path = DEFAULT_GOAL_LOOP, generated_at_utc: 
         "ranked_designs": ranked,
         "top_ranked_candidate": candidate,
         "recommended_operator_approval_question": None,
-        "recommended_research_only_task_boundary": _research_only_task_boundary(candidate),
+        "recommended_research_only_task_boundary": _research_only_task_boundary(
+            candidate
+        ),
         "missing_preregistered_designs": missing,
         "allowed_next_step": (
             "Return this selector to GPT-5.5 Pro. Do not ask an operator approval question for bounded read-only/research-only work already covered by the Oracle packet posture; instead ask GPT-5.5 Pro for the next concrete Codex task inside the research-only task boundary."
@@ -357,20 +544,35 @@ def _validate_report(report: dict[str, Any]) -> None:
     if ids != expected_ids:
         raise ValueError("selector inventory concept mismatch")
     pmcc = next(row for row in rows if row["key"] == "pmcc_diagonal_income")
-    if pmcc["artifact_status"] == "loaded" and pmcc["accepted_profitability"] is not False:
+    if (
+        pmcc["artifact_status"] == "loaded"
+        and pmcc["accepted_profitability"] is not False
+    ):
         raise ValueError("PMCC artifact must remain design-only and not profitable")
     vrp = next(row for row in rows if row["key"] == "vrp_put_credit_spread")
     term = next(row for row in rows if row["key"] == "term_structure_calendar_diagonal")
-    if vrp["readiness_artifact_status"] == "loaded" and vrp["readiness_status"] != "blocked_by_known_readiness_audit":
+    if (
+        vrp["readiness_artifact_status"] == "loaded"
+        and vrp["readiness_status"] != "blocked_by_known_readiness_audit"
+    ):
         raise ValueError("VRP must preserve known readiness blockers")
-    if term["readiness_artifact_status"] == "loaded" and term["readiness_status"] != "blocked_by_known_readiness_audit":
+    if (
+        term["readiness_artifact_status"] == "loaded"
+        and term["readiness_status"] != "blocked_by_known_readiness_audit"
+    ):
         raise ValueError("term-structure must preserve known readiness blockers")
     boundary = report.get("recommended_research_only_task_boundary")
     if boundary is not None:
         if str(boundary).count("`") < 2:
-            raise ValueError("research-only task boundary must name exactly one concept")
-        if "no live validation" not in str(boundary) or "no broker orders" not in str(boundary):
-            raise ValueError("research-only task boundary must preserve live/broker prohibitions")
+            raise ValueError(
+                "research-only task boundary must name exactly one concept"
+            )
+        if "no live validation" not in str(boundary) or "no broker orders" not in str(
+            boundary
+        ):
+            raise ValueError(
+                "research-only task boundary must preserve live/broker prohibitions"
+            )
 
 
 def _fmt_bool(value: Any) -> str:
@@ -410,7 +612,14 @@ def render_markdown(report: dict[str, Any]) -> str:
             ]
         )
     else:
-        lines.extend(["## Selected Candidate", "", "No research-only implementation candidate is ready without a named blocker.", ""])
+        lines.extend(
+            [
+                "## Selected Candidate",
+                "",
+                "No research-only implementation candidate is ready without a named blocker.",
+                "",
+            ]
+        )
 
     lines.extend(
         [
@@ -422,7 +631,9 @@ def render_markdown(report: dict[str, Any]) -> str:
     )
     for index, row in enumerate(_as_list(report.get("ranked_designs")), start=1):
         row = _as_dict(row)
-        blockers = ", ".join(f"`{item}`" for item in _as_list(row.get("blockers"))) or "-"
+        blockers = (
+            ", ".join(f"`{item}`" for item in _as_list(row.get("blockers"))) or "-"
+        )
         lines.append(
             f"| {index} | `{row.get('concept_id')}` | `{row.get('structure')}` | `{row.get('readiness_status')}` | {blockers} |"
         )
@@ -457,7 +668,10 @@ def write_outputs(
     report_with_artifacts["artifacts"] = artifacts
     markdown = render_markdown(report_with_artifacts)
     for path in (json_path, latest_json):
-        path.write_text(json.dumps(report_with_artifacts, indent=2, sort_keys=True) + "\n", encoding="utf8")
+        path.write_text(
+            json.dumps(report_with_artifacts, indent=2, sort_keys=True) + "\n",
+            encoding="utf8",
+        )
     for path in (md_path, latest_md, docs_report):
         path.write_text(markdown, encoding="utf8")
     report["artifacts"] = artifacts
@@ -465,7 +679,9 @@ def write_outputs(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build a read-only preregistered playbook readiness selector.")
+    parser = argparse.ArgumentParser(
+        description="Build a read-only preregistered playbook readiness selector."
+    )
     parser.add_argument("--goal-loop", type=Path, default=DEFAULT_GOAL_LOOP)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--docs-report", type=Path, default=DEFAULT_DOCS_REPORT)
@@ -475,12 +691,22 @@ def main(argv: list[str] | None = None) -> int:
 
     report = build_report(goal_loop_path=args.goal_loop)
     if not args.no_write:
-        report["artifacts"] = write_outputs(report, output_dir=args.output_dir, docs_report=args.docs_report)
+        report["artifacts"] = write_outputs(
+            report, output_dir=args.output_dir, docs_report=args.docs_report
+        )
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:
         print(render_markdown(report))
-    return 0 if report["status"] in {"candidate_selected_for_research_only_implementation_approval", "no_research_implementation_candidate_ready_without_blocker"} else 1
+    return (
+        0
+        if report["status"]
+        in {
+            "candidate_selected_for_research_only_implementation_approval",
+            "no_research_implementation_candidate_ready_without_blocker",
+        }
+        else 1
+    )
 
 
 if __name__ == "__main__":

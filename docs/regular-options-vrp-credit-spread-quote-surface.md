@@ -4,23 +4,23 @@ This generated report is read-only. It checks whether existing trusted local OPR
 
 ## Summary
 
-- Status: `blocked_vrp_credit_spread_quote_surface`.
-- Surface ready: `false`.
+- Status: `credit_spread_quote_surface_ready`.
+- Surface ready: `true`.
 - Accepted profitability: `false`.
-- Symbols ready: `-`.
+- Symbols ready: `SPY, QQQ, IWM, DIA`.
 
 ## Blockers
 
-- `missing_index_credit_spread_quote_surface`
+- None.
 
 ## Symbol Coverage
 
 | Symbol | Status | Covered Months | Latest-Four Months | Covered Dates | Spread Groups | Blockers |
 | --- | --- | ---: | ---: | ---: | ---: | --- |
-| `SPY` | `blocked` | 16 / 24 | 3 / 4 | 285 | 18845 | insufficient_month_coverage, insufficient_latest_four_month_coverage |
-| `QQQ` | `blocked` | 17 / 24 | 4 / 4 | 285 | 19947 | insufficient_month_coverage |
-| `IWM` | `blocked` | 17 / 24 | 3 / 4 | 273 | 17802 | insufficient_month_coverage, insufficient_latest_four_month_coverage |
-| `DIA` | `blocked` | 15 / 24 | 1 / 4 | 257 | 12509 | insufficient_month_coverage, insufficient_latest_four_month_coverage |
+| `SPY` | `ready` | 24 / 24 | 4 / 4 | 464 | 19644 | - |
+| `QQQ` | `ready` | 24 / 24 | 4 / 4 | 464 | 20734 | - |
+| `IWM` | `ready` | 24 / 24 | 4 / 4 | 458 | 18573 | - |
+| `DIA` | `ready` | 24 / 24 | 4 / 4 | 457 | 13302 | - |
 
 ## Forbidden Actions
 

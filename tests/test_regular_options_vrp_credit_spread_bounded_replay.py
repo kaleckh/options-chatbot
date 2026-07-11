@@ -11,12 +11,17 @@ from workspace_tempdir import WorkspaceTempDir
 
 def _write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf8")
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf8"
+    )
 
 
 def _write_jsonl(path: Path, rows: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n", encoding="utf8")
+    path.write_text(
+        "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n",
+        encoding="utf8",
+    )
 
 
 def _playbook(tmp: Path, *, geometry: bool = True) -> Path:
@@ -26,7 +31,10 @@ def _playbook(tmp: Path, *, geometry: bool = True) -> Path:
         "concept_id": replay.CONCEPT_ID,
         "structure": replay.EXPECTED_STRUCTURE,
         "accepted_profitability": False,
-        "historical_research_window": {"start_date": "2024-06-01", "end_date": "2026-05-31"},
+        "historical_research_window": {
+            "start_date": "2024-06-01",
+            "end_date": "2026-05-31",
+        },
     }
     if geometry:
         payload["candidate_geometry"] = {
@@ -47,8 +55,15 @@ def _harness(tmp: Path, *, ready: bool = True) -> Path:
         path,
         {
             "report_id": "regular_options_vrp_credit_spread_structure_harness",
-            "status": "ready_for_bounded_read_only_vrp_replay" if ready else "blocked_vrp_credit_spread_structure_harness",
-            "remaining_blockers": [] if ready else ["missing_point_in_time_vix_bucket", "missing_index_credit_spread_quote_surface"],
+            "status": "ready_for_bounded_read_only_vrp_replay"
+            if ready
+            else "blocked_vrp_credit_spread_structure_harness",
+            "remaining_blockers": []
+            if ready
+            else [
+                "missing_point_in_time_vix_bucket",
+                "missing_index_credit_spread_quote_surface",
+            ],
         },
     )
     return path
@@ -56,7 +71,15 @@ def _harness(tmp: Path, *, ready: bool = True) -> Path:
 
 def _holdout(tmp: Path) -> Path:
     path = tmp / "holdout.json"
-    _write_json(path, {"protected_range": {"start_date": "2026-06-01", "date_basis": "candidate_entry_date"}})
+    _write_json(
+        path,
+        {
+            "protected_range": {
+                "start_date": "2026-06-01",
+                "date_basis": "candidate_entry_date",
+            }
+        },
+    )
     return path
 
 
@@ -90,10 +113,16 @@ class RegularOptionsVrpCreditSpreadBoundedReplayTests(unittest.TestCase):
                 generated_at_utc="2026-06-23T00:00:00Z",
             )
 
-        self.assertEqual(report["status"], "blocked_vrp_credit_spread_bounded_replay_gate")
+        self.assertEqual(
+            report["status"], "blocked_vrp_credit_spread_bounded_replay_gate"
+        )
         self.assertFalse(report["historical_replay_performed"])
-        self.assertIn("missing_point_in_time_vix_bucket", report["replay_gate_blockers"])
-        self.assertIn("missing_index_credit_spread_quote_surface", report["replay_gate_blockers"])
+        self.assertIn(
+            "missing_point_in_time_vix_bucket", report["replay_gate_blockers"]
+        )
+        self.assertIn(
+            "missing_index_credit_spread_quote_surface", report["replay_gate_blockers"]
+        )
         self.assertFalse(report["accepted_profitability"])
         self.assertFalse(report["broker_order_allowed"])
 
@@ -108,9 +137,32 @@ class RegularOptionsVrpCreditSpreadBoundedReplayTests(unittest.TestCase):
                 quotes_db_path=tmp / "quotes.db",
             )
 
-        self.assertEqual(report["status"], "blocked_vrp_credit_spread_bounded_replay_gate")
-        self.assertIn("missing_preregistered_candidate_geometry", report["replay_gate_blockers"])
+        self.assertEqual(
+            report["status"], "blocked_vrp_credit_spread_bounded_replay_gate"
+        )
+        self.assertIn(
+            "missing_preregistered_candidate_geometry", report["replay_gate_blockers"]
+        )
         self.assertEqual(report["replay_rows"], [])
+
+    def test_ready_harness_without_native_candidates_fails_closed(self) -> None:
+        with WorkspaceTempDir(prefix="vrp-replay") as tmp_dir:
+            tmp = Path(tmp_dir)
+            (tmp / "quotes.db").write_bytes(b"sqlite placeholder")
+            report = replay.build_report(
+                preregistered_playbook_path=_playbook(tmp),
+                structure_harness_path=_harness(tmp),
+                holdout_contract_path=_holdout(tmp),
+                quotes_db_path=tmp / "quotes.db",
+            )
+
+        self.assertEqual(
+            report["status"], "blocked_vrp_credit_spread_bounded_replay_gate"
+        )
+        self.assertIn(
+            "missing_native_vrp_candidate_generation_engine",
+            report["replay_gate_blockers"],
+        )
 
     def test_fixture_replay_classifies_denominator_and_pnl(self) -> None:
         with WorkspaceTempDir(prefix="vrp-replay") as tmp_dir:
@@ -136,9 +188,15 @@ class RegularOptionsVrpCreditSpreadBoundedReplayTests(unittest.TestCase):
 
         self.assertTrue(report["historical_replay_performed"])
         self.assertEqual(report["metrics"]["denominator_counts"]["exact_closed"], 1)
-        self.assertEqual(report["metrics"]["denominator_counts"]["zero_bid_untradable"], 1)
-        self.assertEqual(report["metrics"]["denominator_counts"]["missing_required_quote"], 1)
-        self.assertEqual(report["metrics"]["denominator_counts"]["protected_holdout_blocked"], 1)
+        self.assertEqual(
+            report["metrics"]["denominator_counts"]["zero_bid_untradable"], 1
+        )
+        self.assertEqual(
+            report["metrics"]["denominator_counts"]["missing_required_quote"], 1
+        )
+        self.assertEqual(
+            report["metrics"]["denominator_counts"]["protected_holdout_blocked"], 1
+        )
         self.assertEqual(report["metrics"]["net_usd_total"], 57.0)
         self.assertEqual(report["metrics"]["exact_closed_or_settled_rows"], 1)
         self.assertEqual(report["status"], "falsified_vrp_credit_spread_replay")
@@ -148,7 +206,14 @@ class RegularOptionsVrpCreditSpreadBoundedReplayTests(unittest.TestCase):
         with WorkspaceTempDir(prefix="vrp-replay") as tmp_dir:
             tmp = Path(tmp_dir)
             bad = tmp / "bad.json"
-            _write_json(bad, {"status": "implemented", "concept_id": "wrong", "accepted_profitability": True})
+            _write_json(
+                bad,
+                {
+                    "status": "implemented",
+                    "concept_id": "wrong",
+                    "accepted_profitability": True,
+                },
+            )
             report = replay.build_report(
                 preregistered_playbook_path=bad,
                 structure_harness_path=_harness(tmp),
@@ -156,7 +221,9 @@ class RegularOptionsVrpCreditSpreadBoundedReplayTests(unittest.TestCase):
                 quotes_db_path=tmp / "quotes.db",
             )
 
-        self.assertEqual(report["status"], "blocked_vrp_credit_spread_bounded_replay_gate")
+        self.assertEqual(
+            report["status"], "blocked_vrp_credit_spread_bounded_replay_gate"
+        )
         self.assertFalse(report["preregistration_validation"]["valid"])
         self.assertIn("unexpected_concept_id", report["replay_gate_blockers"])
 
@@ -169,7 +236,9 @@ class RegularOptionsVrpCreditSpreadBoundedReplayTests(unittest.TestCase):
                 holdout_contract_path=_holdout(tmp),
                 quotes_db_path=tmp / "quotes.db",
             )
-            artifacts = replay.write_outputs(report, output_dir=tmp / "out", docs_report=tmp / "docs" / "replay.md")
+            artifacts = replay.write_outputs(
+                report, output_dir=tmp / "out", docs_report=tmp / "docs" / "replay.md"
+            )
 
             self.assertTrue((tmp / "out" / "latest.json").exists())
             self.assertTrue((tmp / "out" / "latest.md").exists())

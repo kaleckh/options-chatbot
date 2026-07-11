@@ -4,13 +4,17 @@ import json
 import unittest
 from pathlib import Path
 
-from scripts import build_regular_options_preregistered_playbook_readiness_selector as selector
+from scripts import (
+    build_regular_options_preregistered_playbook_readiness_selector as selector,
+)
 from workspace_tempdir import WorkspaceTempDir
 
 
 def _write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf8")
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf8"
+    )
 
 
 class PreregisteredPlaybookReadinessSelectorTests(unittest.TestCase):
@@ -50,11 +54,22 @@ class PreregisteredPlaybookReadinessSelectorTests(unittest.TestCase):
         for spec in monkey_specs:
             local = dict(spec)
             local["path"] = tmp / f"{spec['key']}.json"
-            _write_json(local["path"], self._playbook(spec["concept_id"], spec["expected_structure"]))
+            _write_json(
+                local["path"],
+                self._playbook(spec["concept_id"], spec["expected_structure"]),
+            )
             if spec.get("readiness_path"):
                 local["readiness_path"] = tmp / f"{spec['key']}_readiness.json"
-                blockers = ["known_blocker"] if spec["key"] in {"vrp_put_credit_spread", "term_structure_calendar_diagonal"} else []
-                _write_json(local["readiness_path"], {"report_id": "readiness", "blockers": blockers})
+                blockers = (
+                    ["known_blocker"]
+                    if spec["key"]
+                    in {"vrp_put_credit_spread", "term_structure_calendar_diagonal"}
+                    else []
+                )
+                _write_json(
+                    local["readiness_path"],
+                    {"report_id": "readiness", "blockers": blockers},
+                )
             specs.append(local)
         return specs
 
@@ -63,12 +78,20 @@ class PreregisteredPlaybookReadinessSelectorTests(unittest.TestCase):
             tmp = Path(tmp_dir)
             original = selector.PLAYBOOKS
             try:
-                selector.PLAYBOOKS = tuple(self._install_all_playbooks(tmp, list(original)))
-                report = selector.build_report(goal_loop_path=self._goal_loop(tmp), generated_at_utc="2026-06-23T01:00:00Z")
+                selector.PLAYBOOKS = tuple(
+                    self._install_all_playbooks(tmp, list(original))
+                )
+                report = selector.build_report(
+                    goal_loop_path=self._goal_loop(tmp),
+                    generated_at_utc="2026-06-23T01:00:00Z",
+                )
             finally:
                 selector.PLAYBOOKS = original
 
-        self.assertEqual(report["status"], "candidate_selected_for_research_only_implementation_approval")
+        self.assertEqual(
+            report["status"],
+            "candidate_selected_for_research_only_implementation_approval",
+        )
         for key, expected in selector.READ_ONLY_FLAGS.items():
             self.assertIs(report[key], expected)
         self.assertFalse(report["accepted_profitability"])
@@ -80,39 +103,60 @@ class PreregisteredPlaybookReadinessSelectorTests(unittest.TestCase):
             "breadth_confirmed_index_qqq_momentum_continuation_debit_spread_v1",
         )
         self.assertIsNone(report["recommended_operator_approval_question"])
-        self.assertIn("no live validation", report["recommended_research_only_task_boundary"])
-        self.assertIn("no broker orders", report["recommended_research_only_task_boundary"])
-        self.assertIn("Do not ask an operator approval question", report["allowed_next_step"])
+        self.assertIn(
+            "no live validation", report["recommended_research_only_task_boundary"]
+        )
+        self.assertIn(
+            "no broker orders", report["recommended_research_only_task_boundary"]
+        )
+        self.assertIn(
+            "Do not ask an operator approval question", report["allowed_next_step"]
+        )
 
     def test_known_readiness_blockers_are_preserved(self) -> None:
         with WorkspaceTempDir(prefix="playbook-selector") as tmp_dir:
             tmp = Path(tmp_dir)
             original = selector.PLAYBOOKS
             try:
-                selector.PLAYBOOKS = tuple(self._install_all_playbooks(tmp, list(original)))
+                selector.PLAYBOOKS = tuple(
+                    self._install_all_playbooks(tmp, list(original))
+                )
                 report = selector.build_report(goal_loop_path=self._goal_loop(tmp))
             finally:
                 selector.PLAYBOOKS = original
 
         rows = {row["key"]: row for row in report["design_inventory"]}
-        self.assertEqual(rows["vrp_put_credit_spread"]["readiness_status"], "blocked_by_known_readiness_audit")
-        self.assertEqual(rows["term_structure_calendar_diagonal"]["readiness_status"], "blocked_by_known_readiness_audit")
+        self.assertEqual(
+            rows["vrp_put_credit_spread"]["readiness_status"],
+            "blocked_by_known_readiness_audit",
+        )
+        self.assertEqual(
+            rows["term_structure_calendar_diagonal"]["readiness_status"],
+            "blocked_by_known_readiness_audit",
+        )
         self.assertIn("known_blocker", rows["vrp_put_credit_spread"]["blockers"])
-        self.assertIn("known_blocker", rows["term_structure_calendar_diagonal"]["blockers"])
+        self.assertIn(
+            "known_blocker", rows["term_structure_calendar_diagonal"]["blockers"]
+        )
 
     def test_pmcc_is_not_silently_skipped(self) -> None:
         with WorkspaceTempDir(prefix="playbook-selector") as tmp_dir:
             tmp = Path(tmp_dir)
             original = selector.PLAYBOOKS
             try:
-                selector.PLAYBOOKS = tuple(self._install_all_playbooks(tmp, list(original)))
+                selector.PLAYBOOKS = tuple(
+                    self._install_all_playbooks(tmp, list(original))
+                )
                 report = selector.build_report(goal_loop_path=self._goal_loop(tmp))
             finally:
                 selector.PLAYBOOKS = original
 
         rows = {row["key"]: row for row in report["design_inventory"]}
         self.assertIn("pmcc_diagonal_income", rows)
-        self.assertEqual(rows["pmcc_diagonal_income"]["concept_id"], "low_mid_vix_index_pmcc_diagonal_income_v1")
+        self.assertEqual(
+            rows["pmcc_diagonal_income"]["concept_id"],
+            "low_mid_vix_index_pmcc_diagonal_income_v1",
+        )
         self.assertFalse(rows["pmcc_diagonal_income"]["accepted_profitability"])
 
     def test_missing_artifact_fails_to_named_blocker_without_mutation(self) -> None:
@@ -128,8 +172,13 @@ class PreregisteredPlaybookReadinessSelectorTests(unittest.TestCase):
                 selector.PLAYBOOKS = original
 
         rows = {row["key"]: row for row in report["design_inventory"]}
-        self.assertEqual(rows["momentum_continuation_debit_spread"]["artifact_status"], "missing")
-        self.assertIn("momentum_continuation_debit_spread", report["missing_preregistered_designs"])
+        self.assertEqual(
+            rows["momentum_continuation_debit_spread"]["artifact_status"], "missing"
+        )
+        self.assertIn(
+            "momentum_continuation_debit_spread",
+            report["missing_preregistered_designs"],
+        )
         for key, expected in selector.READ_ONLY_FLAGS.items():
             self.assertIs(report[key], expected)
 
@@ -138,9 +187,15 @@ class PreregisteredPlaybookReadinessSelectorTests(unittest.TestCase):
             tmp = Path(tmp_dir)
             original = selector.PLAYBOOKS
             try:
-                selector.PLAYBOOKS = tuple(self._install_all_playbooks(tmp, list(original)))
+                selector.PLAYBOOKS = tuple(
+                    self._install_all_playbooks(tmp, list(original))
+                )
                 report = selector.build_report(goal_loop_path=self._goal_loop(tmp))
-                artifacts = selector.write_outputs(report, output_dir=tmp / "out", docs_report=tmp / "docs" / "selector.md")
+                artifacts = selector.write_outputs(
+                    report,
+                    output_dir=tmp / "out",
+                    docs_report=tmp / "docs" / "selector.md",
+                )
             finally:
                 selector.PLAYBOOKS = original
 
@@ -149,9 +204,21 @@ class PreregisteredPlaybookReadinessSelectorTests(unittest.TestCase):
             self.assertTrue((tmp / "docs" / "selector.md").exists())
             self.assertIn("docs_report", artifacts)
             markdown = (tmp / "docs" / "selector.md").read_text(encoding="utf8")
-            self.assertIn("Regular Options Preregistered Playbook Readiness Selector", markdown)
+            self.assertIn(
+                "Regular Options Preregistered Playbook Readiness Selector", markdown
+            )
             self.assertIn("Recommended Research-Only Task Boundary", markdown)
             self.assertNotIn("Do you approve", markdown)
+
+    def test_real_dispersion_lane_consumes_bounded_replay_blocker(self) -> None:
+        report = selector.build_report()
+        rows = {row["key"]: row for row in report["design_inventory"]}
+
+        dispersion = rows["dispersion_proxy_hybrid"]
+        self.assertEqual(
+            dispersion["readiness_status"], "blocked_by_known_readiness_audit"
+        )
+        self.assertIn("bounded_replay_rows_blocked", dispersion["blockers"])
 
 
 if __name__ == "__main__":

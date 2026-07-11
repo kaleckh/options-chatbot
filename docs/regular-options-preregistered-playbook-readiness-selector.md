@@ -4,7 +4,7 @@ This report is generated from `scripts/build_regular_options_preregistered_playb
 
 ## Summary
 
-- Status: `candidate_selected_for_research_only_implementation_approval`.
+- Status: `no_research_implementation_candidate_ready_without_blocker`.
 - Accepted profitability: `false`.
 - Historical replay performed: `false`.
 - Lane implementation performed: `false`.
@@ -13,27 +13,21 @@ This report is generated from `scripts/build_regular_options_preregistered_playb
 
 ## Selected Candidate
 
-- Concept: `index_constituent_dispersion_proxy_defined_risk_hybrid_v1`.
-- Status: `candidate_for_research_only_implementation_approval`.
-- Rationale: `Index constituent dispersion-proxy debit/credit hybrid` is the lowest-complexity valid preregistered design and uses the simplest defined-risk spread proof path.
-
-## Recommended Research-Only Task Boundary
-
-GPT-5.5 Pro may select one bounded research-only implementation/replay task for `index_constituent_dispersion_proxy_defined_risk_hybrid_v1` only, writing derived research artifacts only, with no live validation, no auto-track, no broker orders, no quote import, no evidence-store mutation, no protected-holdout consumption, no scanner release, no stop/sizing/proof-bar changes, and no promotion.
+No research-only implementation candidate is ready without a named blocker.
 
 ## Inventory
 
 | Rank | Concept | Structure | Readiness | Blockers |
 | --- | --- | --- | --- | --- |
-| 1 | `index_constituent_dispersion_proxy_defined_risk_hybrid_v1` | `defined_risk_index_constituent_debit_credit_hybrid_pairs_only` | `candidate_for_research_only_implementation_approval` | - |
-| 2 | `breadth_confirmed_index_qqq_momentum_continuation_debit_spread_v1` | `defined_risk_call_debit_spreads_only` | `blocked_by_known_readiness_audit` | `bootstrap_pf_lower_bound_not_above_1_after_resolution`, `duplicate_within_research_harness`, `entry_missing_leg_quote`, `exit_missing_leg_quote`, `exit_value_negative`, `exit_zero_or_nonpositive_bid_ask`, `missing_net_usd_pnl`, `missing_point_in_time_breadth_confirmation`, `missing_point_in_time_qqq_momentum_confirmation`, `missing_point_in_time_spy_momentum_confirmation`, `net_usd_not_positive_after_resolution`, `rejected_not_call_debit_spread`, `rejected_outside_preregistered_universe`, `strict_rows_below_30_after_resolution` |
-| 3 | `low_mid_vix_index_put_credit_spread_vrp_v1` | `defined_risk_put_credit_spreads_only` | `blocked_by_known_readiness_audit` | `missing_index_credit_spread_quote_surface` |
-| 4 | `low_mid_vix_macro_event_long_strangle_v1` | `defined_risk_long_straddles_or_strangles_only` | `blocked_by_known_readiness_audit` | `macro_event_calendar_source_missing` |
-| 5 | `low_mid_vix_index_calendar_term_structure_dislocation_v1` | `defined_risk_calendar_or_diagonal_debit_spreads_only` | `blocked_by_known_readiness_audit` | `missing_index_calendar_quote_surface`, `missing_point_in_time_term_structure_inputs` |
-| 6 | `low_mid_vix_index_skew_broken_wing_put_fly_v1` | `defined_risk_broken_wing_put_butterflies_only` | `blocked_by_known_readiness_audit` | `missing_index_broken_wing_quote_surface`, `missing_point_in_time_downside_skew_inputs` |
-| 7 | `low_mid_vix_index_pmcc_diagonal_income_v1` | `defined_risk_pmcc_style_call_diagonals_only` | `blocked_by_known_readiness_audit` | `missing_point_in_time_trend_or_regime_inputs`, `missing_trusted_pmcc_diagonal_quote_surface` |
-| 8 | `post_event_iv_crush_index_iron_condor_v1` | `defined_risk_short_iron_condors_or_iron_butterflies_only` | `blocked_by_known_readiness_audit` | `insufficient_full_window_rows`, `insufficient_latest_four_months`, `insufficient_latest_four_rows`, `insufficient_train_months`, `iv_event_premium_proxy_missing`, `macro_event_calendar_category_coverage_missing`, `macro_event_calendar_source_missing`, `missing_required_macro_event_categories` |
-| 9 | `index_flow_extreme_mean_reversion_ratio_backspread_v1` | `defined_risk_ratio_spreads_or_backspreads_only` | `blocked_by_known_readiness_audit` | `missing_point_in_time_flow_extreme_input` |
+| 1 | `breadth_confirmed_index_qqq_momentum_continuation_debit_spread_v1` | `defined_risk_call_debit_spreads_only` | `blocked_by_known_readiness_audit` | `bootstrap_pf_lower_bound_not_above_1_after_resolution`, `preregistered_stress_test_not_implemented` |
+| 2 | `low_mid_vix_index_put_credit_spread_vrp_v1` | `defined_risk_put_credit_spreads_only` | `blocked_by_known_readiness_audit` | `missing_native_vrp_candidate_generation_engine` |
+| 3 | `low_mid_vix_macro_event_long_strangle_v1` | `defined_risk_long_straddles_or_strangles_only` | `blocked_by_known_readiness_audit` | `macro_event_calendar_source_missing` |
+| 4 | `low_mid_vix_index_calendar_term_structure_dislocation_v1` | `defined_risk_calendar_or_diagonal_debit_spreads_only` | `blocked_by_known_readiness_audit` | `missing_index_calendar_quote_surface`, `missing_point_in_time_term_structure_inputs` |
+| 5 | `low_mid_vix_index_skew_broken_wing_put_fly_v1` | `defined_risk_broken_wing_put_butterflies_only` | `blocked_by_known_readiness_audit` | `missing_index_broken_wing_quote_surface`, `missing_point_in_time_downside_skew_inputs` |
+| 6 | `low_mid_vix_index_pmcc_diagonal_income_v1` | `defined_risk_pmcc_style_call_diagonals_only` | `blocked_by_known_readiness_audit` | `missing_point_in_time_trend_or_regime_inputs`, `missing_trusted_pmcc_diagonal_quote_surface` |
+| 7 | `post_event_iv_crush_index_iron_condor_v1` | `defined_risk_short_iron_condors_or_iron_butterflies_only` | `blocked_by_known_readiness_audit` | `insufficient_full_window_rows`, `insufficient_latest_four_months`, `insufficient_latest_four_rows`, `insufficient_train_months`, `iv_event_premium_proxy_missing`, `macro_event_calendar_category_coverage_missing`, `macro_event_calendar_source_missing`, `missing_required_macro_event_categories` |
+| 8 | `index_flow_extreme_mean_reversion_ratio_backspread_v1` | `defined_risk_ratio_spreads_or_backspreads_only` | `blocked_by_known_readiness_audit` | `missing_point_in_time_flow_extreme_input` |
+| 9 | `index_constituent_dispersion_proxy_defined_risk_hybrid_v1` | `defined_risk_index_constituent_debit_credit_hybrid_pairs_only` | `blocked_by_known_readiness_audit` | `bounded_replay_rows_blocked` |
 
 ## Forbidden Actions
 
