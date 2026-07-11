@@ -20,7 +20,7 @@ No research-only implementation candidate is ready without a named blocker.
 | Rank | Concept | Structure | Readiness | Blockers |
 | --- | --- | --- | --- | --- |
 | 1 | `breadth_confirmed_index_qqq_momentum_continuation_debit_spread_v1` | `defined_risk_call_debit_spreads_only` | `blocked_by_known_readiness_audit` | `bootstrap_pf_lower_bound_not_above_1_after_resolution`, `preregistered_stress_test_not_implemented` |
-| 2 | `low_mid_vix_index_put_credit_spread_vrp_v1` | `defined_risk_put_credit_spreads_only` | `blocked_by_known_readiness_audit` | `missing_native_vrp_candidate_generation_engine` |
+| 2 | `low_mid_vix_index_put_credit_spread_vrp_v1` | `defined_risk_put_credit_spreads_only` | `blocked_by_known_readiness_audit` | `missing_index_credit_spread_quote_surface` |
 | 3 | `low_mid_vix_macro_event_long_strangle_v1` | `defined_risk_long_straddles_or_strangles_only` | `blocked_by_known_readiness_audit` | `macro_event_calendar_source_missing` |
 | 4 | `low_mid_vix_index_calendar_term_structure_dislocation_v1` | `defined_risk_calendar_or_diagonal_debit_spreads_only` | `blocked_by_known_readiness_audit` | `missing_index_calendar_quote_surface`, `missing_point_in_time_term_structure_inputs` |
 | 5 | `low_mid_vix_index_skew_broken_wing_put_fly_v1` | `defined_risk_broken_wing_put_butterflies_only` | `blocked_by_known_readiness_audit` | `missing_index_broken_wing_quote_surface`, `missing_point_in_time_downside_skew_inputs` |

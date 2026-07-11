@@ -4,7 +4,7 @@ This generated report is read-only. It implements deterministic structure math a
 
 ## Summary
 
-- Status: `ready_for_bounded_read_only_vrp_replay`.
+- Status: `blocked_vrp_credit_spread_structure_harness`.
 - Concept: `low_mid_vix_index_put_credit_spread_vrp_v1`.
 - Accepted profitability: `false`.
 - Historical replay performed: `false`.
@@ -13,7 +13,7 @@ This generated report is read-only. It implements deterministic structure math a
 
 ## Remaining Blockers
 
-- None.
+- `missing_index_credit_spread_quote_surface`
 
 ## Blocker Burndown
 
@@ -23,7 +23,7 @@ This generated report is read-only. It implements deterministic structure math a
 | `missing_credit_spread_side_aware_exit_pricing_engine` | `resolved_by_harness` | Covered by deterministic structure math, denominator, assignment/expiration, margin, P&L, holdout, and proof-boundary logic. |
 | `missing_credit_spread_side_aware_pricing_engine` | `resolved_by_harness` | Covered by deterministic structure math, denominator, assignment/expiration, margin, P&L, holdout, and proof-boundary logic. |
 | `missing_full_denominator_status_mapping` | `resolved_by_harness` | Covered by deterministic structure math, denominator, assignment/expiration, margin, P&L, holdout, and proof-boundary logic. |
-| `missing_index_credit_spread_quote_surface` | `resolved_by_existing_read_only_input` | Existing read-only input artifact claims this prerequisite is ready; no quote import was performed. |
+| `missing_index_credit_spread_quote_surface` | `unresolved` | Requires existing point-in-time input or quote-surface artifact; harness does not import data. |
 | `missing_margin_max_loss_convention` | `resolved_by_harness` | Covered by deterministic structure math, denominator, assignment/expiration, margin, P&L, holdout, and proof-boundary logic. |
 | `missing_net_usd_pnl_after_costs` | `resolved_by_harness` | Covered by deterministic structure math, denominator, assignment/expiration, margin, P&L, holdout, and proof-boundary logic. |
 | `missing_proof_boundary_labeling` | `resolved_by_harness` | Covered by deterministic structure math, denominator, assignment/expiration, margin, P&L, holdout, and proof-boundary logic. |

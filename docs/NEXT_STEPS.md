@@ -12,7 +12,7 @@ Near-term execution order:
 
 1. Preserve each audited tranche in Git. Baseline `885b1cf4471a31574820f1d0e19544be48c5d171` and authoritative-verifier `d311f157` are complete; checkpoint the momentum evidence-integrity tranche after final verification.
 2. Park momentum continuation after its repaired 340-row sample failed conservative PF robustness (0.92); do not tune on this consumed window.
-3. Implement the preregistered native VRP candidate/denominator engine against the now-ready 24-month SPY/QQQ/IWM/DIA put surface; do not infer economics from source readiness.
+3. Repair the VRP surface with synchronized 15:55 calls and puts for SPY/QQQ/IWM/DIA across the frozen window, then implement the native denominator/candidate engine; do not infer economics from the valid but nonmatching 10:25 put rows.
 4. Allocate research effort to robust positive-expectancy lanes and kill or park falsified lanes quickly.
 5. Advance a lane only after executable forward evidence clears its proof and promotion bars.
 

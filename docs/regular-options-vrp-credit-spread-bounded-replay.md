@@ -13,7 +13,7 @@ This generated report is read-only. It gates a bounded VRP put-credit-spread rep
 
 ## Replay Gate Blockers
 
-- `missing_native_vrp_candidate_generation_engine`
+- `missing_index_credit_spread_quote_surface`
 
 ## Metrics
 

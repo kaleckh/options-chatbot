@@ -30,7 +30,7 @@ Historical momentum diagnostics use the minimum 5% PF lower bound across ticker-
 
 After bounded exact repair batch 3122 added 24,573 trusted rows for all 63 provider-confirmed targets, the expanded momentum sample reached 340 strict rows and 98.02% eligible quote coverage but its conservative PF lower bound fell to 0.92. Durable decision: reject/park this branch as underpowered rather than tuning around the newly observed losses. The remaining seven quote gaps and absent stress test are not a rationale to select this consumed lane.
 
-VRP source repair uses one fixed 10:25 ET timestamp, puts only, 21-45 DTE, four preregistered indexes, and pre-holdout dates. Batches 3123-3124 clear the 24-month surface gate, but zero native candidates cannot be labeled falsification or profitability. The bounded runner must remain blocked until a preregistered native denominator/candidate engine exists.
+VRP batches 3123-3124 are trusted fixed-10:25 put data but cannot clear an engine frozen to 15:55. Durable decision: quote-surface readiness must bind the exact engine minute and required call/put parity inputs; any-minute put coverage is a fail-open. Zero native candidates cannot be labeled falsification or profitability. The bounded runner remains blocked until exact 15:55 synchronized calls/puts and a native denominator/candidate engine exist.
 
 ## 2026-07-10: Schema-v5 Living History And Gateboard Freshness Are Structural
 

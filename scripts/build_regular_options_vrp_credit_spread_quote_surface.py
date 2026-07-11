@@ -13,8 +13,15 @@ ROOT = Path(__file__).resolve().parents[1]
 REPORT_ID = "regular_options_vrp_credit_spread_quote_surface"
 SURFACE_ID = "vrp_put_credit_spread_trusted_quote_surface_v1"
 DEFAULT_QUOTES_DB = ROOT / "data" / "options-validation" / "options_history.db"
-DEFAULT_OUTPUT_DIR = ROOT / "data" / "profitability-lab" / "regular-options-vrp-credit-spread-quote-surface"
-DEFAULT_DOCS_REPORT = ROOT / "docs" / "regular-options-vrp-credit-spread-quote-surface.md"
+DEFAULT_OUTPUT_DIR = (
+    ROOT
+    / "data"
+    / "profitability-lab"
+    / "regular-options-vrp-credit-spread-quote-surface"
+)
+DEFAULT_DOCS_REPORT = (
+    ROOT / "docs" / "regular-options-vrp-credit-spread-quote-surface.md"
+)
 
 DEFAULT_UNIVERSE = ("SPY", "QQQ", "IWM", "DIA")
 DEFAULT_SOURCE_LABELS = ("thetadata_opra_nbbo_1m",)
@@ -23,6 +30,7 @@ DEFAULT_END_DATE = "2026-05-31"
 DEFAULT_LATEST_FOUR_MONTHS = ("2026-02", "2026-03", "2026-04", "2026-05")
 DEFAULT_DTE_MIN = 21
 DEFAULT_DTE_MAX = 45
+DEFAULT_QUOTE_MINUTE_ET = 15 * 60 + 55
 REQUIRED_MONTHS = 24
 REQUIRED_LATEST_FOUR_MONTHS = 4
 
@@ -92,7 +100,9 @@ def _sqlite_readonly(path: Path) -> sqlite3.Connection:
 
 
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
-    row = conn.execute("select 1 from sqlite_master where type='table' and name=?", (table,)).fetchone()
+    row = conn.execute(
+        "select 1 from sqlite_master where type='table' and name=?", (table,)
+    ).fetchone()
     return row is not None
 
 
@@ -120,6 +130,7 @@ def _surface_rows(
     latest_four_months: Sequence[str],
     dte_min: int,
     dte_max: int,
+    quote_minute_et: int,
 ) -> dict[str, dict[str, Any]]:
     placeholders_symbols = ",".join("?" for _ in universe)
     placeholders_sources = ",".join("?" for _ in source_labels)
@@ -131,6 +142,7 @@ def _surface_rows(
         end_date,
         dte_min,
         dte_max,
+        quote_minute_et,
         *latest_four_months,
     ]
     query = f"""
@@ -157,6 +169,7 @@ def _surface_rows(
               and q.bid >= 0
               and q.ask >= q.bid
               and (julianday(q.expiry) - julianday(q.quote_date_et)) between ? and ?
+              and q.quote_minute_et = ?
             group by q.underlying, q.quote_date_et, q.quote_minute_et, q.expiry
             having strike_count >= 2
         ),
@@ -224,17 +237,24 @@ def build_report(
     latest_four_months: Sequence[str] = DEFAULT_LATEST_FOUR_MONTHS,
     dte_min: int = DEFAULT_DTE_MIN,
     dte_max: int = DEFAULT_DTE_MAX,
+    quote_minute_et: int = DEFAULT_QUOTE_MINUTE_ET,
     required_months: int = REQUIRED_MONTHS,
     required_latest_four_months: int = REQUIRED_LATEST_FOUR_MONTHS,
     generated_at_utc: str | None = None,
 ) -> dict[str, Any]:
-    db_meta = {"path": _rel(quotes_db_path), "exists": quotes_db_path.exists(), "status": "missing"}
+    db_meta = {
+        "path": _rel(quotes_db_path),
+        "exists": quotes_db_path.exists(),
+        "status": "missing",
+    }
     requested_months = _month_range(start_date, end_date)
     raw_rows: dict[str, dict[str, Any]] = {}
     if quotes_db_path.exists():
         try:
             with _sqlite_readonly(quotes_db_path) as conn:
-                if not _table_exists(conn, "option_quote_snapshots") or not _table_exists(conn, "import_batches"):
+                if not _table_exists(
+                    conn, "option_quote_snapshots"
+                ) or not _table_exists(conn, "import_batches"):
                     db_meta["status"] = "missing_required_tables"
                 else:
                     db_meta["status"] = "loaded_read_only"
@@ -247,6 +267,7 @@ def build_report(
                         latest_four_months=latest_four_months,
                         dte_min=dte_min,
                         dte_max=dte_max,
+                        quote_minute_et=quote_minute_et,
                     )
         except sqlite3.Error as exc:
             db_meta["status"] = "unreadable"
@@ -264,12 +285,18 @@ def build_report(
         for symbol in universe
     ]
     symbols_ready = [row["symbol"] for row in symbol_rows if row["status"] == "ready"]
-    blockers = [] if len(symbols_ready) == len(tuple(universe)) else ["missing_index_credit_spread_quote_surface"]
+    blockers = (
+        []
+        if len(symbols_ready) == len(tuple(universe))
+        else ["missing_index_credit_spread_quote_surface"]
+    )
     report = {
         "report_id": REPORT_ID,
         "surface_id": SURFACE_ID,
         "generated_at_utc": generated_at_utc or _utc_now_iso(),
-        "status": "credit_spread_quote_surface_ready" if not blockers else "blocked_vrp_credit_spread_quote_surface",
+        "status": "credit_spread_quote_surface_ready"
+        if not blockers
+        else "blocked_vrp_credit_spread_quote_surface",
         **READ_ONLY_FLAGS,
         "scope": "read_only_vrp_credit_spread_quote_surface_proof",
         "credit_spread_quote_surface_ready": not blockers,
@@ -280,6 +307,7 @@ def build_report(
             "option_type": "put",
             "dte_min": dte_min,
             "dte_max": dte_max,
+            "required_quote_minute_et": quote_minute_et,
             "same_minute_same_expiry_min_distinct_strikes": 2,
             "trusted_bid_ask_required": True,
         },
@@ -303,7 +331,10 @@ def _validate_report(report: dict[str, Any]) -> None:
     for key, expected in READ_ONLY_FLAGS.items():
         if report.get(key) is not expected:
             raise ValueError(f"read-only flag mismatch for {key}")
-    if report.get("accepted_profitability") is not False or report.get("promotion_ready") is not False:
+    if (
+        report.get("accepted_profitability") is not False
+        or report.get("promotion_ready") is not False
+    ):
         raise ValueError("quote-surface proof cannot mark profitability or promotion")
 
 
@@ -331,7 +362,15 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.extend(f"- `{item}`" for item in _as_list(report.get("blockers")))
     else:
         lines.append("- None.")
-    lines.extend(["", "## Symbol Coverage", "", "| Symbol | Status | Covered Months | Latest-Four Months | Covered Dates | Spread Groups | Blockers |", "| --- | --- | ---: | ---: | ---: | ---: | --- |"])
+    lines.extend(
+        [
+            "",
+            "## Symbol Coverage",
+            "",
+            "| Symbol | Status | Covered Months | Latest-Four Months | Covered Dates | Spread Groups | Blockers |",
+            "| --- | --- | ---: | ---: | ---: | ---: | --- |",
+        ]
+    )
     for row in _as_list(report.get("symbol_rows")):
         blockers = ", ".join(_as_list(row.get("blockers"))) or "-"
         lines.append(
@@ -344,7 +383,12 @@ def render_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def write_outputs(report: dict[str, Any], *, output_dir: Path = DEFAULT_OUTPUT_DIR, docs_report: Path = DEFAULT_DOCS_REPORT) -> dict[str, str]:
+def write_outputs(
+    report: dict[str, Any],
+    *,
+    output_dir: Path = DEFAULT_OUTPUT_DIR,
+    docs_report: Path = DEFAULT_DOCS_REPORT,
+) -> dict[str, str]:
     output_dir.mkdir(parents=True, exist_ok=True)
     docs_report.parent.mkdir(parents=True, exist_ok=True)
     stamp = _utc_stamp()
@@ -372,17 +416,24 @@ def write_outputs(report: dict[str, Any], *, output_dir: Path = DEFAULT_OUTPUT_D
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build a read-only VRP credit-spread quote-surface proof.")
+    parser = argparse.ArgumentParser(
+        description="Build a read-only VRP credit-spread quote-surface proof."
+    )
     parser.add_argument("--quotes-db", type=Path, default=DEFAULT_QUOTES_DB)
     parser.add_argument("--universe", default=",".join(DEFAULT_UNIVERSE))
     parser.add_argument("--source-labels", default=",".join(DEFAULT_SOURCE_LABELS))
     parser.add_argument("--start-date", default=DEFAULT_START_DATE)
     parser.add_argument("--end-date", default=DEFAULT_END_DATE)
-    parser.add_argument("--latest-four-months", default=",".join(DEFAULT_LATEST_FOUR_MONTHS))
+    parser.add_argument(
+        "--latest-four-months", default=",".join(DEFAULT_LATEST_FOUR_MONTHS)
+    )
     parser.add_argument("--dte-min", type=int, default=DEFAULT_DTE_MIN)
     parser.add_argument("--dte-max", type=int, default=DEFAULT_DTE_MAX)
+    parser.add_argument("--quote-minute-et", type=int, default=DEFAULT_QUOTE_MINUTE_ET)
     parser.add_argument("--required-months", type=int, default=REQUIRED_MONTHS)
-    parser.add_argument("--required-latest-four-months", type=int, default=REQUIRED_LATEST_FOUR_MONTHS)
+    parser.add_argument(
+        "--required-latest-four-months", type=int, default=REQUIRED_LATEST_FOUR_MONTHS
+    )
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--docs-report", type=Path, default=DEFAULT_DOCS_REPORT)
     parser.add_argument("--no-write", action="store_true")
@@ -391,18 +442,27 @@ def main(argv: list[str] | None = None) -> int:
 
     report = build_report(
         quotes_db_path=args.quotes_db,
-        universe=tuple(item.strip().upper() for item in args.universe.split(",") if item.strip()),
-        source_labels=tuple(item.strip() for item in args.source_labels.split(",") if item.strip()),
+        universe=tuple(
+            item.strip().upper() for item in args.universe.split(",") if item.strip()
+        ),
+        source_labels=tuple(
+            item.strip() for item in args.source_labels.split(",") if item.strip()
+        ),
         start_date=args.start_date,
         end_date=args.end_date,
-        latest_four_months=tuple(item.strip() for item in args.latest_four_months.split(",") if item.strip()),
+        latest_four_months=tuple(
+            item.strip() for item in args.latest_four_months.split(",") if item.strip()
+        ),
         dte_min=args.dte_min,
         dte_max=args.dte_max,
+        quote_minute_et=args.quote_minute_et,
         required_months=args.required_months,
         required_latest_four_months=args.required_latest_four_months,
     )
     if not args.no_write:
-        report["artifacts"] = write_outputs(report, output_dir=args.output_dir, docs_report=args.docs_report)
+        report["artifacts"] = write_outputs(
+            report, output_dir=args.output_dir, docs_report=args.docs_report
+        )
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:
