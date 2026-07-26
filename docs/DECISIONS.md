@@ -4,15 +4,18 @@
 
 This live file contains current durable decisions only. The complete pre-compaction decision record is preserved byte-for-byte in the verified 2026-07-10 project-memory archive and remains available to archive-aware living-history retrieval.
 
-## 2026-07-19: VRP Is Terminal; The Single Fallback Must Fail Closed Before Outcomes
+## 2026-07-26: The Post-Earnings Fallback Is Terminal; Systematic Alpha Research Is Dormant
 
-Durable decision: preserve VRP v2 as `underpowered_infeasible_do_not_score_do_not_weaken_bars`; do not acquire or score its four-ETF surface. The sole allowed fallback is post-earnings premium selling on the exact 9 equities (the prior 13-symbol wording incorrectly included four ETFs). Its one geometry, event rule, split, execution, stress, concentration, permutation, Deflated-Sharpe, and no-retuning bars are frozen before outcomes. Quote acquisition requires passing no-outcome lineage and 60/20/12 no-P&L feasibility. Failure makes systematic alpha research dormant under the joint plan.
-
-Task health separates scheduled from off-window invocations; nonzero off-window results remain visible but prove no scheduled success or failure. Operator outcomes cannot use self-attested `exact_nbbo`; normal UI/API capture and a trusted validator are mandatory. No broker, live, proof, promotion, append, holdout, stop, or sizing authority follows.
-
-## 2026-07-18: The VRP Decision Tree Is The Single Research Bet
-
-Durable decision (`docs/regular-options-main-lane-audit-2026-07-18-joint-plan.md`): VRP fresh-window v2 supersedes v1 (retired unread after a passing no-outcome lineage audit), freezing benchmark-then-vertical read order, calendar-level clustering, the 60/20/12 power precondition, portfolio/tail reporting, and cost stress before any P&L. F1/F2 and the all-59 short-call acquisition are parked; the corporate-action normalizer is deferred. Report/health builders are observability-only in scheduled-task exit codes; DailyOps gains a local-Postgres preflight. One fallback (post-earnings premium selling, own untouched window) may follow terminal VRP failure; after that, systematic alpha research goes dormant while suggestion-tracking and telemetry continue. Nothing here authorizes scoring, promotion, broker, or live action.
+Durable decision (`docs/regular-options-post-earnings-fallback-terminal-verdict-2026-07-26.md`): preserve
+VRP v2 as terminally underpowered and reject the sole post-earnings fallback as
+`DEAD_ON_CONSTRUCTIBILITY`. Its 2020-2021 OOS partition yields only 13 constructible events, 10 independent
+event-week clusters, and 7 months versus 60/20/12 required; even four hypothetical missing-surface passes
+reach only 17 events. The earlier 44/70 figures were concurrency bounds, not four-leg-liquidity and
+minimum-credit-qualified capacity. Cancel the train early-exit pilot, scoring/outcome acquisition, and the
+wider single-name acquisition program. Under the 2026-07-18 joint plan, systematic alpha research is now
+dormant; suggestion tracking, operator-decision telemetry, and product reliability continue. This is not
+an economic falsification of post-earnings short volatility and grants no broker, paper-API, or live-capital
+authority.
 
 ## 2026-07-12: Profitability Research Starts From The Coverage-Qualified Universe
 

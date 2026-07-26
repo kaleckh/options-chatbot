@@ -4,7 +4,7 @@
 > "blocked", and "requires preregistration" below is a default, not a lock. Override any of them by
 > stating a reason in one line. The only hard stop is broker/paper-API/live-capital execution.
 
-Last updated: 2026-07-19
+Last updated: 2026-07-26
 
 This is the prioritized current-action source of truth. Historical queues are preserved in the verified 2026-07-10 project-memory archive; dedicated owner docs and current generated artifacts remain authoritative for their domains.
 
@@ -12,9 +12,17 @@ This is the prioritized current-action source of truth. Historical queues are pr
 
 Drive the system toward defensible, prospectively verified profitability. Existing lanes may be repaired, replaced, parked, or removed; new lanes may be added. Prefer the path with the strongest causal evidence and realistic deployable economics, not the path that preserves current strategy assumptions.
 
-**2026-07-19: the joint plan's fallback calendar and capacity repair is complete.** VRP v2 is terminally underpowered, so minimum four-ETF acquisition and VRP scoring are off. The post-earnings fallback has a ready hash-bound SEC calendar, but capacity is conditional (optimistic pass; pessimistic fail) and feasibility remains blocked solely on the no-outcome lineage audit; quote access is not authorized. See `docs/regular-options-main-lane-audit-2026-07-19.md`. The all-59 short-call branch and F1/F2 remain parked.
+**2026-07-26: the joint plan is terminal.** VRP v2 remains underpowered, and measured four-leg entry
+geometry now kills the sole post-earnings fallback: 13 constructible 2020-2021 OOS events (10 independent
+event-week clusters, 7 months) versus 60/20/12 required. See
+`docs/regular-options-post-earnings-fallback-terminal-verdict-2026-07-26.md`. Systematic alpha research is
+dormant under step 8 of the joint plan. The suggestion-tracking product experiment and telemetry continue.
 
-1. (Deferred per joint plan) Corporate-action-normalized point-in-time contract identity is required only before any future single-name acquisition. The frozen v1 run completed 2,343/2,389 exact requests but 46 NVDA June 2024 strike identities exhausted two HTTP-472 attempts. If revived: build a new no-P&L OCC identity/enumeration contract; never rewrite v1 or bypass its retry cap.
+1. (Dropped per joint plan) Do not continue the wider single-name acquisition program. On the nine most
+   liquid large-cap names in the fallback, yearly median selected-leg spreads were 20.7%-33.6%, and 285/552
+   legs (51.6%) breached the contract's own 25%-of-midpoint filter. Moving to less-liquid names has no
+   credible route to improving this measured constraint. The prior frozen v1 result remains a historical,
+   unscored record.
 2. Keep the candidate-integrated production-parity path green. It now binds the default candidate/cohort/holdout/owner bytes and rejects malformed rows or candidate self-attestation. The current adapter owner declares no scanner parity, the 2,972-row corpus has no admissible window or exact closes, and economics stay suppressed.
 3. Use the canonical tracked runner for future research commands. Full ledger/anchor/witness/registry/readback generations are crash-recoverable; events bind the durable session checkpoint; dead starts reconcile explicitly; audit recomputes coherent-snapshot age and rejects stale publication. The audit is green only while discovery is current: any session that regenerates tracked source artifacts must run `options_research_tracking.py refresh` then `audit` before handoff (drift observed and repaired 2026-07-18). New commands require preregistration; `options:research:*` aliases are fail-closed. Direct Python/non-namespaced aliases remain a disclosed process boundary, so use the wrapper whenever failure or zero-output history must survive restart.
 4. Preserve the completed manifest-bound corpus and measured no-write production-scanner replay. The exact 6,986-row denominator made zero provider calls: 595 no-pick agreements remain unverified, 629 decisions/contracts mismatch, and 5,762 rows fail closed across 692 date/lane groups. Trusted historical legs now normalize as observed instead of unknown; the run hash-binds 685 read-only quote queries and 309,484 returned rows. The simplified adapter is retired from profitability interpretation and retained only as a frozen diagnostic baseline; scanner-native generation is required but not ready. The 4,491 equity rows tagged for future earnings/sector context are conservative potential full-watchlist inventory, not row-level causal demand. The current 74-event earnings owner has zero causally known future-schedule events and no versioned full-coverage capability. Do not use hindsight, tune the consumed window, or begin generic acquisition from these counts. All 93 remaining exits are structural post-freeze censoring through `2026-06-24`; historical rows are never forward proof.
@@ -24,7 +32,12 @@ Drive the system toward defensible, prospectively verified profitability. Existi
 8. Keep volatility expansion as a narrow prospective observation lane, not the presumed winner. Phase 2 remains 0/30. Task configuration is ready, but the July 18 nonzero results came from Saturday/off-slot invocations and now classify as `pending_next_expected_run`, not scheduled production failure. Observe the real July 20 07:35, 11:00, and 11:30 ET runs; append, auto-track, broker, promotion, and live authority remain disabled.
 9. (Terminal 2026-07-18) Preserve the VRP v2 verdict `underpowered_infeasible_do_not_score_do_not_weaken_bars`. The maximum frozen hold reaches only 52 trades and 13 synchronized clusters versus 60/20. Do not acquire the four-ETF surface or score VRP.
 10. Keep profitability owners temporally coherent. The July 19 gateboard and monthly audit are fresh, but the coherent snapshot remains `blocked_temporal_incoherence` because eight older owner artifacts are stale/skewed. Refresh only owners whose source facts can materially change; do not turn no-change regeneration into research progress.
-11. Preserve the completed post-earnings fallback result: the hash-bound nine-equity SEC calendar is ready (250 complete, 2 explained LLY gaps, 0 unresolved; 72 atomic OOS events) and capacity is `portfolio_capacity_conditional_on_train_early_exit_frequency_do_not_acquire_quotes_yet` (pessimistic 44/24/11 fails; optimistic 70/29/14 passes). Feasibility is `blocked_no_pnl_feasibility_inputs` solely because `fallback_no_outcome_lineage_audit_missing_or_invalid` remains. First complete that lineage audit; then separately plan and register a train-only early-exit-frequency pilot. Both the pilot and every form of quote/outcome access are out of scope here; do not score, weaken bars, or acquire quotes.
+11. (Terminal 2026-07-26) Preserve the post-earnings verdict `DEAD_ON_CONSTRUCTIBILITY`. The measured OOS
+    ceiling is 13 events, 10 event-week clusters, and 7 months versus 60/20/12. The former 44 and 70 counts
+    were concurrency bounds that omitted four-leg liquidity and minimum-credit eligibility. Cancel the
+    train-only early-exit-frequency pilot: it existed only to move that concurrency bound from 44 toward
+    70, while measured constructibility caps the actual contract at 13. Do not acquire outcomes or build a
+    scorer for this frozen contract.
 12. Activate the paired operator-decision experiment only after normal UI/API pre-decision capture and a code-owned trusted exact-NBBO outcomes validator exist. Current counts are zero and arbitrary JSON provenance strings are rejected. Preserve the 30-decision, 10/10 group, 12-week, 80%-coverage and clustered-confidence gates.
 
 This objective does not itself authorize broker orders or live-capital deployment. Those actions require current release evidence and separate explicit user authorization.
@@ -86,7 +99,9 @@ Current posture is `safe_blocked_no_live_release`.
 - The monthly open-risk label and stale circuit-breaker fixture are repaired. Preserve their global-false and validation-never-called regression tests.
 - Momentum continuation is parked: trusted batch 3122 expanded it to 340 exact rows and 98.02% quote coverage, but conservative clustered-bootstrap PF LB fell to 0.92 despite raw PF 1.5008. Do not spend the remaining research budget filling seven gaps or tuning stress assumptions unless a separately preregistered fresh hypothesis changes the branch.
 - The clean-slate executable tournament also rejects broad-trend debit momentum and trend-filtered VRP. Authoritative artifacts are `data/profitability-lab/spy-broad-trend-debit-v4/latest.json` and `data/profitability-lab/spy-trend-vrp-v4-1555/latest.json`; the technical operating plan is `docs/PROFITABLE_LANE_TECHNICAL_PLAN.md`. Do not retune these consumed families.
-- Continue only preregistered research, source repair, paper-shadow capture, and exact evidence collection allowed by current contracts.
+- Systematic alpha research is dormant under the joint plan. Continue the suggestion-tracking product
+  experiment, operator-decision telemetry, and ordinary product reliability work; do not start another
+  strategy acquisition or scoring program from this queue.
 - Treat consumed evaluation windows as unavailable for tuning or family selection.
 - Keep historical/materializer/tracker rows separate from prospective forward proof.
 - Require non-self-asserted, content-revalidated executable bid/ask provenance, timestamps, costs, denominator status, and net USD economics for exact proof.
