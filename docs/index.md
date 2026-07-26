@@ -4,6 +4,9 @@ This index is the concise documentation source of truth and navigation layer. Cu
 
 ## Start Here
 
+- `docs/PROVISIONAL-AUTHORITY.md` — **read first; supersedes everything else in this repo.** All
+  constraints are provisional defaults, overridable with a one-line reason. Single hard stop: no broker,
+  paper-API, or live-capital execution without Kale's per-instance authorization.
 - `README.md` — product and setup overview
 - `AGENTS.md` — repository workflow, proof, and safety rules
 - `docs/PROJECT_CONTEXT.md` — concise product, architecture, memory, and storage context
@@ -17,9 +20,19 @@ This index is the concise documentation source of truth and navigation layer. Cu
 
 ## Operations And Safety Owners
 
+- `docs/memory-system-audit-2026-07-12.md` - live usefulness audit, freshness-cache performance proof, concurrent-window checkpoint isolation, and remaining lifecycle/legacy-module debt
 - `docs/project-operating-map.md` and `data/contracts/project-pathway-registry.json` — pathway navigation
 - `docs/project-operator-gateboard.md` and `data/forward-tracking/project_operator_gateboard_latest.json` — current fail-closed status
+- `docs/PROFITABLE_LANE_TECHNICAL_PLAN.md` — executable tournament verdict, lane funnel, untouched-data program, and forward promotion architecture
+- `docs/regular-options-main-lane-audit-2026-07-18-joint-plan.md` — controlling eight-step execution order (VRP decision tree, single fallback, dormancy rule) from the 2026-07-18 audit + adversarial debate
+- `docs/regular-options-main-lane-audit-2026-07-19.md` — post-implementation audit: corrected runtime attribution, terminal VRP verdict, frozen fallback feasibility, and operator-outcome trust boundary
+- `docs/regular-options-post-earnings-concurrency-preflight.md` — hash-bound nine-equity OOS capacity bounds for the frozen post-earnings fallback
 - `docs/agent-control-plane.md` — canonical schema-v5 CEO/worker workflow, strict restore/outbox/session/retrieval/dream integrity, stable living-history classes, coherent gateboard provenance, and implementation-authority versus action-gate boundary
+- `docs/fresh-window-chain-capture-attestation.md` — inactive asymmetric operator-capture policy, trust boundary, and non-authorizing chain-proof blockers
+- `docs/options-research-tracking.md` — canonical lane identities, hash-chained experiment history, legacy backfill, tracked-run workflow, and coherent-snapshot decision gate
+- `docs/regular-options-vrp-credit-spread-frozen-input-demand.md` — frozen VRP local/imported input gaps, snapshot identity, and non-authorizing provider boundary
+- `docs/regular-options-historical-frozen-underlying-daily-materialization-repair-plan.md` — hash-bound, no-write exact daily-row repair delta and authority boundary
+- `docs/regular-options-historical-production-scanner-replay.md` — exact-denominator no-write production-scanner replay, measured adapter mismatches, and causal-context blockers
 - `docs/memory-graph-v5-upgrade-audit-2026-07-10.md` — dated schema-v5 hardening, final live ingest/doctor/recovery verification, scheduler proof, and remaining nonblocking scale debt
 - `docs/autoresearch/memory-graph-dreaming-goal.md` — reusable global/local memory-graph assurance prompt
 - `C:\Users\kalec\projects-memory\MEMORY_GRAPH.md` and `C:\Users\kalec\projects-memory\audits\memory-graph-v2-upgrade-2026-07-09.md` — curated computer-wide pointer/provenance contract and dated v2 verification; neither overrides repo authority

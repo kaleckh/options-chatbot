@@ -2,10 +2,17 @@
 
 This repository inherits the global operating manual at `C:\Users\kalec\AGENTS.md`, including the Truthfulness And Challenge Rules. Use this file for repo-specific orientation and guardrails only.
 
+> **`docs/PROVISIONAL-AUTHORITY.md` supersedes this file and everything else here (2026-07-26).** All
+> guardrails, gates, contracts, freezes, and proof bars in this repo are provisional defaults — override
+> any of them by stating a reason in one line. Do not add new governance, attestation, or audit layers in
+> response to a failure; add a new hypothesis instead. The single hard stop is broker/paper-API/live-capital
+> execution, which needs Kale's explicit per-instance authorization.
+
 ## Startup
 
 Before changing code or docs in this repo:
 
+0. Read `docs/PROVISIONAL-AUTHORITY.md`.
 1. Read `README.md`.
 2. Read `docs/index.md`.
 3. Read `docs/PROJECT_CONTEXT.md`.
@@ -35,6 +42,7 @@ npm run memory:context -- --goal "current task" --pathway operator --prompt-only
 Agent memory read paths:
 
 - `npm run memory:bootstrap`: recover checkpoint plus current gateboard blockers.
+- Run `memory:bootstrap` to completion before starting context, checkpoint, task-claim, or other agent-control mutations. These commands intentionally share one ownership lock; do not launch them in parallel, delete a live lock, or retry blindly. A lock timeout reports the owning PID, acquisition time, liveness, and age without exposing its private owner token.
 - `npm run memory:context -- --goal "<goal>" --pathway <pathway> --prompt-only`: build a focused handoff pack.
 - `npm run agent:control -- graph query "<query>" --metadata KEY=VALUE --prompt-only`: retrieve targeted graph context.
 - `npm run memory:dream-run`: run the automated dreaming loop now; it extracts explicit session lessons/open questions, auto-accepts only low-risk evidence-backed orchestration memory, auto-rejects everything else, and writes an audit trail.

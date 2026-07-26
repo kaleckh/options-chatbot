@@ -1,6 +1,58 @@
 # Decisions
 
+> Superseded by `docs/PROVISIONAL-AUTHORITY.md` (2026-07-26): all decisions below are overridable defaults.
+
 This live file contains current durable decisions only. The complete pre-compaction decision record is preserved byte-for-byte in the verified 2026-07-10 project-memory archive and remains available to archive-aware living-history retrieval.
+
+## 2026-07-19: VRP Is Terminal; The Single Fallback Must Fail Closed Before Outcomes
+
+Durable decision: preserve VRP v2 as `underpowered_infeasible_do_not_score_do_not_weaken_bars`; do not acquire or score its four-ETF surface. The sole allowed fallback is post-earnings premium selling on the exact 9 equities (the prior 13-symbol wording incorrectly included four ETFs). Its one geometry, event rule, split, execution, stress, concentration, permutation, Deflated-Sharpe, and no-retuning bars are frozen before outcomes. Quote acquisition requires passing no-outcome lineage and 60/20/12 no-P&L feasibility. Failure makes systematic alpha research dormant under the joint plan.
+
+Task health separates scheduled from off-window invocations; nonzero off-window results remain visible but prove no scheduled success or failure. Operator outcomes cannot use self-attested `exact_nbbo`; normal UI/API capture and a trusted validator are mandatory. No broker, live, proof, promotion, append, holdout, stop, or sizing authority follows.
+
+## 2026-07-18: The VRP Decision Tree Is The Single Research Bet
+
+Durable decision (`docs/regular-options-main-lane-audit-2026-07-18-joint-plan.md`): VRP fresh-window v2 supersedes v1 (retired unread after a passing no-outcome lineage audit), freezing benchmark-then-vertical read order, calendar-level clustering, the 60/20/12 power precondition, portfolio/tail reporting, and cost stress before any P&L. F1/F2 and the all-59 short-call acquisition are parked; the corporate-action normalizer is deferred. Report/health builders are observability-only in scheduled-task exit codes; DailyOps gains a local-Postgres preflight. One fallback (post-earnings premium selling, own untouched window) may follow terminal VRP failure; after that, systematic alpha research goes dormant while suggestion-tracking and telemetry continue. Nothing here authorizes scoring, promotion, broker, or live action.
+
+## 2026-07-12: Profitability Research Starts From The Coverage-Qualified Universe
+
+Durable decision: broad research uses all 59 symbols in fixed 10:10/15:55 strata and publishes exclusions. Include GOOGL; never alias GOOG. Variants require preregistration, temporal validation, and multiplicity control.
+
+## 2026-07-12: Historical Scanner Parity Must Invoke The Production Owner
+
+Durable decision: a local materializer cannot self-attest parity. The simplified adapter is diagnostic-only; scanner-native generation is required but not ready. The 6,986-row replay measured unverified no-picks, mismatches, and context-blocked rows (counts in the parity evidence records); earnings/sector tags are potential inventory, not causal demand. Full-watchlist ranking, economics, proof, promotion, and trading remain blocked.
+
+## 2026-07-12: Executable And Feasibility Rejections
+
+Durable decision: reject SPY and 59-symbol trend debit/credit; GOOGL did not replicate and C failed final. Kill credit-VRP v1 on put scarcity, relative-strength debit v1 on raw breadth, and all-59 upside-exhaustion bear-call v1 on its preregistered breadth gates before outcome scoring (numbers in `docs/PROFITABLE_LANE_TECHNICAL_PLAN.md`). The feature-screened all-59 short-call owner remains frozen acquisition-only. Do not relax gates or score before exact lifecycle feasibility passes; no live authority follows.
+
+## 2026-07-11: Profitability Readbacks Must Be Coherent And Non-Authorizing
+
+Durable decision: profitability owners may be combined only through a one-read, byte-hash-bound snapshot with explicit timestamp age/skew. Malformed structures, contradictory owner statuses, non-finite values, stale sources, and future timestamps fail closed. Open-risk governor clearance is never global profitability, promotion, broker, or live-release authority.
+
+## 2026-07-11: Production Parity Requires Differential Equivalence
+
+Durable decision: side-aware mechanics and row assertions do not establish production parity. Economics remain mechanics-only until scanner, exposure/risk, loss, and review/exit behavior match production owners. Code probes and candidate integration are separate gates: replay must call production guardrail/review ordering, use causal executable exposure, rank chronologically, validate contract counts, and bind profile overrides. Rejected quotes, missing/stale marks, owner errors, incomplete paths/denominators, contradictory summaries, or temporal inversion block. The freeze has no admissible pre-holdout window; holdout cannot be consumed to manufacture one.
+
+## 2026-07-12: Research History Is Crash-Recoverable, Session-Bound, And Non-Authorizing
+
+Durable decision: research history publishes ledger, anchor, rollback witness, registry, and readbacks through one recoverable journal; stale/mixed generations fail. Tracked events bind the durable checkpoint and child identity; unknown state blocks, audit stays read-only, aliases require exact tokens, paths cannot escape the repo. Tracking is navigation/history only and grants no evidence, scanner, proof, promotion, holdout, cohort, broker, sizing, stop, or live authority. Runs declare pass/kill, snapshot, range, denominator, execution, uncertainty, and revival.
+
+## 2026-07-11: Parity Economics Require Authoritative Source Binding
+
+Durable decision: direct caller dictionaries and candidate-owned parity flags cannot establish production parity. Economics remain suppressed unless the default candidate, cohort, holdout, and adapter-owner bytes are captured and SHA-256 bound, every source row parses, counts reconcile, owner contracts match, and the adapter owner itself declares scanner and production-replay parity with the exact candidate-file hash. Alternate diagnostic paths remain mechanics-only.
+
+## 2026-07-11: Historical Replay Query Plans Are Explicit Prerequisites
+
+Durable decision: the frozen historical adapter binds indexed read-only query plans, versioned content-addressed corpus manifests with tracked anchors, and query-transcript publication; drift, tampering, missing anchors, code/runtime changes, or count disagreement fail closed, and the adapter never creates or mutates database indexes. Downstream demand independently rebuilds against the active manifest with exact entry/exit domain binding and cannot widen or duplicate domains. Tracked repair requires an owner-derived plan, exact digest, approval token, zero-error preflight, and post-import checks. The resealed adapter is corpus/lineage-complete (exact counts, hashes, and censored-exit detail in the adapter and materialization evidence records); completion is not evidence acceptance — selection conditioning, scanner replay parity, prospective proof, and release authority remain blocked.
+
+## 2026-07-11: VRP Readiness Is Frozen-Window Exact
+
+Durable decision: frozen VRP binds contract hashes, four indexes, DST-aware 15:55, DTE 21-45, and the 2018-2020 train. Its stable local snapshot binds DB/WAL identity plus schema, SQLite, owner, query, row, and lineage hashes; it finds 0 admissible rows across 2,488 checkpoints. This proves local absence only. Provider completeness/missingness stay false; no replay, import, proof, or trading authority follows. Tracked crash policy requires a valid exact-13-symbol row and joint-negative SPY, QQQ, and breadth confirmations. Its owner binds policy/source lineage, rejects naive time, and uses a DST-aware 09:35 known-at. Frozen inputs remain absent.
+
+## 2026-07-11: Operator Capture Attestation Is Not Chain Proof
+
+Durable decision: raw bytes, request scope, date-keyed listed contracts, executable rows, CSV, trusted SQLite, database identity, and manifest lineage must revalidate. A pinned Ed25519 key/writer/origin can attest designated-operator capture integrity, but the key holder can still sign fabricated bytes and a well-formed subset cannot prove exhaustive provider coverage. Therefore operator attestation has zero chain authority; `operator_capture_attestation_does_not_authorize_chain_proof` and `provider_chain_exhaustiveness_not_established` remain binding until an independently trusted acquisition/enumeration source exists.
 
 ## 2026-07-10: Profitability Is The Objective, Not Preservation Of Existing Lanes
 
@@ -10,7 +62,7 @@ Profitability claims must still clear preregistered, causal, executable-bid/ask,
 
 ## 2026-07-10: Forward Entry Proof Binds To The Authoritative Ledger
 
-Durable decision: a forward completion may count only when its single preceding matched entry has an exact locator into `forward_tracking_authoritative.db` and content-revalidates against exactly one `scan_pick` event. The scan logger writes the authoritative ledger before any projected scan, fill-attempt, near-miss, or auto-track work and rejects malformed ledger acknowledgements. The tracker verifies all candidates for one report through one read-only SQLite snapshot, caches by immutable locator, requires session/event metadata parity, exact contract/timestamp/Decimal price equality, synchronized legs, and uniformly fresh `alpaca_opra` source lineage. Legacy or ambiguous rows remain fail-closed; no fuzzy backfill is allowed.
+Durable decision: a Phase 2 v3 completion may count only when its single preceding matched entry content-revalidates against exactly one authoritative `scan_pick`, its prospective demand was created in-session before resolution, and both exact option legs retain separately signed Theta shard captures. Validation rereads raw bytes, reparses one exact OCC leg per capture, verifies request/path/root/hash/size/BBO/timestamp lineage, and independently recomputes execution, fees, and P&L. Alpaca observations and v2 rows cannot silently become v3 proof. The scheduled observer is immutable demand-only infrastructure; automatic cohort append, promotion, broker orders, and live capital remain disabled.
 
 Windows Task Scheduler result `0x41301` is an in-progress state when the task status is `Running`, not a failed execution. Health reports may classify that exact pair as nonblocking in-progress; other nonzero results remain blocking.
 
@@ -38,9 +90,13 @@ Durable decision: WORKLOG and DECISIONS have stable class expectations (`episode
 
 Gateboard-derived pathway, blocker, and source-artifact nodes must come from one coherent gateboard byte snapshot. Seed validates and hashes safe artifacts declared `available=true` as snapshot provenance. An `available=false` declaration remains explicitly unavailable: it is not dereferenced or hashed as present and cannot satisfy an available-source freshness expectation.
 
-The live schema-v5 migration, session and ghost repair, final living-history ingest/bootstrap, doctor, audit, retrieval, dashboard, eval, outbox/mirror/anchor checks, backup restore, and dream audit completed green. Preserve `data/agent-control/post-v4-safety/20260710T035321Z-e254fd94`, `data/agent-control/pre-v5-safety/20260710T035321Z-e254fd94-repaired-sessions`, `data/agent-control/verified-v5-safety/20260710T063210Z-ac899ea5`, and pre-ghost-repair bundle `data/agent-control/backups/20260710T141639Z-ed16ac30`; the last bundle passed restore-check. Maintenance `RUN-20260710-c1aae9a5` passed and options dream `DREAMRUN-20260710-d64378a5` completed. Global dreaming manual sequence 2 (`PMDREAM-20260710-150315388-4dc9366af849`) and scheduled sequence 3 (`PMDREAM-20260710-150505551-ddd8389b9bee`) completed under canonical audit-contract SHA-256 `eb867cc4f8641f5a5085e059f9c6c15c84ade2e4894361bae23e1d53581da0d9`. `\ProjectsMemoryDreaming`, `\OptionsMemoryDreaming`, and `\OptionsMemoryMaintenance` each have observed `LastTaskResult=0`; options dreaming retains its 45-minute limit.
+The live schema-v5 migration, repair, ingest/bootstrap, doctor, audit, eval, recovery, and dream checks completed green. Preserve the named v4/v5 safety chain in `PROJECT_CONTEXT`; `20260710T141639Z-ed16ac30` passed restore-check. Maintenance `RUN-20260710-c1aae9a5`, options dream `DREAMRUN-20260710-d64378a5`, global dream sequences 2-3, and all three scheduled memory tasks passed.
 
-Shared living-history source bytes should be cached once per refresh instead of reread for every referencing node. This is nonblocking performance debt: the current behavior can approach `O(nodes x source-read)` CPU, but the observed maintenance task still finishes in about six minutes within its 30-minute limit.
+Durable 2026-07-12 follow-up: freshness must read each resolved living-history source once per refresh while preserving fail-closed metadata/path semantics. Concurrent windows must use validated tenant-scoped checkpoint keys; keyed latest pointers cannot replace the backward-compatible unkeyed Prime pointer or each other. Checkpoints remain orchestration-only.
+
+## 2026-07-14: Reject Infeasible Frozen Geometry And Normalize Corporate Actions Before New Scoring
+
+Post-close frozen exits are infeasible; SPY is consumed and rejected unscored. All-59 v1 remains quarantined after 46 capped failures. Repair needs a new no-P&L corporate-action identity contract. Publication stays all-or-nothing and separate from scoring. Stop tuning consumed broad families; prefer distinct true-VRP feasibility.
 
 ## 2026-07-09: CEO Implementation Authority And Memory Schema v5 Use Separate Gates
 
@@ -56,19 +112,15 @@ Durable decision: capture the five project-memory files into an immutable dated 
 
 The live budgets are: PROJECT_CONTEXT 22 KiB, DECISIONS 24 KiB, WORKLOG 10 KiB, NEXT_STEPS 22 KiB, docs index 16 KiB, and 94 KiB total. Historical detail belongs in the archive or dedicated owner artifacts rather than repeated startup files.
 
+## 2026-07-12: Untouched Options Acquisition Uses Exact Identity Shards
+
+Durable decision: untouched acquisition freezes causal selection, enumerates exact provider identities, and uses hash-bound SQLite checkpoints with at most two workers/attempts. Valid empties count; malformed, transport, identity, timestamp, or lineage errors block scoring. Publication requires complete reverified shards. Local capture attestation proves neither provider origin nor trading authority.
+
 ## 2026-07-09: Storage Cleanup Must Be Policy-Driven And Fail Closed
 
 Durable decision: project cleanup defaults to dry-run, re-derives plans at apply time, protects tracked and authoritative paths, rejects links/reparse points, stages deletes atomically, checks file identity, and requires an explicit acknowledgement. Timestamp retention is per artifact family and preserves recent, daily, weekly, monthly, referenced, transition, malformed, and safety-milestone evidence.
 
 Logs rotate by atomic rename and compression. Inactive lane data may be removed only after a byte/hash-verified archive exists. Raw import artifacts remain audit-only until a distinct replacement is sealed. Agent-memory pruning requires the newest retained bundle to pass the complete restore-check and preserves all calendar-retained and incomplete bundles. A separate explicit acknowledgement may remove only redundant older bundles whose sole failure is a regenerable event-mirror hash/field/duplicate mismatch while ledger, DB outbox, anchors, manifest, and sidecar gates pass; every other failure remains blocked.
-
-## 2026-07-09: Pre-Vacuum Backup Retirement Requires All Gates
-
-Durable decision: `options_history.db.pre_vacuum_backup` remains protected until all required vacuum markers, fresh-window import completion, downstream pipeline completion, SQLite integrity/table checks, absence or ownership of the shared import lock, and an exact strong-hash replacement backup pass in one apply-time critical section. The retirement tool holds the shared importer lock through verification and deletion. Missing evidence means retain the backup.
-
-## 2026-07-09: Browser Smoke Tests Are Read-Only Product Checks
-
-Durable decision: Playwright smoke tests may verify navigation, keyboard behavior, responsive layout, and serious/critical automated accessibility findings with deterministic GET-only fixtures. They do not validate live backend state, profitability, proof, evidence quality, auth enforcement, orders, or broker state and cannot clear release gates.
 
 ## 2026-07-08: Research Mandate Does Not Grant Live Authority
 
@@ -80,15 +132,19 @@ Durable decision: the compacted options-history store may serve as active only a
 
 ## 2026-07-07: External Strategy Research Is Literature Context
 
-Durable decision: recovered options-strategy research can rank hypotheses and inform a new preregistered design, but it does not prove current retail profitability. Defined-risk index volatility-risk-premium structures remain a research candidate; event volatility is conditional/cost-sensitive; short-DTE premium selling and directional debit-spread deployment remain unproven. Any follow-up must predefine universe, source, entries/exits, side-aware fills, costs, risk, splits, multiple-testing controls, and kill criteria.
+Durable decision: external strategy research ranks hypotheses but proves no retail profitability. Follow-up must preregister universe, source, entries/exits, side-aware fills, costs, risk, splits, multiple-testing controls, and kill criteria.
 
 ## 2026-07-05: Consumed Windows And Refreeze Boundaries Remain Binding
 
-Durable decision: a consumed evaluation window cannot become a tuning or selection surface. One data-repaired rerun is allowed only where the original evaluation inspected zero usable rows because the fixed input chain was broken, and only with the unchanged frozen contract and gates. Future refreeze/filter-family work remains a separate preregistered research contract; design work does not change the active frozen policy.
+Durable decision: consumed evaluation cannot become tuning or selection. One unchanged-contract repair rerun is allowed only when broken inputs yielded zero usable rows. Refreeze/filter-family work needs separate preregistration and does not change active policy.
+
+## 2026-07-09: Browser Smoke Tests Are Read-Only Product Checks
+
+Durable decision: Playwright smoke tests verify navigation, keyboard, layout, and serious/critical accessibility with deterministic GET-only fixtures; they never validate live backend state, profitability, proof, evidence quality, auth, orders, or broker state and cannot clear release gates.
 
 ## 2026-07-02: Quote Imports Coordinate Through One Shared Lock
 
-Durable decision: all writers to the shared option-history store must coordinate on the same import lock. A fresh-window job, historical job, vacuum, backup retirement, or repair process must fail closed rather than compete with another writer. Approved imports remain bounded to their token, universe, dates, and provenance rules and do not authorize proof, scanner, or promotion changes.
+Durable decision: every option-history writer uses one shared lock and fails closed on contention. Imports stay bounded to approved token, universe, dates, and provenance and grant no proof, scanner, or promotion authority.
 
 ## 2026-07-02: WORKLOG And DECISIONS Are Runtime Retrieval Sources
 
@@ -96,8 +152,8 @@ Durable decision: dated WORKLOG episodes and DECISIONS entries are stable retrie
 
 ## 2026-06-29: Memory Maintenance Is Audited And Restore-Checked
 
-Durable decision: routine memory maintenance self-logs, anchors the ledger, creates relocatable in-bundle backups, validates the DB/outbox/event mirror/anchors/JSONL sidecars, and records failure. Locks use ownership tokens and Windows-safe liveness checks. Memory metadata and retrieval are tenant-scoped and sanitize authority, secret-shaped content, and targeted order imperatives.
+Durable decision: memory maintenance self-logs, anchors, creates relocatable backups, validates DB/outbox/mirror/sidecars, and records failure. Locks are ownership-token and Windows-liveness safe; retrieval is tenant-scoped and sanitizes authority and secrets.
 
 ## Standing Proof Decision
 
-Durable decision: only prospective, policy-qualified, executable evidence can clear options proof gates. Historical simulations, research/backfill rows, stale or indicative quotes, generated dashboards, memory nodes, worker reports, browser checks, and operator notes remain context or evidence records at their declared class. They never authorize trades, broker actions, evidence mutation, live release, or promotion by themselves.
+Durable decision: only prospective, policy-qualified executable evidence clears proof gates. Historical/research rows, indicative quotes, dashboards, memory, reviews, and operator notes retain their declared nonauthorizing class and never authorize trades, evidence mutation, promotion, broker, or live release.
