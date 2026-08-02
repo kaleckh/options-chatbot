@@ -7,7 +7,7 @@
         "Live scan, replay diagnostics, paper ideas, tracked-position review, route/readback contracts, and regular-options proof hygiene."
       ],
       "forbidden_work": [
-        "Do not route active browser work through paused day-trading, crypto-options, or Polymarket code paths."
+        "Do not route active browser work through paused day-trading or crypto-options code paths."
       ],
       "hard_rules": [
         "This is the only mounted browser product family in the current worktree.",
@@ -40,7 +40,7 @@
         "Readability, mobile table contracts, and analytics maintenance when tied to the active Trading Desk."
       ],
       "forbidden_work": [
-        "Do not confuse these Trading Desk analytics tabs with paused day-trading, crypto-options, or Polymarket lanes."
+        "Do not confuse these Trading Desk analytics tabs with paused day-trading or crypto-options lanes."
       ],
       "hard_rules": [
         "Legacy analytics are still inside the Trading Desk surface.",
@@ -139,35 +139,10 @@
       ],
       "route_ui_status": "not_mounted_browser_product",
       "status": "paused_out_of_scope"
-    },
-    {
-      "allowed_work": [
-        "Only archive, remove, repair, or reopen work explicitly requested by the user."
-      ],
-      "forbidden_work": [
-        "Do not wire Polymarket into active navigation, route lifecycle, scanner, proof, or Trading Desk flows."
-      ],
-      "hard_rules": [
-        "Polymarket code is adjacent tooling, not the active browser product.",
-        "Existing tests may remain without making this lane active.",
-        "Reopening requires an explicit user request."
-      ],
-      "label": "Polymarket sidecar",
-      "lane_id": "polymarket_sidecar",
-      "owner_docs": [
-        "docs/PROJECT_CONTEXT.md",
-        "docs/architecture-audit.md"
-      ],
-      "path_roots": [
-        "src/lib/polymarket",
-        "tests/polymarket"
-      ],
-      "route_ui_status": "not_mounted_browser_product",
-      "status": "paused_out_of_scope"
     }
   ],
   "non_goals": [
-    "No deletion, repair, refactor, or expansion of paused day-trading, crypto-options, or Polymarket code.",
+    "No deletion, repair, refactor, or expansion of paused day-trading or crypto-options code.",
     "No browser route, navigation tab, route lifecycle, auth, payload, proof, scanner, replay, DB, or schema behavior changes.",
     "No package-script disabling; legacy and sidecar test commands may exist without making a lane active.",
     "No AI commodity isolation work beyond naming it as a separate lane deferred to the AI commodity isolation contract."

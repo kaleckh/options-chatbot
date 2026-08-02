@@ -16,7 +16,6 @@ This file is the semantic owner for active, separate, legacy, sidecar, and pause
 | `ai_commodity_proof_lane` | `separate_non_browser_proof_lane` | `not_mounted_browser_product` | `scripts/run_ai_commodity_opra_progress.py`<br>`data/ai-commodity-infra`<br>`tests/test_ai_commodity_opra_progress.py` |
 | `day_trading` | `paused_out_of_scope` | `empty_route_scaffolding_only` | `src/lib/day-trading`<br>`tests/day-trading`<br>`src/app/api/day-trading`<br>`docs/day-trading-current-state.md`<br>`docs/archive/day-trading-product-roadmap.md` |
 | `crypto_options_sidecar` | `paused_out_of_scope` | `not_mounted_browser_product` | `crypto_options`<br>`scripts/run_crypto_scan.bat` |
-| `polymarket_sidecar` | `paused_out_of_scope` | `not_mounted_browser_product` | `src/lib/polymarket`<br>`tests/polymarket` |
 
 ## Hard Rules
 
@@ -43,21 +42,16 @@ This file is the semantic owner for active, separate, legacy, sidecar, and pause
 - Package scripts may exist without making this an active browser lane.
 - Reopening requires an explicit user request.
 
-### Polymarket sidecar
-- Polymarket code is adjacent tooling, not the active browser product.
-- Existing tests may remain without making this lane active.
-- Reopening requires an explicit user request.
-
 ## Guarded Checks
 
 - `src/app/api/day-trading/**` must not contain active `route.ts`, `route.tsx`, `route.js`, or `route.jsx` handlers.
-- Active browser surfaces must not import paused day-trading, crypto-options, or Polymarket modules.
-- `data/contracts/route-mutation-inventory.json` must not list day-trading, crypto-options, or Polymarket browser routes.
+- Active browser surfaces must not import paused day-trading or crypto-options modules.
+- `data/contracts/route-mutation-inventory.json` must not list day-trading or crypto-options browser routes.
 - Living docs must link this boundary map so agents do not infer scope from old code or archive docs.
 
 ## Non-Goals
 
-- No deletion, repair, refactor, or expansion of paused day-trading, crypto-options, or Polymarket code.
+- No deletion, repair, refactor, or expansion of paused day-trading or crypto-options code.
 - No browser route, navigation tab, route lifecycle, auth, payload, proof, scanner, replay, DB, or schema behavior changes.
 - No package-script disabling; legacy and sidecar test commands may exist without making a lane active.
 - No AI commodity isolation work beyond naming it as a separate lane deferred to the AI commodity isolation contract.

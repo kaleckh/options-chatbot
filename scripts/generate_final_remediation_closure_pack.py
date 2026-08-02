@@ -42,7 +42,7 @@ GENERATED_CONTRACTS_WITH_VALIDATION = (
 NON_GOALS = (
     "Does not define route behavior, payloads, auth semantics, proof predicates, scanner policy, replay math, DB schema, or frontend behavior.",
     "Does not claim production profitability, broker execution readiness, or AI commodity proof completion.",
-    "Does not reopen crypto options, Polymarket, day-trading, or other paused sidecar lanes.",
+    "Does not reopen crypto options, day-trading, or other paused sidecar lanes.",
     "Does not govern volatile research runs, generated market-data outputs, DB sidecars, archives, or dated evidence reports.",
     "Does not use timestamps, mtimes, content hashes, network freshness checks, DB opens, migrations, or runtime app introspection.",
 )
@@ -290,7 +290,6 @@ def _active_scope_closure(errors: list[str]) -> dict[str, Any]:
         "ai_commodity_proof_lane": "separate_non_browser_proof_lane",
         "day_trading": "paused_out_of_scope",
         "crypto_options_sidecar": "paused_out_of_scope",
-        "polymarket_sidecar": "paused_out_of_scope",
     }
     mismatches: list[dict[str, str | None]] = []
     for lane_id, expected in expected_status.items():

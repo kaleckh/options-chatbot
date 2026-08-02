@@ -4,7 +4,6 @@
       "ai_commodity_proof_lane": "separate_non_browser_proof_lane",
       "crypto_options_sidecar": "paused_out_of_scope",
       "day_trading": "paused_out_of_scope",
-      "polymarket_sidecar": "paused_out_of_scope",
       "regular_supervised_options_browser": "active_browser_product"
     },
     "ai_commodity_detail_status": "separate_non_browser_proof_lane",
@@ -13,7 +12,6 @@
       "ai_commodity_proof_lane": "separate_non_browser_proof_lane",
       "crypto_options_sidecar": "paused_out_of_scope",
       "day_trading": "paused_out_of_scope",
-      "polymarket_sidecar": "paused_out_of_scope",
       "regular_supervised_options_browser": "active_browser_product"
     },
     "legacy_lane_boundary_source": "data/contracts/legacy-lane-boundaries.json",
@@ -146,7 +144,7 @@
   "non_goals": [
     "Does not define route behavior, payloads, auth semantics, proof predicates, scanner policy, replay math, DB schema, or frontend behavior.",
     "Does not claim production profitability, broker execution readiness, or AI commodity proof completion.",
-    "Does not reopen crypto options, Polymarket, day-trading, or other paused sidecar lanes.",
+    "Does not reopen crypto options, day-trading, or other paused sidecar lanes.",
     "Does not govern volatile research runs, generated market-data outputs, DB sidecars, archives, or dated evidence reports.",
     "Does not use timestamps, mtimes, content hashes, network freshness checks, DB opens, migrations, or runtime app introspection."
   ],

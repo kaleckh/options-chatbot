@@ -34,7 +34,7 @@ NON_GOALS = (
     "Does not define route behavior, payloads, response schemas, auth semantics, proof predicates, scanner policy, replay math, DB schema, or frontend behavior.",
     "Does not replace route parity, storage ownership, proof contracts, API contracts, or generated artifact governance.",
     "Does not refactor main.py or extracted routers.",
-    "Does not reopen crypto, Polymarket, day-trading, or AI commodity browser lanes.",
+    "Does not reopen crypto, day-trading, or AI commodity browser lanes.",
 )
 
 MODULE_MANIFEST: dict[str, dict[str, Any]] = {

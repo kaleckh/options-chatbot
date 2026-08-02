@@ -13,7 +13,7 @@ MD_OUTPUT_PATH = ROOT / "docs" / "legacy-lane-boundaries.md"
 ROUTE_INVENTORY_PATH = ROOT / "data" / "contracts" / "route-mutation-inventory.json"
 
 NON_GOALS = (
-    "No deletion, repair, refactor, or expansion of paused day-trading, crypto-options, or Polymarket code.",
+    "No deletion, repair, refactor, or expansion of paused day-trading or crypto-options code.",
     "No browser route, navigation tab, route lifecycle, auth, payload, proof, scanner, replay, DB, or schema behavior changes.",
     "No package-script disabling; legacy and sidecar test commands may exist without making a lane active.",
     "No AI commodity isolation work beyond naming it as a separate lane deferred to the AI commodity isolation contract.",
@@ -46,7 +46,7 @@ LANES: tuple[dict[str, Any], ...] = (
             "Live scan, replay diagnostics, paper ideas, tracked-position review, route/readback contracts, and regular-options proof hygiene.",
         ),
         "forbidden_work": (
-            "Do not route active browser work through paused day-trading, crypto-options, or Polymarket code paths.",
+            "Do not route active browser work through paused day-trading or crypto-options code paths.",
         ),
         "hard_rules": (
             "This is the only mounted browser product family in the current worktree.",
@@ -71,7 +71,7 @@ LANES: tuple[dict[str, Any], ...] = (
             "Readability, mobile table contracts, and analytics maintenance when tied to the active Trading Desk.",
         ),
         "forbidden_work": (
-            "Do not confuse these Trading Desk analytics tabs with paused day-trading, crypto-options, or Polymarket lanes.",
+            "Do not confuse these Trading Desk analytics tabs with paused day-trading or crypto-options lanes.",
         ),
         "hard_rules": (
             "Legacy analytics are still inside the Trading Desk surface.",
@@ -158,31 +158,6 @@ LANES: tuple[dict[str, Any], ...] = (
             "Reopening requires an explicit user request.",
         ),
     },
-    {
-        "lane_id": "polymarket_sidecar",
-        "label": "Polymarket sidecar",
-        "status": "paused_out_of_scope",
-        "route_ui_status": "not_mounted_browser_product",
-        "path_roots": (
-            "src/lib/polymarket",
-            "tests/polymarket",
-        ),
-        "owner_docs": (
-            "docs/PROJECT_CONTEXT.md",
-            "docs/architecture-audit.md",
-        ),
-        "allowed_work": (
-            "Only archive, remove, repair, or reopen work explicitly requested by the user.",
-        ),
-        "forbidden_work": (
-            "Do not wire Polymarket into active navigation, route lifecycle, scanner, proof, or Trading Desk flows.",
-        ),
-        "hard_rules": (
-            "Polymarket code is adjacent tooling, not the active browser product.",
-            "Existing tests may remain without making this lane active.",
-            "Reopening requires an explicit user request.",
-        ),
-    },
 )
 
 ACTIVE_BROWSER_SCAN_ROOTS = (
@@ -196,12 +171,9 @@ PAUSED_BROWSER_IMPORT_PATTERNS = (
     "@/lib/day-trading",
     "src/lib/day-trading",
     "../lib/day-trading",
-    "@/lib/polymarket",
-    "src/lib/polymarket",
-    "../lib/polymarket",
     "crypto_options",
 )
-EXCLUDED_SCAN_PARTS = {"day-trading", "polymarket", "node_modules", ".next", "__pycache__"}
+EXCLUDED_SCAN_PARTS = {"day-trading", "node_modules", ".next", "__pycache__"}
 DAY_TRADING_ROUTE_HANDLER_NAMES = {"route.ts", "route.tsx", "route.js", "route.jsx"}
 DOC_LINK_PATHS = (
     "docs/index.md",
@@ -258,7 +230,7 @@ def _route_inventory_findings() -> list[str]:
         "client_fetches": inventory.get("client_fetches") or [],
     }
     inventory_text = json.dumps(route_surface, sort_keys=True).lower()
-    disallowed = ("/api/day-trading", "day-trading", "polymarket", "crypto_options")
+    disallowed = ("/api/day-trading", "day-trading", "crypto_options")
     return [token for token in disallowed if token in inventory_text]
 
 
@@ -271,7 +243,6 @@ def validate_contract(contract: dict[str, Any]) -> list[str]:
         "ai_commodity_proof_lane": "separate_non_browser_proof_lane",
         "day_trading": "paused_out_of_scope",
         "crypto_options_sidecar": "paused_out_of_scope",
-        "polymarket_sidecar": "paused_out_of_scope",
     }
     for lane_id, expected_status in expected_statuses.items():
         lane = lanes.get(lane_id)
@@ -377,8 +348,8 @@ def render_markdown(contract: dict[str, Any]) -> str:
             "## Guarded Checks",
             "",
             "- `src/app/api/day-trading/**` must not contain active `route.ts`, `route.tsx`, `route.js`, or `route.jsx` handlers.",
-            "- Active browser surfaces must not import paused day-trading, crypto-options, or Polymarket modules.",
-            "- `data/contracts/route-mutation-inventory.json` must not list day-trading, crypto-options, or Polymarket browser routes.",
+            "- Active browser surfaces must not import paused day-trading or crypto-options modules.",
+            "- `data/contracts/route-mutation-inventory.json` must not list day-trading or crypto-options browser routes.",
             "- Living docs must link this boundary map so agents do not infer scope from old code or archive docs.",
             "",
             "## Non-Goals",
