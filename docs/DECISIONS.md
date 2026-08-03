@@ -4,18 +4,35 @@
 
 This live file contains current durable decisions only. The complete pre-compaction decision record is preserved byte-for-byte in the verified 2026-07-10 project-memory archive and remains available to archive-aware living-history retrieval.
 
+## 2026-08-02: Naked Index Short Puts Rejected; Hypothesis Search Stops; Restart Is Exogenous-Only
+
+Durable decision. Naked cash-secured short puts on SPY/QQQ/IWM rejected: 419 trades, 219 week clusters,
+raw pooled PF 1.161 but **clustered 5% PF LB 0.626** — below 1.0 in every window including the crash-free
+one. 2018-2021 overlay returned +$387 on 270 trades against a 48.9% daily-marked drawdown. Option P&L is
+itself the excess return over T-bills here, so no rate assumption is involved. Detail: H15 in
+`docs/LEDGER.csv`; harness `scripts/replay_short_put_v2.py`.
+
+**Systematic hypothesis search stops.** `docs/LEDGER.csv` holds all 16 hypotheses to verdict since
+2026-03-18, zero survivors across every structure class attempted. Product, telemetry and reliability work
+continue; this ends hypothesis testing, not the repository.
+
+**Restart is exogenous-only**, decided now rather than when motivated. Valid: a materially better measured
+execution-cost surface for some structure class; a data or market surface enabling a mechanism with no
+LEDGER row; or an independently replicated external result clearing measured execution costs. **Not valid:**
+re-analysis of consumed windows, parameter or symbol variation on an existing row, a new model or agent,
+another debate, elapsed time, or enthusiasm. **Any proposal must state its nearest LEDGER row and the
+mechanism-level difference before discussion**; one that cannot is malformed, not debatable.
+
 ## 2026-07-26: The Post-Earnings Fallback Is Terminal; Systematic Alpha Research Is Dormant
 
-Durable decision (`docs/regular-options-post-earnings-fallback-terminal-verdict-2026-07-26.md`): preserve
-VRP v2 as terminally underpowered and reject the sole post-earnings fallback as
-`DEAD_ON_CONSTRUCTIBILITY`. Its 2020-2021 OOS partition yields only 13 constructible events, 10 independent
-event-week clusters, and 7 months versus 60/20/12 required; even four hypothetical missing-surface passes
-reach only 17 events. The earlier 44/70 figures were concurrency bounds, not four-leg-liquidity and
-minimum-credit-qualified capacity. Cancel the train early-exit pilot, scoring/outcome acquisition, and the
-wider single-name acquisition program. Under the 2026-07-18 joint plan, systematic alpha research is now
-dormant; suggestion tracking, operator-decision telemetry, and product reliability continue. This is not
-an economic falsification of post-earnings short volatility and grants no broker, paper-API, or live-capital
-authority.
+Durable decision: preserve VRP v2 as terminally underpowered (H11) and reject the post-earnings fallback as
+`DEAD_ON_CONSTRUCTIBILITY` (H12) — 13 constructible OOS events versus 60/20/12 required; the earlier 44/70
+figures were concurrency bounds, not liquidity-and-credit-qualified capacity. Cancel the train early-exit
+pilot, outcome acquisition, and the wider single-name acquisition program. Not an economic falsification of
+post-earnings short volatility, and grants no broker, paper-API, or live-capital authority. Numbers and
+provenance: `docs/LEDGER.csv` H11/H12 and
+`docs/regular-options-post-earnings-fallback-terminal-verdict-2026-07-26.md` (compacted 2026-08-02 to the
+24 KiB living-file budget; no decision content dropped).
 
 ## 2026-07-12: Profitability Research Starts From The Coverage-Qualified Universe
 
@@ -27,7 +44,11 @@ Durable decision: a local materializer cannot self-attest parity. The simplified
 
 ## 2026-07-12: Executable And Feasibility Rejections
 
-Durable decision: reject SPY and 59-symbol trend debit/credit; GOOGL did not replicate and C failed final. Kill credit-VRP v1 on put scarcity, relative-strength debit v1 on raw breadth, and all-59 upside-exhaustion bear-call v1 on its preregistered breadth gates before outcome scoring (numbers in `docs/PROFITABLE_LANE_TECHNICAL_PLAN.md`). The feature-screened all-59 short-call owner remains frozen acquisition-only. Do not relax gates or score before exact lifecycle feasibility passes; no live authority follows.
+Durable decision: reject SPY and 59-symbol trend debit/credit (GOOGL did not replicate, C failed final);
+kill credit-VRP v1, relative-strength debit v1, and all-59 bear-call v1 before outcome scoring; the all-59
+short-call owner stays frozen acquisition-only. Do not relax gates or score before exact lifecycle
+feasibility passes; no live authority follows. Numbers and provenance: `docs/LEDGER.csv` H02-H09 and
+`docs/PROFITABLE_LANE_TECHNICAL_PLAN.md` (compacted 2026-08-02 to budget; no decision content dropped).
 
 ## 2026-07-11: Profitability Readbacks Must Be Coherent And Non-Authorizing
 
@@ -79,13 +100,25 @@ Before economic reevaluation, profile the currently impractical full adapter, es
 
 ## 2026-07-10: Momentum Evidence Uses Eligible Coverage And Conservative Clustering
 
-Durable decision: momentum quote coverage is synchronized trusted bid/ask availability among rows that pass every non-quote strategy and lifecycle filter, not all replay rows and not only completed rows. A raw run's `missing_quote_date` is the exact planned policy exit whose quote was unavailable; normalization must preserve it instead of manufacturing a lifecycle gap. Truly absent policy exits use a separate selection-aware lifecycle blocker. Crossed, missing, negative executable-side, nonpositive entry-debit, and negative exit-value failures remain in the appropriate eligible denominator and generate exact contract/date repair demand. Exit execution validates the sides actually traded (long bid and short ask); a zero short bid alone is not an exit failure. Source replay, preregistration, run artifacts, denominator parity, and bounded-resolution arithmetic fail closed before candidate status.
+Durable decision: momentum quote coverage is synchronized trusted bid/ask availability among rows passing
+every non-quote strategy and lifecycle filter — not all replay rows, not only completed rows. Preserve a raw
+`missing_quote_date` as the planned policy exit rather than manufacturing a lifecycle gap. Source replay,
+preregistration, run artifacts, denominator parity, and bounded-resolution arithmetic fail closed before
+candidate status.
 
-Historical momentum diagnostics use the minimum 5% PF lower bound across ticker-week, market-week, and entry-date block bootstraps. Raw PF is not a stress test; until cost/liquidity shocks are preregistered and implemented, stress remains an explicit blocker. Historical positives remain consumed research evidence, never accepted profitability or forward proof.
+Diagnostics use the minimum 5% PF lower bound across ticker-week, market-week, and entry-date block
+bootstraps. Raw PF is not a stress test. Historical positives are consumed research evidence, never accepted
+profitability or forward proof.
 
-After bounded exact repair batch 3122 added 24,573 trusted rows for all 63 provider-confirmed targets, the expanded momentum sample reached 340 strict rows and 98.02% eligible quote coverage but its conservative PF lower bound fell to 0.92. Durable decision: reject/park this branch as underpowered rather than tuning around the newly observed losses. The remaining seven quote gaps and absent stress test are not a rationale to select this consumed lane.
+Momentum continuation is rejected/parked as underpowered (H10): 340 strict rows, 98.02% eligible coverage,
+raw PF 1.5008 but conservative PF LB 0.92 — do not tune around the observed losses.
 
-VRP batches 3123-3124 are trusted fixed-10:25 put data but cannot clear an engine frozen to 15:55. Durable decision: quote-surface readiness must bind the exact engine minute and required call/put parity inputs; any-minute put coverage is a fail-open. Zero native candidates cannot be labeled falsification or profitability. The bounded runner remains blocked until exact 15:55 synchronized calls/puts and a native denominator/candidate engine exist.
+VRP batches 3123-3124 are trusted fixed-10:25 put data and cannot clear an engine frozen to 15:55.
+Quote-surface readiness must bind the exact engine minute and required call/put parity inputs; any-minute
+coverage is a fail-open. Zero native candidates is not falsification.
+
+Detail and provenance: `docs/LEDGER.csv` H10 (compacted 2026-08-02 to the 24 KiB budget; no decision
+content dropped).
 
 ## 2026-07-10: Schema-v5 Living History And Gateboard Freshness Are Structural
 
